@@ -22,7 +22,7 @@ const getClientConfig = () => {
     // Local Development Configuration (Docker)
     console.log(`🐳 Using local DynamoDB at http://localhost:8000`);
     return {
-      region: "eu-north-1",
+      region: "us-east-1",
       endpoint: "http://localhost:8000",
       credentials: {
         accessKeyId: "fakeMyKeyId",
@@ -43,7 +43,17 @@ const getClientConfig = () => {
 };
 
 // Initialize DynamoDB client with configuration
-const client = new DynamoDBClient(getClientConfig());
+// Force local configuration for now
+const clientConfig = {
+  region: "us-east-1",
+  endpoint: "http://localhost:8000",
+  credentials: {
+    accessKeyId: "fakeMyKeyId",
+    secretAccessKey: "fakeSecretAccessKey"
+  }
+};
+console.log('DynamoDB Client Config:', clientConfig);
+const client = new DynamoDBClient(clientConfig);
 
 // Create DocumentClient with options
 export const docClient = DynamoDBDocumentClient.from(client, {
@@ -132,7 +142,7 @@ export const checkDynamoDBConnection = async (): Promise<boolean> => {
 };
 
 // Export the client for direct access if needed
-export { client as dynamoDBClient };
+export { client };
 
 // Export configuration for reference
 export const config = {

@@ -170,23 +170,48 @@ export class DealsService {
   async getDealsByTenant(tenantId: string, userId: string, includeDeleted = false): Promise<Deal[]> {
     console.log('🔍 Getting deals by tenant:', { tenantId, userId, includeDeleted });
     
-    const result = await docClient.send(new QueryCommand({
-      TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
-      FilterExpression: includeDeleted 
-        ? '(attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)'
-        : 'isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
-      ExpressionAttributeValues: {
-        ':tenantId': tenantId,
-        ':userId': userId,
-        ':zero': 0,
-        ...(includeDeleted ? {} : { ':isDeleted': false })
-      }
-    }));
+    try {
+      // Try using the index first
+      const result = await docClient.send(new QueryCommand({
+        TableName: this.tableName,
+        IndexName: 'TenantIdIndex',
+        KeyConditionExpression: 'tenantId = :tenantId',
+        FilterExpression: includeDeleted 
+          ? '(attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)'
+          : 'isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+        ExpressionAttributeValues: {
+          ':tenantId': tenantId,
+          ':userId': userId,
+          ':zero': 0,
+          ...(includeDeleted ? {} : { ':isDeleted': false })
+        }
+      }));
 
-    console.log('📊 Found deals:', result.Items?.length);
-    return (result.Items || []) as Deal[];
+      console.log('📊 Found deals:', result.Items?.length);
+      return (result.Items || []) as Deal[];
+    } catch (error) {
+      console.error('❌ Index query failed, falling back to scan:', error);
+      
+      // Fallback to scan operation
+      const scanResult = await docClient.send(new ScanCommand({
+        TableName: this.tableName,
+        FilterExpression: 'tenantId = :tenantId AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+        ExpressionAttributeValues: {
+          ':tenantId': tenantId,
+          ':userId': userId,
+          ':zero': 0
+        }
+      }));
+
+      // Filter out deleted items if not including deleted
+      const items = scanResult.Items || [];
+      const filteredItems = includeDeleted 
+        ? items 
+        : items.filter(item => !item.isDeleted);
+
+      console.log('📊 Scan result:', filteredItems.length, 'items');
+      return filteredItems as Deal[];
+    }
   }
 
   // Get deals by owner

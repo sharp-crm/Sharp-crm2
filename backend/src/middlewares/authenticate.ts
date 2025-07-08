@@ -12,7 +12,7 @@ export interface AuthenticatedRequest extends Request {
     firstName: string;
     lastName: string;
     role: string;
-    tenantId?: string;
+    tenantId: string | undefined;
     isDeleted?: boolean;
   };
 }

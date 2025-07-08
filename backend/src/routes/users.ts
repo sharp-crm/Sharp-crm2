@@ -18,7 +18,7 @@ const dynamoClient = new DynamoDBClient({
 });
 
 // Upload profile image
-router.post('/profile-image', authenticate, upload.single('image'), async (req, res, next) => {
+router.post('/profile-image', authenticate as express.RequestHandler, upload.single('image'), async (req, res, next) => {
   try {
     if (!req.file) {
       throw createError('No file uploaded', 400);

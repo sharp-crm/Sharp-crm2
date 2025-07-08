@@ -1,7 +1,8 @@
-import express, { Request, Response, NextFunction } from "express";
-import { PutCommand, GetCommand, QueryCommand, UpdateCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
+import express, { Response, NextFunction } from "express";
+import { PutCommand, GetCommand, QueryCommand, UpdateCommand, DeleteCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { docClient } from "../services/dynamoClient";
 import { v4 as uuidv4 } from "uuid";
+import { AuthenticatedRequest } from "../middlewares/authenticate";
 
 interface Task {
   id: string;
@@ -16,14 +17,6 @@ interface Task {
   createdAt: string;
 }
 
-interface AuthenticatedRequest extends Request {
-  user?: {
-    userId: string;
-    tenantId: string;
-    role: string;
-  };
-}
-
 const router = express.Router();
 
 // Get all tasks for tenant
@@ -34,18 +27,36 @@ router.get("/", (async (req: AuthenticatedRequest, res: Response, next: NextFunc
       return res.status(400).json({ error: "Tenant ID required" });
     }
 
-    const result = await docClient.send(
-      new QueryCommand({
-        TableName: "Tasks",
-        IndexName: "TenantIdIndex",
-        KeyConditionExpression: "tenantId = :tenantId",
-        ExpressionAttributeValues: {
-          ":tenantId": tenantId
-        }
-      })
-    );
-
-    res.json({ data: (result.Items as Task[]) || [] });
+    try {
+      // Try using the index first
+      const result = await docClient.send(
+        new QueryCommand({
+          TableName: "Tasks",
+          IndexName: "TenantIdIndex",
+          KeyConditionExpression: "tenantId = :tenantId",
+          ExpressionAttributeValues: {
+            ":tenantId": tenantId
+          }
+        })
+      );
+      
+      res.json({ data: (result.Items as Task[]) || [] });
+    } catch (error) {
+      console.error('❌ Index query failed, falling back to scan:', error);
+      
+      // Fallback to scan operation
+      const scanResult = await docClient.send(
+        new ScanCommand({
+          TableName: "Tasks",
+          FilterExpression: "tenantId = :tenantId",
+          ExpressionAttributeValues: {
+            ":tenantId": tenantId
+          }
+        })
+      );
+      
+      res.json({ data: (scanResult.Items as Task[]) || [] });
+    }
   } catch (error) {
     next(error);
   }
@@ -221,19 +232,5 @@ router.delete("/:id", (async (req: AuthenticatedRequest, res: Response, next: Ne
     next(error);
   }
 }) as express.RequestHandler);
-
-export const getTasks = async (tenantId: string): Promise<Task[]> => {
-  const result = await docClient.send(
-    new QueryCommand({
-      TableName: "Tasks",
-      IndexName: "TenantIdIndex",
-      KeyConditionExpression: "tenantId = :tenantId",
-      ExpressionAttributeValues: {
-        ":tenantId": tenantId
-      }
-    })
-  );
-  return result.Items as Task[];
-};
 
 export default router;

@@ -242,6 +242,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           { name: 'email', label: 'Email', type: 'email', required: true },
           { name: 'leadSource', label: 'Lead Source', type: 'select', options: leadSourceOptions, required: true },
           { name: 'leadStatus', label: 'Lead Status', type: 'select', options: leadStatusOptions, required: true },
+          { name: 'value', label: 'Lead Value', type: 'number', required: true, min: 0, step: "0.01" },
           { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers), required: false },
           { name: 'street', label: 'Street', type: 'text', required: false, group: 'address' },
           { name: 'area', label: 'Area', type: 'text', required: false, group: 'address' },
@@ -320,7 +321,16 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
   };
 
   const handleInputChange = (name: string, value: any) => {
-    setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === 'value') {
+      // Ensure value is a valid non-negative number
+      const numValue = Number(value);
+      if (isNaN(numValue) || numValue < 0) {
+        return; // Don't update if invalid
+      }
+      setFormData(prev => ({ ...prev, [name]: numValue }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -355,7 +365,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             country: formData.country,
             zipCode: formData.zipCode,
             description: formData.description,
-            value: formData.value || 0,
+            value: Number(formData.value) || 0,
             status: formData.leadStatus,
             source: formData.leadSource,
             visibleTo: formData.visibleTo || []

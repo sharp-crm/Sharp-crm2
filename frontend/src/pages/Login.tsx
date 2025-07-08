@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuthStore } from '../store/useAuthStore';
+import API from '../api/client';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -17,7 +18,7 @@ const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:3000/api/auth/login', {
+      const response = await API.post('/auth/login', {
         email,
         password,
       });

@@ -1,25 +1,19 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import app from "./app";
-import { initializeDatabase } from "./utils/initDatabase";
+import express from 'express';
+import http from 'http';
+import cors from 'cors';
+import app from './app';
+import SocketService from './services/socketService';
+
+const server = http.createServer(app);
+
+// Initialize Socket.IO
+new SocketService(server);
 
 const PORT = process.env.PORT || 3000;
 
-async function startServer() {
-  try {
-    // Initialize database first
-    console.log("Initializing database...");
-    await initializeDatabase();
-    
-    // Start the server
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  } catch (error) {
-    console.error("Failed to start server:", error);
-    process.exit(1);
-  }
-}
-
-startServer();
+server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});

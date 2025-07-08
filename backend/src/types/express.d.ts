@@ -1,15 +1,20 @@
-import 'express';
+import { Request } from 'express';
 
-declare module 'express' {
-  export interface Request {
-    user: {
-      userId: string;
-      email: string;
-      firstName: string;
-      lastName: string;
-      role: string;
-      tenantId?: string;
-      isDeleted?: boolean;
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        userId: string;
+        email: string;
+        firstName: string;
+        lastName: string;
+        role: string;
+        tenantId: string;
+        createdBy?: string;
+        phoneNumber?: string;
+      };
     }
   }
-} 
+}
+
+export {}; 

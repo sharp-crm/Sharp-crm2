@@ -8,22 +8,10 @@ import {
 import { DynamoDBDocumentClient, PutCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
-
-// Use local DynamoDB configuration
-const clientConfig: any = {
-  region: "us-east-1",
-  endpoint: "http://localhost:8000",
-  credentials: {
-    accessKeyId: "fakeMyKeyId",
-    secretAccessKey: "fakeSecretAccessKey"
-  }
-};
-
-const client = new DynamoDBClient(clientConfig);
-const docClient = DynamoDBDocumentClient.from(client);
+import { docClient, client } from "../services/dynamoClient";
 
 // Log the region configuration
-console.log("\x1b[36m%s\x1b[0m", `🔌 DynamoDB initialized in region: ${clientConfig.region}`);
+console.log("\x1b[36m%s\x1b[0m", `🔌 DynamoDB initialized`);
 
 const tables = [
   {
@@ -421,6 +409,65 @@ const tables = [
       }
     ],
     BillingMode: "PAY_PER_REQUEST"
+  },
+  {
+    TableName: 'ChatChannels',
+    KeySchema: [{ AttributeName: 'id', KeyType: 'HASH' }],
+    AttributeDefinitions: [
+      { AttributeName: 'id', AttributeType: 'S' },
+      { AttributeName: 'tenantId', AttributeType: 'S' }
+    ],
+    GlobalSecondaryIndexes: [
+      {
+        IndexName: 'TenantIndex',
+        KeySchema: [{ AttributeName: 'tenantId', KeyType: 'HASH' }],
+        Projection: { ProjectionType: 'ALL' },
+        ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+      }
+    ],
+    ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+  },
+  {
+    TableName: 'ChatMessages',
+    KeySchema: [
+      { AttributeName: 'channelId', KeyType: 'HASH' },
+      { AttributeName: 'timestamp', KeyType: 'RANGE' }
+    ],
+    AttributeDefinitions: [
+      { AttributeName: 'channelId', AttributeType: 'S' },
+      { AttributeName: 'timestamp', AttributeType: 'S' },
+      { AttributeName: 'tenantId', AttributeType: 'S' }
+    ],
+    GlobalSecondaryIndexes: [
+      {
+        IndexName: 'TenantIndex',
+        KeySchema: [{ AttributeName: 'tenantId', KeyType: 'HASH' }],
+        Projection: { ProjectionType: 'ALL' },
+        ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+      }
+    ],
+    ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+  },
+  {
+    TableName: 'ChatChannelMembers',
+    KeySchema: [
+      { AttributeName: 'channelId', KeyType: 'HASH' },
+      { AttributeName: 'userId', KeyType: 'RANGE' }
+    ],
+    AttributeDefinitions: [
+      { AttributeName: 'channelId', AttributeType: 'S' },
+      { AttributeName: 'userId', AttributeType: 'S' },
+      { AttributeName: 'tenantId', AttributeType: 'S' }
+    ],
+    GlobalSecondaryIndexes: [
+      {
+        IndexName: 'TenantIndex',
+        KeySchema: [{ AttributeName: 'tenantId', KeyType: 'HASH' }],
+        Projection: { ProjectionType: 'ALL' },
+        ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+      }
+    ],
+    ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
   }
 ];
 
