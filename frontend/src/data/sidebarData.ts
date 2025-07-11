@@ -79,6 +79,7 @@ export const settingsItems: SidebarItem[] = [
     children: [
       { name: 'Personal Settings', path: '/settings/personal', icon: 'User' },
       { name: 'Access Control', path: '/settings/access-control', icon: 'Users' },
+      { name: 'Organisation Tree', path: '/settings/org-tree', icon: 'Network' },
     ]
   }
 ];

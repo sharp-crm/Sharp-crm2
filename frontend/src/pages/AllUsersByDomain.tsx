@@ -12,6 +12,7 @@ interface User {
   email: string;
   role: string;
   phoneNumber?: string;
+  reportingTo?: string;
   permissions?: string[];
   isDeleted?: boolean;
   deletedAt?: string;
@@ -103,6 +104,12 @@ const AllUsers: React.FC<AllUsersProps> = ({ hideHeader = false, hideBreadcrumbs
   }, []);
 
   const filteredUsers = users.filter(user => !user.isDeleted);
+
+  // Function to get manager name
+  const getManagerName = (managerId: string) => {
+    const manager = users.find(user => user.id === managerId);
+    return manager ? `${manager.firstName} ${manager.lastName}` : 'Unknown Manager';
+  };
 
   // Group users by role
   const groupedUsers: Record<string, User[]> = filteredUsers.reduce((acc, user) => {

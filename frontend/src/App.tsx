@@ -14,6 +14,7 @@ import Dealers from './pages/Dealers';
 import Notifications from './pages/Notifications';
 import Personal from './pages/Settings/Personal';
 import AccessControl from './pages/Settings/AccessControl';
+import OrgTree from './pages/Settings/OrgTree';
 import EmailIntegration from './pages/Integration/EmailIntegration';
 import TeamChat from './pages/TeamChat';
 import Profile from './pages/Profile';
@@ -59,6 +60,7 @@ const App: React.FC = () => {
           <Route path="notifications" element={<Notifications />} />
           <Route path="settings/personal" element={<Personal />} />
           <Route path="settings/access-control" element={<AccessControl />} />
+          <Route path="settings/org-tree" element={<OrgTree />} />
           <Route path="integrations/email" element={<EmailIntegration />} />
           <Route path="team-chat" element={<TeamChat />} />
           <Route path="profile" element={<Profile />} />

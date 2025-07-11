@@ -26,6 +26,7 @@ const AddNewUserModal: React.FC<AddNewUserModalProps> = ({ isOpen, onClose, onUs
     phoneNumber: '',
     role: isSuperAdmin ? 'ADMIN' : 'SALES_REP', // Super admin defaults to ADMIN
     dateOfBirth: '',
+    reportingTo: '', // Add reportingTo field
   });
 
   const [formData, setFormData] = useState(getInitialFormData);
@@ -33,6 +34,7 @@ const AddNewUserModal: React.FC<AddNewUserModalProps> = ({ isOpen, onClose, onUs
   const [resetKey, setResetKey] = useState(0);
   const [passwordValidation, setPasswordValidation] = useState(validatePassword(''));
   const [showPasswordRequirements, setShowPasswordRequirements] = useState(false);
+  const [managers, setManagers] = useState<{id: string, name: string}[]>([]);
 
   // Reset form when modal opens
   useEffect(() => {
@@ -42,6 +44,25 @@ const AddNewUserModal: React.FC<AddNewUserModalProps> = ({ isOpen, onClose, onUs
       setResetKey(prev => prev + 1); // Force component re-render
     }
   }, [isOpen, isSuperAdmin]);
+
+  // Fetch managers when modal opens (for SALES_REP role)
+  useEffect(() => {
+    if (isOpen && isAdmin) {
+      const fetchManagers = async () => {
+        try {
+          const response = await API.get('/users/managers');
+          const managersData = response.data?.data || [];
+          setManagers(managersData.map((manager: any) => ({
+            id: manager.userId || manager.id,
+            name: manager.name || `${manager.firstName} ${manager.lastName}`
+          })));
+        } catch (error) {
+          console.error('Failed to fetch managers:', error);
+        }
+      };
+      fetchManagers();
+    }
+  }, [isOpen, isAdmin]);
 
   // Handle ESC key to close modal
   useEffect(() => {
@@ -59,7 +80,13 @@ const AddNewUserModal: React.FC<AddNewUserModalProps> = ({ isOpen, onClose, onUs
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    
+    // Clear reportingTo when role changes away from SALES_REP
+    if (name === 'role' && value !== 'SALES_REP') {
+      setFormData((prev) => ({ ...prev, [name]: value, reportingTo: '' }));
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+    }
     
     // Real-time password validation
     if (name === 'password') {
@@ -88,6 +115,12 @@ const AddNewUserModal: React.FC<AddNewUserModalProps> = ({ isOpen, onClose, onUs
     // Check password confirmation
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
+      return;
+    }
+    
+    // Validate reportingTo for Sales Reps
+    if (formData.role === 'SALES_REP' && !formData.reportingTo) {
+      setError('Sales representatives must have a reporting manager');
       return;
     }
     
@@ -201,6 +234,30 @@ const AddNewUserModal: React.FC<AddNewUserModalProps> = ({ isOpen, onClose, onUs
               <option value="" disabled>No permissions to create users</option>
             )}
           </select>
+          
+          {/* Reporting To Field - Required for Sales Reps */}
+          {formData.role === 'SALES_REP' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reporting To*</label>
+              <select 
+                name="reportingTo" 
+                value={formData.reportingTo} 
+                onChange={handleChange} 
+                required 
+                className="w-full p-2 border rounded"
+              >
+                <option value="">Select Manager</option>
+                {managers.map(manager => (
+                  <option key={manager.id} value={manager.id}>
+                    {manager.name}
+                  </option>
+                ))}
+              </select>
+              {managers.length === 0 && (
+                <p className="text-sm text-red-600 mt-1">No managers available. Please create a Sales Manager first.</p>
+              )}
+            </div>
+          )}
           <DatePicker
             key={`date-${resetKey}`} // Force re-render when form resets
             value={formData.dateOfBirth}

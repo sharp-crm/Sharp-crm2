@@ -1025,11 +1025,18 @@ export interface User {
   email: string;
   role: string;
   tenantId: string;
+  firstName?: string;
+  lastName?: string;
+  reportingTo?: string;
+  permissions?: string[];
+  isDeleted?: boolean;
+  createdAt?: string;
+  phoneNumber?: string;
 }
 
 export const usersApi = {
   getAll: async (): Promise<User[]> => {
-    const response = await API.get('/users');
+    const response = await API.get('/users/tenant-users');
     return response.data.data;
   },
 

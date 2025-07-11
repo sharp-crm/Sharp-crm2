@@ -178,6 +178,9 @@ const TeamChat: React.FC = () => {
           // Select first channel by default if available
           if (mappedChannels.length > 0 && !selectedChannel) {
             setSelectedChannel(mappedChannels[0].id);
+          } else if (mappedChannels.length === 0) {
+            // Clear selected channel if no channels exist
+            setSelectedChannel('');
           }
         }
       } catch (error) {
@@ -388,7 +391,7 @@ const TeamChat: React.FC = () => {
         setTypingUsers(prev => prev.filter(user => user.userId !== data.userId));
       }
     });
-
+  
     const readReceiptHandler = socketService.onReadReceipt((data) => {
       const { messageIds, from } = data;
       
@@ -917,13 +920,13 @@ const TeamChat: React.FC = () => {
                 isOwnMessage 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-white text-gray-900 border border-gray-200'
-              }`}>
+        }`}>
                 {/* Sender Info for received messages */}
                 {!isOwnMessage && (
                   <div className="flex items-center mb-1">
                     <span className="text-sm font-medium text-gray-900">{getUserName(message.senderId)}</span>
                   </div>
-                )}
+          )}
 
                 {/* Reply Reference */}
                 {repliedToMessage && (
@@ -932,7 +935,7 @@ const TeamChat: React.FC = () => {
                   }`}>
                     <div className={`text-xs ${
                       isOwnMessage ? 'text-blue-100' : 'text-gray-500'
-                    }`}>
+          }`}>
                       Replying to {getUserName(repliedToMessage.senderId)}
                     </div>
                     <div className={`text-xs truncate ${
@@ -1134,6 +1137,12 @@ const TeamChat: React.FC = () => {
     return user ? `${user.firstName} ${user.lastName}` : 'Unknown User';
   };
 
+  // Helper function to get replied message
+  const getRepliedMessage = (messageId: string): Message | null => {
+    const currentMessages = getCurrentMessages();
+    return currentMessages.find(m => m.id === messageId) || null;
+  };
+
   // Function to handle message editing
   const handleEditMessage = (messageId: string) => {
     const message = getCurrentMessages().find(m => m.id === messageId);
@@ -1189,6 +1198,80 @@ const TeamChat: React.FC = () => {
   // Function to handle message replies
   const handleReply = (message: Message) => {
     setReplyingTo(message);
+  };
+
+  // Function to handle sending replies
+  const handleSendReply = () => {
+    if (!replyInput.trim()) return;
+
+    if (selectedUser) {
+      // Send direct message reply
+      const newMessage: Message = {
+        id: Date.now().toString(),
+        senderId: currentUser?.userId || '',
+        sender: `${currentUser?.firstName} ${currentUser?.lastName}`,
+        content: replyInput,
+        timestamp: new Date(),
+        type: 'text',
+        channelId: '',
+        recipientId: selectedUser.userId,
+        reactions: [],
+        isEdited: false,
+        readBy: [],
+        threadMessages: [],
+        replyTo: replyingTo?.id,
+        deliveryStatus: {
+          sent: true,
+          delivered: false,
+          read: false,
+          timestamp: new Date()
+        }
+      };
+
+      setDirectMessages(prev => ({
+        ...prev,
+        [selectedUser.userId]: [...(prev[selectedUser.userId] || []), newMessage]
+      }));
+
+      socketService.sendPrivateMessage(selectedUser.userId, newMessage);
+    } else if (selectedChannel) {
+      // Send channel message reply
+      const replyMessage = {
+        content: replyInput,
+        type: 'text',
+        replyTo: replyingTo?.id
+      };
+
+      API.post(`/chat/channels/${selectedChannel}/messages`, replyMessage)
+        .then(response => {
+          const sentMessage: Message = {
+            id: response.data.data.id || Date.now().toString(),
+            senderId: currentUser?.userId || '',
+            sender: `${currentUser?.firstName} ${currentUser?.lastName}`,
+            content: replyInput,
+            timestamp: new Date(),
+            type: 'text',
+            channelId: selectedChannel,
+            reactions: [],
+            isEdited: false,
+            readBy: [],
+            threadMessages: [],
+            replyTo: replyingTo?.id
+          };
+
+          setChannelMessages(prev => ({
+            ...prev,
+            [selectedChannel]: [...(prev[selectedChannel] || []), sentMessage]
+          }));
+        })
+        .catch(error => {
+          console.error("Failed to send reply:", error);
+        });
+    }
+
+    setReplyInput('');
+    setReplyingTo(null);
+    scrollToBottom();
   };
 
   // Update handleTyping function to use the right typing indicator based on context
@@ -1405,7 +1488,7 @@ const TeamChat: React.FC = () => {
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="p-2 text-gray-400 hover:text-gray-600 rounded-lg"
-          >
+            >
             {isSidebarOpen ? (
               <Icons.PanelLeftClose className="w-5 h-5" />
             ) : (
@@ -1449,40 +1532,52 @@ const TeamChat: React.FC = () => {
                   </button>
                 </div>
                 <div className="space-y-2">
-                  {channels.map(channel => (
-                    <button
-                      key={channel.id}
-                      onClick={() => handleChannelSelect(channel.id)}
-                      className={`w-full flex items-center px-3 py-2 rounded-lg transition-colors ${
-                        selectedChannel === channel.id
-                          ? 'bg-blue-50 text-blue-600'
-                          : 'text-gray-700 hover:bg-gray-100'
-                      }`}
-                    >
-                      <span className="text-lg mr-2">#</span>
-                      <span className="flex-1 text-left font-medium">{channel.name}</span>
-                      {channel.unread && (
-                        <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-600 rounded-full">
-                          {channel.unread}
-                        </span>
-                      )}
-                      {channel.type === 'private' && (
-                        <Icons.Lock className="w-4 h-4 ml-2 text-gray-400" />
-                      )}
-                      {channel.permissions?.canManage.includes(currentUser?.userId) && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedChannelSettings(channel);
-                            setShowChannelSettings(true);
-                          }}
-                          className="p-1 ml-2 text-gray-400 hover:text-gray-600 rounded"
-                        >
-                          <Icons.Settings className="w-4 h-4" />
-                        </button>
-                      )}
-                    </button>
-                  ))}
+                  {channels.length > 0 ? (
+                    channels.map(channel => (
+                      <button
+                        key={channel.id}
+                        onClick={() => handleChannelSelect(channel.id)}
+                        className={`w-full flex items-center px-3 py-2 rounded-lg transition-colors ${
+                          selectedChannel === channel.id
+                            ? 'bg-blue-50 text-blue-600'
+                            : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                        <span className="text-lg mr-2">#</span>
+                        <span className="flex-1 text-left font-medium">{channel.name}</span>
+                        {channel.unread && (
+                          <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-600 rounded-full">
+                            {channel.unread}
+                          </span>
+                        )}
+                        {channel.type === 'private' && (
+                          <Icons.Lock className="w-4 h-4 ml-2 text-gray-400" />
+                        )}
+                        {channel.permissions?.canManage.includes(currentUser?.userId) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedChannelSettings(channel);
+                              setShowChannelSettings(true);
+                            }}
+                            className="p-1 ml-2 text-gray-400 hover:text-gray-600 rounded"
+                          >
+                            <Icons.Settings className="w-4 h-4" />
+                          </button>
+                        )}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="text-center py-4">
+                      <p className="text-sm text-gray-500 mb-2">No channels yet</p>
+                      <button
+                        onClick={() => setShowChannelModal(true)}
+                        className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Create your first channel
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1524,8 +1619,8 @@ const TeamChat: React.FC = () => {
                           selectedUser?.id === member.id
                             ? 'bg-blue-50 text-blue-600'
                             : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
+                  }`}
+                >
                         <div className="flex items-center min-w-0">
                   <div className="relative">
                             <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
@@ -1592,14 +1687,24 @@ const TeamChat: React.FC = () => {
                       <p className="text-sm text-gray-500">{selectedUser.role}</p>
                     </div>
                   </>
-                ) : (
+                ) : selectedChannel && channels.find(c => c.id === selectedChannel) ? (
                   <>
                     <Icons.Hash className="w-5 h-5 text-gray-400 mr-2" />
                     <h2 className="text-lg font-semibold text-gray-900">
-                      {channels.find(c => c.id === selectedChannel)?.name || 'General'}
+                      {channels.find(c => c.id === selectedChannel)?.name}
                     </h2>
                     <span className="ml-2 text-sm text-gray-500">
                       {channels.find(c => c.id === selectedChannel)?.members} members
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Icons.MessageCircle className="w-5 h-5 text-gray-400 mr-2" />
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      Team Chat
+                    </h2>
+                    <span className="ml-2 text-sm text-gray-500">
+                      No channels available
                     </span>
                   </>
                 )}
@@ -1616,13 +1721,17 @@ const TeamChat: React.FC = () => {
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
                   {selectedUser 
                     ? `Start a conversation with ${selectedUser.firstName} ${selectedUser.lastName}`
-                    : `Welcome to #${selectedChannel}`
+                    : selectedChannel && channels.find(c => c.id === selectedChannel)
+                    ? `Welcome to #${channels.find(c => c.id === selectedChannel)?.name}`
+                    : "Welcome to Team Chat"
                   }
                 </h3>
                 <p className="text-gray-500">
                   {selectedUser
                     ? "Send a message to begin chatting"
-                    : "This is the beginning of your conversation."
+                    : selectedChannel && channels.find(c => c.id === selectedChannel)
+                    ? "This is the beginning of your conversation."
+                    : "Create a channel or start a direct message to begin chatting."
                   }
                 </p>
               </div>
@@ -1751,7 +1860,9 @@ const TeamChat: React.FC = () => {
                         ? `Reply to ${getUserName(replyingTo.senderId)}...`
                         : selectedUser 
                           ? `Message ${selectedUser.firstName} ${selectedUser.lastName}`
-                          : `Message #${channels.find(c => c.id === selectedChannel)?.name || 'general'}`
+                          : selectedChannel && channels.find(c => c.id === selectedChannel)
+                          ? `Message #${channels.find(c => c.id === selectedChannel)?.name}`
+                          : "Select a channel or user to start messaging"
                     }
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     rows={1}
@@ -1803,7 +1914,7 @@ const TeamChat: React.FC = () => {
                       ? 'bg-blue-600 text-white hover:bg-blue-700'
                       : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                   }`}
-                >
+            >
                   <Icons.Send className="w-4 h-4" />
                 </button>
               </div>

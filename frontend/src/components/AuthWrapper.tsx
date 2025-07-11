@@ -1,5 +1,5 @@
 // components/AuthWrapper.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -9,24 +9,28 @@ const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [hydrated, setHydrated] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const initialized = useRef(false);
 
   useEffect(() => {
-    initialize();
-    setHydrated(true);
+    if (!initialized.current) {
+      initialize();
+      setHydrated(true);
+      initialized.current = true;
+    }
   }, [initialize]);
 
   useEffect(() => {
-    if (hydrated) {
-      const publicPaths = ['/login', '/signup', '/forgot-password'];
-      const isPublicPath = publicPaths.includes(location.pathname);
+    if (!hydrated) return;
 
-      if (!accessToken && !isPublicPath) {
-        navigate('/login', { replace: true });
-      } else if (accessToken && isPublicPath) {
-        navigate('/', { replace: true });
-      }
+    const publicPaths = ['/login', '/signup', '/forgot-password'];
+    const isPublicPath = publicPaths.includes(location.pathname);
+
+    if (!accessToken && !isPublicPath) {
+      navigate('/login', { replace: true });
+    } else if (accessToken && isPublicPath) {
+      navigate('/', { replace: true });
     }
-  }, [hydrated, accessToken, location.pathname, navigate]);
+  }, [hydrated, accessToken, location.pathname]);
 
   if (!hydrated) {
     return (
