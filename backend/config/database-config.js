@@ -11,7 +11,7 @@ const isLocal = process.env.DYNAMODB_LOCAL === 'true';
  */
 const localConfig = {
   region: "us-east-1",  // Required by AWS SDK (any valid region works)
-  endpoint: "http://localhost:8000" || "http://127.0.0.1:8000",  // Points to Docker container
+  endpoint: "http://localhost:8000" || "http://127.0.0.1:8000" || "http://host.docker.internal:8000",  // Points to Docker container
   credentials: {
     // These are FAKE credentials - Docker DynamoDB Local doesn't validate them
     accessKeyId: "fakeMyKeyId",
