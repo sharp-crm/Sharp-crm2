@@ -9,7 +9,12 @@
     "strict": true,                           // Strict type checking
     "skipLibCheck": true,                     // Speeds up compile, skip .d.ts checks
     "resolveJsonModule": true,                // Allows importing JSON files
-    "typeRoots": ["./node_modules/@types", "./src/types"] // Add custom type definitions
+    "typeRoots": ["./node_modules/@types", "./src/types"], // Add custom type definitions
+    
+    // Additional checks for better error prevention (moderate level)
+    "noImplicitAny": true,                    // Error on expressions with implicit 'any' type
+    "noFallthroughCasesInSwitch": true,       // Error on fallthrough cases in switch statements
+    "useUnknownInCatchVariables": true        // Use unknown instead of any in catch variables
   },
   "include": ["src/**/*"],                    // Include all files in src/
   "exclude": ["node_modules"]                 // Exclude node_modules

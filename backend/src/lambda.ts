@@ -43,9 +43,21 @@ export const handler = async (
 
   try {
     // Handle the request through serverless express
-    return serverlessExpressInstance(event, context);
+    // Use Promise wrapper for serverless-express
+    return new Promise((resolve, reject) => {
+      serverlessExpressInstance(event, context, (err: any, result: APIGatewayProxyResult) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(result);
+        }
+      });
+    });
   } catch (error) {
     console.error('Lambda handler error:', error);
+    
+    // Type-safe error handling
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     
     return {
       statusCode: 500,
@@ -57,7 +69,7 @@ export const handler = async (
       },
       body: JSON.stringify({
         message: 'Internal server error',
-        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        error: process.env.NODE_ENV === 'development' ? errorMessage : undefined
       })
     };
   }
@@ -75,7 +87,8 @@ export const tokenCleanupHandler = async (event: any, context: Context): Promise
     await cleanupExpiredTokens();
     console.log('Token cleanup completed successfully');
   } catch (error) {
-    console.error('Token cleanup failed:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    console.error('Token cleanup failed:', errorMessage);
     throw error;
   }
 };
@@ -105,7 +118,8 @@ export const healthCheckHandler = async (
       })
     };
   } catch (error) {
-    console.error('Health check failed:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    console.error('Health check failed:', errorMessage);
     
     return {
       statusCode: 503,
@@ -115,7 +129,8 @@ export const healthCheckHandler = async (
       body: JSON.stringify({
         status: 'unhealthy',
         timestamp: new Date().toISOString(),
-        error: 'Health check failed'
+        error: 'Health check failed',
+        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
       })
     };
   }
