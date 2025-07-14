@@ -22,15 +22,48 @@ class SocketService {
   private typingTimeouts: Map<string, NodeJS.Timeout> = new Map(); // userId_channelId -> timeout
 
   constructor(server: HTTPServer) {
+    // Get CORS origins from environment variables
+    const corsOrigins = this.getCorsOrigins();
+    
     this.io = new SocketIOServer(server, {
       cors: {
-        origin: ["http://localhost:5173", "http://localhost:5174"], // Vite's default ports
-        methods: ["GET", "POST"]
+        origin: corsOrigins,
+        methods: ["GET", "POST"],
+        credentials: true
       }
     });
 
     this.setupEventHandlers();
-    console.log('SocketService initialized');
+    console.log('SocketService initialized with CORS origins:', corsOrigins);
+  }
+
+  private getCorsOrigins(): string[] {
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    if (isProduction) {
+      // Production: Support multiple frontend URLs if needed
+      const frontendUrls = process.env.FRONTEND_URLS;
+      if (frontendUrls) {
+        return frontendUrls.split(',').map(url => url.trim());
+      }
+      
+      // Fallback to single URL
+      const frontendUrl = process.env.FRONTEND_URL;
+      if (!frontendUrl) {
+        console.warn('⚠️  FRONTEND_URL environment variable not set in production');
+        return [];
+      }
+      return [frontendUrl];
+    } else {
+      // Development: Allow localhost ports for development
+      return [
+        "http://localhost:5173",
+        "http://localhost:5174", 
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174"
+      ];
+    }
   }
 
   private setupEventHandlers() {

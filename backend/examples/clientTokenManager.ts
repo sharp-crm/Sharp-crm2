@@ -31,8 +31,8 @@ class TokenManager {
   private readonly API_BASE_URL: string;
   private readonly REFRESH_THRESHOLD = 5 * 60 * 1000; // 5 minutes before expiry
 
-  constructor(apiBaseUrl: string = 'http://localhost:3000') {
-    this.API_BASE_URL = apiBaseUrl;
+  constructor(apiBaseUrl?: string) {
+    this.API_BASE_URL = apiBaseUrl || API_CONFIG.BASE_URL;
     this.loadTokensFromStorage();
   }
 

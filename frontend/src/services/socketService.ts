@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../store/useAuthStore';
+import { API_CONFIG } from '../config/api';
 
 class SocketService {
   public socket: Socket | null = null;
@@ -9,12 +10,38 @@ class SocketService {
   private readReceiptHandlers: Set<(data: any) => void> = new Set();
   private channelTypingHandlers: Set<(data: any) => void> = new Set();
 
+  private getSocketUrl(): string {
+    // Check for dedicated socket URL first
+    const socketUrl = import.meta.env.VITE_SOCKET_URL;
+    if (socketUrl) {
+      return socketUrl;
+    }
+    
+    // Fallback to API URL conversion
+    const apiUrl = import.meta.env.VITE_API_URL;
+    if (apiUrl) {
+      const baseUrl = apiUrl.replace('/api', '');
+      return baseUrl;
+    }
+    
+    // Development fallback
+    const isDevelopment = import.meta.env.DEV;
+    if (isDevelopment) {
+      return 'http://localhost:3000';
+    }
+    
+    console.warn('⚠️  No socket URL configured');
+    return 'https://your-backend-app.onrender.com';
+  }
+
   connect() {
     if (this.socket?.connected) return;
 
-    console.log('Initializing socket connection...');
-    this.socket = io('http://localhost:3000', {
-      autoConnect: false
+    console.log('Initializing socket connection to:', API_CONFIG.SOCKET_URL);
+    
+    this.socket = io(API_CONFIG.SOCKET_URL, {
+      autoConnect: false,
+      transports: ['websocket', 'polling']
     });
 
     this.setupEventHandlers();

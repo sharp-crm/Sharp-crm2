@@ -1,14 +1,16 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/useAuthStore';
 import { refreshTokenRequest } from './auth';
+import { API_CONFIG } from '../config/api';
 
 // Create API instance for protected routes
 const API = axios.create({
-  baseURL: 'http://localhost:3000/api',
+  baseURL: API_CONFIG.BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
   withCredentials: true, // Include cookies in requests
+  timeout: API_CONFIG.TIMEOUT,
 });
 
 // Add auth token to requests
