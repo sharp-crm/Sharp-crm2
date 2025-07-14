@@ -24,8 +24,8 @@ const getClientConfig = () => {
     return {
       region: "us-east-1",
       // endpoint: "http://localhost:8000",
-      endpoint: "http://127.0.0.1:8000",
-      // endpoint: "http://host.docker.internal:8000",
+      // endpoint: "http://127.0.0.1:8000",
+      endpoint: "http://host.docker.internal:8000",
       credentials: {
         accessKeyId: "fakeMyKeyId",
         secretAccessKey: "fakeSecretAccessKey"
