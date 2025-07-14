@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/useAuthStore';
+import { refreshTokenRequest } from './auth';
 
 // Create API instance for protected routes
 const API = axios.create({
@@ -7,6 +8,7 @@ const API = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Include cookies in requests
 });
 
 // Add auth token to requests
@@ -61,7 +63,9 @@ API.interceptors.response.use(
                           localStorage.getItem('refreshToken');
 
       if (!refreshToken) {
-        throw new Error('No refresh token available');
+        // No refresh token available, logout and redirect
+        authStore.logout();
+        return Promise.reject(new Error('No refresh token available'));
       }
 
       if (isRefreshing) {
@@ -78,23 +82,15 @@ API.interceptors.response.use(
 
       isRefreshing = true;
 
-      const res = await axios.post('http://localhost:3000/api/auth/refresh', { refreshToken });
-      const { accessToken, refreshToken: newRefreshToken } = res.data.data;
+      const res = await refreshTokenRequest();
+      const { accessToken } = res.data;
 
-      // Update both Zustand store and storage
-      const user = authStore.user || JSON.parse(localStorage.getItem('user') || '{}');
-      authStore.login({
-        userId: user.userId,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        tenantId: user.tenantId,
-        createdBy: user.createdBy,
-        phoneNumber: user.phoneNumber,
-        accessToken,
-        refreshToken: newRefreshToken,
-      });
+      if (!accessToken) {
+        throw new Error('Invalid refresh token response');
+      }
+
+      // Update access token in store
+      authStore.setAccessToken(accessToken);
 
       // Update axios default header
       axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;

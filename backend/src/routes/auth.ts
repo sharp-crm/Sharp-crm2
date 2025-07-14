@@ -3,7 +3,20 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
-import { generateAccessToken, generateRefreshToken, verifyRefreshToken, invalidateRefreshToken } from '../utils/tokenUtils';
+import { 
+  generateAccessToken, 
+  generateRefreshToken, 
+  generateTokenPair,
+  verifyRefreshToken, 
+  invalidateRefreshToken,
+  invalidateAllUserRefreshTokens,
+  autoRefreshTokens,
+  isTokenNearExpiry,
+  validateTokenStructure,
+  setRefreshTokenCookie,
+  clearRefreshTokenCookie,
+  getRefreshTokenFromCookie
+} from '../utils/tokenUtils';
 import { docClient } from '../services/dynamoClient';
 
 const router = Router();
@@ -14,10 +27,20 @@ const register: RequestHandler = async (req, res, next) => {
     const { email, password, firstName, lastName, role, phoneNumber } = req.body;
 
     // Check if user already exists
-    const existingUser = await docClient.send(new GetCommand({
-      TableName: "Users",
-      Key: { email }
-    }));
+    let existingUser;
+    try {
+      existingUser = await docClient.send(new GetCommand({
+        TableName: "Users",
+        Key: { email }
+      }));
+    } catch (dbError) {
+      console.error('Database connection error during user check:', dbError);
+      res.status(503).json({ 
+        message: "Database connection error. Please try again later.",
+        error: process.env.NODE_ENV === 'development' ? (dbError instanceof Error ? dbError.message : 'Unknown error') : undefined
+      });
+      return;
+    }
 
     if (existingUser.Item) {
       res.status(400).json({ message: "User already exists" });
@@ -32,7 +55,8 @@ const register: RequestHandler = async (req, res, next) => {
     const userId = uuidv4();
     const timestamp = new Date().toISOString();
 
-    const newUser = {
+    // Create user object, filtering out undefined values
+    const newUser: any = {
       userId,
       email,
       password: hashedPassword,
@@ -41,25 +65,36 @@ const register: RequestHandler = async (req, res, next) => {
       role,
       tenantId: "UNASSIGNED", // New registrations start with unassigned tenant
       createdBy: "SELF_REGISTRATION", // Self-registration
-      phoneNumber,
       isDeleted: false,
       createdAt: timestamp,
       updatedAt: timestamp
     };
+
+    // Only add phoneNumber if it has a value
+    if (phoneNumber) {
+      newUser.phoneNumber = phoneNumber;
+    }
 
     await docClient.send(new PutCommand({
       TableName: "Users",
       Item: newUser
     }));
 
-    // Generate tokens
-    const accessToken = generateAccessToken({ userId, email, role, tenantId: "UNASSIGNED" });
-    const refreshToken = await generateRefreshToken({ userId, email });
+    // Generate token pair
+    const tokens = await generateTokenPair({ 
+      userId, 
+      email, 
+      role, 
+      tenantId: "UNASSIGNED" 
+    });
+
+    // Set secure HTTP-only cookie for refresh token
+    setRefreshTokenCookie(res, tokens.refreshToken);
 
     res.status(201).json({
       message: "User registered successfully",
-      accessToken,
-      refreshToken,
+      accessToken: tokens.accessToken,
+      accessTokenExpiry: tokens.accessTokenExpiry,
       user: {
         userId,
         email,
@@ -82,10 +117,20 @@ const login: RequestHandler = async (req, res, next) => {
     const { email, password } = req.body;
 
     // Find user
-    const result = await docClient.send(new GetCommand({
-      TableName: "Users",
-      Key: { email }
-    }));
+    let result;
+    try {
+      result = await docClient.send(new GetCommand({
+        TableName: "Users",
+        Key: { email }
+      }));
+    } catch (dbError) {
+      console.error('Database connection error during login:', dbError);
+      res.status(503).json({ 
+        message: "Database connection error. Please try again later.",
+        error: process.env.NODE_ENV === 'development' ? (dbError instanceof Error ? dbError.message : 'Unknown error') : undefined
+      });
+      return;
+    }
 
     const user = result.Item;
 
@@ -108,22 +153,23 @@ const login: RequestHandler = async (req, res, next) => {
       return;
     }
 
-    // Generate tokens
-    const accessToken = generateAccessToken({ 
+    // Invalidate any existing refresh tokens for security
+    await invalidateAllUserRefreshTokens(user.userId);
+
+    // Generate new token pair
+    const tokens = await generateTokenPair({ 
       userId: user.userId, 
       email: user.email, 
       role: user.role,
       tenantId: user.tenantId
     });
-    
-    const refreshToken = await generateRefreshToken({ 
-      userId: user.userId, 
-      email: user.email 
-    });
+
+    // Set secure HTTP-only cookie for refresh token
+    setRefreshTokenCookie(res, tokens.refreshToken);
 
     res.json({
-      accessToken,
-      refreshToken,
+      accessToken: tokens.accessToken,
+      accessTokenExpiry: tokens.accessTokenExpiry,
       user: {
         userId: user.userId,
         email: user.email,
@@ -144,7 +190,8 @@ const login: RequestHandler = async (req, res, next) => {
 // Refresh token
 const refresh: RequestHandler = async (req, res, next) => {
   try {
-    const { refreshToken } = req.body;
+    // Get refresh token from cookie (primary) or body (fallback)
+    const refreshToken = getRefreshTokenFromCookie(req) || req.body.refreshToken;
 
     if (!refreshToken) {
       res.status(401).json({ message: "Refresh token required" });
@@ -155,10 +202,20 @@ const refresh: RequestHandler = async (req, res, next) => {
       const decoded = await verifyRefreshToken(refreshToken);
 
       // Verify user still exists and is not soft deleted
-      const userResult = await docClient.send(new GetCommand({
-        TableName: "Users",
-        Key: { email: decoded.email }
-      }));
+      let userResult;
+      try {
+        userResult = await docClient.send(new GetCommand({
+          TableName: "Users",
+          Key: { email: decoded.email }
+        }));
+      } catch (dbError) {
+        console.error('Database connection error during token refresh:', dbError);
+        res.status(503).json({ 
+          message: "Database connection error. Please try again later.",
+          error: process.env.NODE_ENV === 'development' ? (dbError instanceof Error ? dbError.message : 'Unknown error') : undefined
+        });
+        return;
+      }
 
       const user = userResult.Item;
 
@@ -172,18 +229,12 @@ const refresh: RequestHandler = async (req, res, next) => {
         return;
       }
 
-      // Generate new access token with current user data
-      const accessToken = generateAccessToken({
+      // Generate new token pair with current user data
+      const tokens = await generateTokenPair({
         userId: user.userId,
         email: user.email,
         role: user.role,
         tenantId: user.tenantId
-      });
-
-      // Generate new refresh token
-      const newRefreshToken = await generateRefreshToken({
-        userId: user.userId,
-        email: user.email
       });
 
       // Invalidate old refresh token
@@ -191,10 +242,24 @@ const refresh: RequestHandler = async (req, res, next) => {
         await invalidateRefreshToken(decoded.jti);
       }
 
-      res.json({ accessToken, refreshToken: newRefreshToken });
+      // Set new refresh token in secure cookie
+      setRefreshTokenCookie(res, tokens.refreshToken);
+
+      res.json({
+        accessToken: tokens.accessToken,
+        accessTokenExpiry: tokens.accessTokenExpiry,
+        user: {
+          userId: user.userId,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          tenantId: user.tenantId
+        }
+      });
     } catch (error) {
-      if (error instanceof Error && error.name === 'JsonWebTokenError') {
-        res.status(401).json({ message: "Invalid refresh token" });
+      if (error instanceof Error && (error.name === 'JsonWebTokenError' || error.message.includes('expired'))) {
+        res.status(401).json({ message: "Invalid or expired refresh token" });
         return;
       }
       throw error;
@@ -356,10 +421,112 @@ const getProfile: RequestHandler = async (req, res, next) => {
   }
 };
 
+// Auto-refresh endpoint
+const autoRefresh: RequestHandler = async (req, res, next) => {
+  try {
+    const { accessToken, refreshToken } = req.body;
+
+    if (!accessToken || !refreshToken) {
+      res.status(400).json({ message: "Both access and refresh tokens required" });
+      return;
+    }
+
+    const result = await autoRefreshTokens(accessToken, refreshToken);
+
+    if (!result.shouldRefresh) {
+      res.json({ 
+        shouldRefresh: false,
+        message: "Token refresh not needed"
+      });
+      return;
+    }
+
+    if (!result.tokens) {
+      res.status(401).json({ message: "Unable to refresh tokens" });
+      return;
+    }
+
+    res.json({
+      shouldRefresh: true,
+      accessToken: result.tokens.accessToken,
+      refreshToken: result.tokens.refreshToken,
+      accessTokenExpiry: result.tokens.accessTokenExpiry,
+      refreshTokenExpiry: result.tokens.refreshTokenExpiry
+    });
+  } catch (error) {
+    console.error('Auto-refresh error:', error);
+    next(error);
+  }
+};
+
+// Logout endpoint
+const logout: RequestHandler = async (req, res, next) => {
+  try {
+    // Get refresh token from cookie (primary) or body (fallback)
+    const refreshToken = getRefreshTokenFromCookie(req) || req.body.refreshToken;
+    const { userId } = req.body;
+
+    if (refreshToken) {
+      try {
+        // Validate and get token info
+        const decoded = await verifyRefreshToken(refreshToken);
+        
+        // Invalidate this specific refresh token
+        if (decoded.jti) {
+          await invalidateRefreshToken(decoded.jti);
+        }
+      } catch (error) {
+        console.log('Refresh token already invalid or expired');
+      }
+    }
+
+    // Optional: Invalidate all refresh tokens for this user
+    if (userId) {
+      await invalidateAllUserRefreshTokens(userId);
+    }
+
+    // Clear refresh token cookie
+    clearRefreshTokenCookie(res);
+
+    res.json({ message: "Logged out successfully" });
+  } catch (error) {
+    console.error('Logout error:', error);
+    next(error);
+  }
+};
+
+// Token validation endpoint
+const validateToken: RequestHandler = async (req, res, next) => {
+  try {
+    const { accessToken } = req.body;
+
+    if (!accessToken) {
+      res.status(400).json({ message: "Access token required" });
+      return;
+    }
+
+    const validation = validateTokenStructure(accessToken);
+    const nearExpiry = isTokenNearExpiry(accessToken);
+
+    res.json({
+      valid: validation.valid,
+      expired: validation.expired,
+      nearExpiry,
+      payload: validation.payload
+    });
+  } catch (error) {
+    console.error('Token validation error:', error);
+    next(error);
+  }
+};
+
 // Route handlers
 router.post("/register", register);
 router.post("/login", login);
 router.post("/refresh", refresh);
+router.post("/auto-refresh", autoRefresh);
+router.post("/logout", logout);
+router.post("/validate-token", validateToken);
 router.put("/profile", updateProfile);
 router.post("/change-password", changePassword);
 router.get("/profile", getProfile);

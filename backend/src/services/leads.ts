@@ -156,56 +156,31 @@ export class LeadsService {
   async getLeadsByTenant(tenantId: string, userId: string, includeDeleted = false): Promise<Lead[]> {
     console.log('🔍 getLeadsByTenant called with:', { tenantId, userId, includeDeleted });
     
-    try {
-      // Try using the index first
-      const result = await docClient.send(new QueryCommand({
-        TableName: this.tableName,
-        IndexName: 'TenantIdIndex',
-        KeyConditionExpression: 'tenantId = :tenantId',
-        FilterExpression: includeDeleted 
-          ? '(attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)'
-          : 'isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
-        ExpressionAttributeValues: {
-          ':tenantId': tenantId,
-          ':userId': userId,
-          ':zero': 0,
-          ...(includeDeleted ? {} : { ':isDeleted': false })
-        }
-      }));
+    const result = await docClient.send(new QueryCommand({
+      TableName: this.tableName,
+      IndexName: 'TenantIdIndex',
+      KeyConditionExpression: 'tenantId = :tenantId',
+      FilterExpression: includeDeleted 
+        ? '(attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)'
+        : 'isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+      ExpressionAttributeValues: {
+        ':tenantId': tenantId,
+        ':userId': userId,
+        ':zero': 0,
+        ...(includeDeleted ? {} : { ':isDeleted': false })
+      }
+    }));
 
-      console.log('📊 Raw DynamoDB result:', result.Items?.length, 'items');
-      console.log('📋 Items:', result.Items?.map(item => ({
-        id: item.id,
-        firstName: item.firstName,
-        visibleTo: item.visibleTo,
-        userId: item.userId,
-        createdBy: item.createdBy
-      })));
+    console.log('📊 Raw DynamoDB result:', result.Items?.length, 'items');
+    console.log('📋 Items:', result.Items?.map(item => ({
+      id: item.id,
+      firstName: item.firstName,
+      visibleTo: item.visibleTo,
+      userId: item.userId,
+      createdBy: item.createdBy
+    })));
 
-      return (result.Items || []) as Lead[];
-    } catch (error) {
-      console.error('❌ Index query failed, falling back to scan:', error);
-      
-      // Fallback to scan operation
-      const scanResult = await docClient.send(new ScanCommand({
-        TableName: this.tableName,
-        FilterExpression: 'tenantId = :tenantId AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
-        ExpressionAttributeValues: {
-          ':tenantId': tenantId,
-          ':userId': userId,
-          ':zero': 0
-        }
-      }));
-
-      // Filter out deleted items if not including deleted
-      const items = scanResult.Items || [];
-      const filteredItems = includeDeleted 
-        ? items 
-        : items.filter(item => !item.isDeleted);
-
-      console.log('📊 Scan result:', filteredItems.length, 'items');
-      return filteredItems as Lead[];
-    }
+    return (result.Items || []) as Lead[];
   }
 
   // Get leads by owner

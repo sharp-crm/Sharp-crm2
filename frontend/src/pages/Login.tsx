@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuthStore } from '../store/useAuthStore';
-import API from '../api/client';
+import { loginUser } from '../api/auth';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -18,21 +18,21 @@ const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await API.post('/auth/login', {
+      const response = await loginUser({
         email,
         password,
       });
 
       if (response.status === 200 && response.data) {
-        const { accessToken, refreshToken, user } = response.data;
+        const { accessToken, user } = response.data;
         
-        if (!accessToken || !refreshToken || !user) {
+        if (!accessToken || !user) {
           throw new Error('Invalid response from server');
         }
 
         const { userId, firstName, lastName, role, email: userEmail, tenantId, createdBy, phoneNumber } = user;
 
-        // Store in Zustand (also updates sessionStorage)
+        // Store in Zustand (refresh token is now in cookie)
         login({ 
           userId, 
           firstName, 
@@ -42,24 +42,14 @@ const Login: React.FC = () => {
           tenantId, 
           createdBy, 
           phoneNumber, 
-          accessToken, 
-          refreshToken 
+          accessToken
         });
 
         // Set axios default for future requests
         axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
 
-        // Store in both session and local storage
-        sessionStorage.setItem('accessToken', accessToken);
-        sessionStorage.setItem('refreshToken', refreshToken);
-        sessionStorage.setItem('user', JSON.stringify(user));
-
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('refreshToken', refreshToken);
-        localStorage.setItem('user', JSON.stringify(user));
-
-        // Navigate
-        navigate('/');
+        // Don't navigate here - let AuthWrapper handle it
+        // This prevents race conditions with authentication state
       } else {
         throw new Error('Invalid response from server');
       }

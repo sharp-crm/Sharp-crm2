@@ -30,51 +30,58 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AuthWrapper from './components/AuthWrapper';
 import Toast from './components/Common/Toast';
 import AllUsers from './pages/AllUsersByDomain';
+import NotFound from './pages/NotFound';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
 
 const App: React.FC = () => {
   return (
-    <AuthWrapper>
-      <Routes>
-        {/* Public Routes */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/logout" element={<Logout />} />
+    <RouteErrorBoundary>
+      <AuthWrapper>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/logout" element={<Logout />} />
 
-        {/* Protected Routes */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Home />} />
-          <Route path="settings/all-users" element={<AllUsers />} />
-          <Route path="leads" element={<Leads />} />
-          <Route path="contacts" element={<Contacts />} />
-          <Route path="deals" element={<Deals />} />
-          <Route path="tasks" element={<Tasks />} />
-          <Route path="subsidiaries" element={<Subsidiaries />} />
-          <Route path="dealers" element={<Dealers />} />
-          <Route path="notifications" element={<Notifications />} />
-          <Route path="settings/personal" element={<Personal />} />
-          <Route path="settings/access-control" element={<AccessControl />} />
-          <Route path="settings/org-tree" element={<OrgTree />} />
-          <Route path="integrations/email" element={<EmailIntegration />} />
-          <Route path="team-chat" element={<TeamChat />} />
-          <Route path="profile" element={<Profile />} />
-          <Route path="reports/all" element={<AllReports />} />
-          <Route path="reports/favourites" element={<Favourites />} />
-          <Route path="reports/scheduled" element={<ScheduledReports />} />
-          <Route path="analytics/overview" element={<Overview />} />
-          <Route path="analytics/leads" element={<LeadAnalytics />} />
-          <Route path="analytics/deals" element={<DealInsights />} />
-          <Route path="analytics/activity" element={<ActivityStats />} />
-        </Route>
-      </Routes>
-      <Toast />
-    </AuthWrapper>
+          {/* Protected Routes */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Home />} />
+            <Route path="settings/all-users" element={<AllUsers />} />
+            <Route path="leads" element={<Leads />} />
+            <Route path="contacts" element={<Contacts />} />
+            <Route path="deals" element={<Deals />} />
+            <Route path="tasks" element={<Tasks />} />
+            <Route path="subsidiaries" element={<Subsidiaries />} />
+            <Route path="dealers" element={<Dealers />} />
+            <Route path="notifications" element={<Notifications />} />
+            <Route path="settings/personal" element={<Personal />} />
+            <Route path="settings/access-control" element={<AccessControl />} />
+            <Route path="settings/org-tree" element={<OrgTree />} />
+            <Route path="integrations/email" element={<EmailIntegration />} />
+            <Route path="team-chat" element={<TeamChat />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="reports/all" element={<AllReports />} />
+            <Route path="reports/favourites" element={<Favourites />} />
+            <Route path="reports/scheduled" element={<ScheduledReports />} />
+            <Route path="analytics/overview" element={<Overview />} />
+            <Route path="analytics/leads" element={<LeadAnalytics />} />
+            <Route path="analytics/deals" element={<DealInsights />} />
+            <Route path="analytics/activity" element={<ActivityStats />} />
+          </Route>
+          
+          {/* 404 Catch-all Route - MUST be last */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+        <Toast />
+      </AuthWrapper>
+    </RouteErrorBoundary>
   );
 };
 

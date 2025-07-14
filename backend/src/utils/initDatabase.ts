@@ -10,8 +10,7 @@ import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import { docClient, client } from "../services/dynamoClient";
 
-// Log the region configuration
-console.log("\x1b[36m%s\x1b[0m", `🔌 DynamoDB initialized`);
+// DynamoDB initialized
 
 const tables = [
   {
@@ -24,7 +23,8 @@ const tables = [
       { AttributeName: "userId", AttributeType: "S" },
       { AttributeName: "tenantId", AttributeType: "S" },
       { AttributeName: "createdBy", AttributeType: "S" },
-      { AttributeName: "phoneNumber", AttributeType: "S" }
+      { AttributeName: "phoneNumber", AttributeType: "S" },
+      { AttributeName: "reportingTo", AttributeType: "S" }
     ],
     GlobalSecondaryIndexes: [
       {
@@ -58,6 +58,15 @@ const tables = [
         IndexName: "PhoneNumberIndex",
         KeySchema: [
           { AttributeName: "phoneNumber", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "ReportingToIndex",
+        KeySchema: [
+          { AttributeName: "reportingTo", KeyType: "HASH" }
         ],
         Projection: {
           ProjectionType: "ALL"
@@ -485,33 +494,25 @@ async function tableExists(tableName: string): Promise<boolean> {
 
 async function createTable(tableConfig: any): Promise<void> {
   try {
-    console.log(`Creating table: ${tableConfig.TableName}`);
     await client.send(new CreateTableCommand(tableConfig));
-    console.log(`✓ Table ${tableConfig.TableName} created successfully`);
   } catch (error: any) {
-    if (error.name === 'ResourceInUseException') {
-      console.log(`✓ Table ${tableConfig.TableName} already exists`);
-    } else {
-      console.error(`✗ Failed to create table ${tableConfig.TableName}:`, error.message);
+    if (error.name !== 'ResourceInUseException') {
       throw error;
     }
   }
 }
 
 async function waitForTableActive(tableName: string): Promise<void> {
-  console.log(`Waiting for table ${tableName} to become active...`);
   let tableActive = false;
   while (!tableActive) {
     try {
       const result = await client.send(new DescribeTableCommand({ TableName: tableName }));
       if (result.Table?.TableStatus === 'ACTIVE') {
         tableActive = true;
-        console.log(`Table ${tableName} is now active`);
       } else {
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     } catch (error) {
-      console.error(`Error checking table status: ${error}`);
       throw error;
     }
   }
@@ -533,7 +534,6 @@ async function createSuperAdmin(): Promise<void> {
     );
 
     if (existingUser.Item) {
-      console.log("✓ Super admin user already exists");
       return;
     }
 
@@ -563,38 +563,28 @@ async function createSuperAdmin(): Promise<void> {
       })
     );
 
-    console.log("✓ Super admin user created successfully");
   } catch (error) {
-    console.error("✗ Failed to create super admin user:", error);
     throw error;
   }
 }
 
 export async function initializeDatabase(): Promise<void> {
-  console.log("🚀 Initializing DynamoDB tables...\n");
-  
   try {
     // List existing tables
     const existingTables = await client.send(new ListTablesCommand({}));
-    console.log("Existing tables:", existingTables.TableNames || []);
     
     // Create tables
     for (const tableConfig of tables) {
       const exists = await tableExists(tableConfig.TableName);
       if (!exists) {
         await createTable(tableConfig);
-      } else {
-        console.log(`✓ Table ${tableConfig.TableName} already exists`);
       }
     }
 
     // Create super admin user
     await createSuperAdmin();
     
-    console.log("\n✅ Database initialization completed successfully!");
-    
   } catch (error) {
-    console.error("\n❌ Database initialization failed:", error);
     process.exit(1);
   }
 }

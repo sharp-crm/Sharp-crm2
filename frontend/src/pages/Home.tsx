@@ -114,7 +114,7 @@ const Home: React.FC = () => {
         .slice(0, 3);
       setUpcomingDeals(closingDeals);
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      // Handle error silently
     } finally {
       setLoading(false);
     }

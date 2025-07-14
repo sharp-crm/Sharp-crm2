@@ -78,6 +78,52 @@ const isUUID = (str: string): boolean => {
   return uuidRegex.test(str);
 };
 
+// Get managers for reporting hierarchy
+router.get("/managers", async (req, res, next) => {
+  try {
+    const currentUser = (req as any).user;
+    if (!currentUser) {
+      throw createError("User not found in token", 401);
+    }
+
+    // Only admins can create users, so they can access managers
+    if (!['SUPER_ADMIN', 'ADMIN'].includes(currentUser.role)) {
+      throw createError("Access denied. Admin role required.", 403);
+    }
+
+    // Get all sales managers in the same tenant
+    const result = await docClient.send(
+      new ScanCommand({
+        TableName: "Users",
+        FilterExpression: "tenantId = :tenantId AND #role = :role AND isDeleted = :isDeleted",
+        ExpressionAttributeNames: {
+          "#role": "role"
+        },
+        ExpressionAttributeValues: {
+          ":tenantId": currentUser.tenantId,
+          ":role": "SALES_MANAGER",
+          ":isDeleted": false
+        }
+      })
+    );
+
+    const managers = (result.Items || []).map(user => ({
+      id: user.userId,
+      userId: user.userId,
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+      email: user.email,
+      role: user.role
+    }));
+
+    res.json({ data: managers });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
 // Get all users for the same tenant (hierarchical)
 router.get("/tenant-users", async (req, res, next) => {
   try {
@@ -121,6 +167,7 @@ router.get("/tenant-users", async (req, res, next) => {
       role: user.role || 'SALES_REP',
       tenantId: user.tenantId,
       createdBy: user.createdBy,
+      reportingTo: user.reportingTo,
       permissions: rolePermissions[user.role?.toUpperCase()] || [],
       isDeleted: user.isDeleted || false,
       createdAt: user.createdAt,
@@ -196,6 +243,7 @@ router.get("/:id", async (req, res, next) => {
       name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
       email: user.email,
       role: user.role || 'SALES_REP',
+      reportingTo: user.reportingTo,
       permissions: rolePermissions[user.role?.toUpperCase()] || [],
       isDeleted: user.isDeleted || false,
       createdAt: user.createdAt,
@@ -219,7 +267,7 @@ router.post("/", async (req, res, next) => {
       throw createError("Access denied. Admin or Super Admin role required.", 403);
     }
 
-    const { email, password, firstName, lastName, role = "SALES_REP", phoneNumber } = req.body;
+    const { email, password, firstName, lastName, role = "SALES_REP", phoneNumber, reportingTo } = req.body;
 
     if (!email || !password || !firstName || !lastName) {
       throw createError("Email, password, firstName, and lastName are required", 400);
@@ -282,33 +330,78 @@ router.post("/", async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const userId = uuidv4();
 
-    // Determine tenant assignment
+    // Determine tenant assignment and reporting hierarchy
     let tenantId = "default-tenant";
     let createdBy = currentUser.userId;
+    let finalReportingTo = null;
 
     if (userRole === 'SUPER_ADMIN') {
       // Super admin only creates admins - each gets their own tenant ID
       tenantId = uuidv4();
+      // Admins don't report to anyone (null)
+      finalReportingTo = null;
     } else if (userRole === 'ADMIN') {
       // Admin creating user - assign to admin's tenant
       tenantId = currentUser.tenantId;
+      
+      // Determine reporting structure based on role being created
+      if (requestedRole === 'SALES_MANAGER') {
+        // Sales managers report to the admin
+        finalReportingTo = currentUser.userId;
+      } else if (requestedRole === 'SALES_REP') {
+        // Sales reps report to a manager (reportingTo is required)
+        if (!reportingTo) {
+          throw createError("Sales representatives must have a reporting manager", 400);
+        }
+        
+        // Validate that the reportingTo user exists and is a manager in the same tenant
+        const managerResult = await docClient.send(
+          new ScanCommand({
+            TableName: "Users",
+            FilterExpression: "userId = :userId AND tenantId = :tenantId AND #role = :role AND isDeleted = :isDeleted",
+            ExpressionAttributeNames: {
+              "#role": "role"
+            },
+            ExpressionAttributeValues: {
+              ":userId": reportingTo,
+              ":tenantId": currentUser.tenantId,
+              ":role": "SALES_MANAGER",
+              ":isDeleted": false
+            }
+          })
+        );
+        
+        if (!managerResult.Items || managerResult.Items.length === 0) {
+          throw createError("Invalid reporting manager. Must be a sales manager in the same tenant.", 400);
+        }
+        
+        finalReportingTo = reportingTo;
+      }
     }
 
-    const user = {
+    // Create user object, filtering out undefined values
+    const user: any = {
       userId,
       email,
-
       firstName: firstName || '',
       lastName: lastName || '',
       password: hashedPassword,
       role: requestedRole,
       tenantId,
       createdBy,
-      phoneNumber,
       isDeleted: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
+
+    // Only add optional fields if they have values
+    if (phoneNumber) {
+      user.phoneNumber = phoneNumber;
+    }
+    
+    if (finalReportingTo) {
+      user.reportingTo = finalReportingTo;
+    }
 
     await docClient.send(
       new PutCommand({
@@ -327,6 +420,7 @@ router.post("/", async (req, res, next) => {
       role: requestedRole,
       tenantId,
       createdBy,
+      reportingTo: finalReportingTo,
       permissions: rolePermissions[requestedRole] || [],
       isDeleted: false,
       createdAt: user.createdAt,

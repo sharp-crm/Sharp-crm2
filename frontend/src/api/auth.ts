@@ -3,7 +3,7 @@ import { useAuthStore } from '../store/useAuthStore'; // adjust the path as need
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
-// 1. Axios Instance
+// 1. Axios Instance for protected API calls (with interceptor)
 const API = axios.create({
   baseURL: `${API_URL}/auth`,
   headers: {
@@ -11,15 +11,24 @@ const API = axios.create({
   },
 });
 
-// 2. Auth API functions
-export const registerUser = (data: { email: string; password: string; username: string; role?: string }) => 
-  API.post('/register', data);
-export const loginUser = (data: { email: string; password: string }) => 
-  API.post('/login', data);
-export const refreshTokenRequest = (refreshToken: string) =>
-  API.post('/refresh', { refreshToken });
+// 2. Separate Axios instance for auth endpoints (without interceptor)
+const AUTH_API = axios.create({
+  baseURL: `${API_URL}/auth`,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  withCredentials: true, // Include cookies in requests
+});
 
-// 3. 🔁 Axios Interceptor Code — place HERE after API instance is defined
+// 3. Auth API functions using the separate instance
+export const registerUser = (data: { email: string; password: string; firstName: string; lastName: string; role?: string; phoneNumber?: string; dateOfBirth?: string }) => 
+  AUTH_API.post('/register', data);
+export const loginUser = (data: { email: string; password: string }) => 
+  AUTH_API.post('/login', data);
+export const refreshTokenRequest = () =>
+  AUTH_API.post('/refresh', {}); // Token will be sent via cookie
+
+// 4. 🔁 Axios Interceptor Code — place HERE after API instance is defined
 let isRefreshing = false;
 let failedQueue: any[] = [];
 
@@ -39,22 +48,26 @@ API.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status !== 401 || originalRequest._retry) {
+    // Don't try to refresh tokens for auth endpoints or non-401 errors
+    const isAuthEndpoint = originalRequest.url?.includes('/login') || 
+                          originalRequest.url?.includes('/register') ||
+                          originalRequest.url?.includes('/refresh') ||
+                          originalRequest.url?.includes('/logout');
+
+    // Skip token refresh for:
+    // 1. Non-401 errors
+    // 2. Already retried requests
+    // 3. Authentication endpoints (login, register, refresh, logout)
+    if (error.response?.status !== 401 || originalRequest._retry || isAuthEndpoint) {
       return Promise.reject(error);
     }
 
+    // Only attempt refresh for actual API calls that require authentication
     originalRequest._retry = true;
 
     try {
       const authStore = useAuthStore.getState();
-      const refreshToken = authStore.refreshToken || 
-                          sessionStorage.getItem('refreshToken') || 
-                          localStorage.getItem('refreshToken');
-
-      if (!refreshToken) {
-        throw new Error('No refresh token available');
-      }
-
+      
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({
@@ -69,27 +82,19 @@ API.interceptors.response.use(
 
       isRefreshing = true;
 
-      const res = await refreshTokenRequest(refreshToken);
-      const { accessToken, refreshToken: newRefreshToken } = res.data;
+      // Call refresh endpoint - token will be sent via cookie
+      const res = await refreshTokenRequest();
+      const { accessToken, user } = res.data;
 
-      if (!accessToken || !newRefreshToken) {
+      if (!accessToken) {
         throw new Error('Invalid refresh token response');
       }
 
-      // Update both Zustand store and storage
-      const user = authStore.user || JSON.parse(localStorage.getItem('user') || '{}');
-      authStore.login({
-        userId: user.userId,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        tenantId: user.tenantId,
-        createdBy: user.createdBy,
-        phoneNumber: user.phoneNumber,
-        accessToken,
-        refreshToken: newRefreshToken,
-      });
+      // Update store with new access token and user info
+      authStore.setAccessToken(accessToken);
+      if (user) {
+        authStore.setUser(user);
+      }
 
       // Update axios default header
       axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
@@ -108,5 +113,5 @@ API.interceptors.response.use(
   }
 );
 
-// 4. Default export of API (optional)
+// 5. Default export of API (optional)
 export default API;

@@ -92,7 +92,6 @@ const Subsidiaries: React.FC = () => {
       setSubsidiaries(data);
     } catch (err) {
       setError('Failed to load subsidiaries. Please try again.');
-      console.error('Error fetching subsidiaries:', err);
     } finally {
       setLoading(false);
     }
@@ -156,7 +155,6 @@ const Subsidiaries: React.FC = () => {
       setSubsidiaryToDelete(null);
       setSelectedSubsidiary(null);
     } catch (err) {
-      console.error('Error deleting subsidiary:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete subsidiary');
     }
   };

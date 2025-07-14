@@ -49,7 +49,6 @@ const Leads: React.FC = () => {
         setLeads(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch leads');
-        console.error('Error fetching leads:', err);
       } finally {
         setLoading(false);
       }

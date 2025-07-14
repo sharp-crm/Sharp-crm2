@@ -1,11 +1,21 @@
+import { useEffect } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
-import { isTokenExpired } from '../utils/auth';
+import { isTokenExpired, clearAllTokens } from '../utils/auth';
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const { accessToken, user } = useAuthStore((s) => ({ 
     accessToken: s.accessToken, 
     user: s.user 
   }));
+
+  // Clear expired tokens automatically
+  useEffect(() => {
+    if (accessToken && isTokenExpired(accessToken)) {
+      console.warn('Token expired in ProtectedRoute, clearing auth state');
+      clearAllTokens();
+      useAuthStore.getState().logout();
+    }
+  }, [accessToken]);
 
   // If no token or user found, return null (let AuthWrapper handle navigation)
   if (!accessToken || !user) {

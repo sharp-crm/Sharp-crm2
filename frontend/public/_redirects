@@ -1,0 +1,13 @@
+# Netlify redirects for SPA with hash routing
+# The root path and hash routes should serve the SPA
+# All other paths should return 404 for proper UX
+
+# Allow static assets
+/assets/*  /assets/:splat  200
+/favicon.ico  /favicon.ico  200
+
+# Only serve SPA for root path - hash routing will handle the rest
+/  /index.html  200
+
+# All other paths return 404 (proper UX for invalid routes)
+/*  /404.html  404

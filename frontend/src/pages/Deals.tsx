@@ -43,7 +43,7 @@ const Deals: React.FC = () => {
             : [];
         setUsers(userArray);
       } catch (err) {
-        console.error('Error fetching users:', err);
+        // Handle error silently
       }
     };
 
@@ -65,7 +65,6 @@ const Deals: React.FC = () => {
         setDeals(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch deals');
-        console.error('Error fetching deals:', err);
       } finally {
         setLoading(false);
       }
@@ -149,7 +148,6 @@ const Deals: React.FC = () => {
       setDeleteConfirmOpen(false);
       setDealToDelete(null);
     } catch (err) {
-      console.error('Error deleting deal:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete deal');
       setDeleteConfirmOpen(false);
       setDealToDelete(null);
@@ -418,7 +416,7 @@ const Deals: React.FC = () => {
         defaultType={defaultType}
         onSuccess={() => {
           // Refresh deals data after successful creation
-          dealsApi.getAll().then(data => setDeals(data)).catch(console.error);
+          dealsApi.getAll().then(data => setDeals(data)).catch(() => {});
         }}
       />
 

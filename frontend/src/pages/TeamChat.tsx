@@ -1265,7 +1265,7 @@ const TeamChat: React.FC = () => {
           }));
         })
         .catch(error => {
-          console.error("Failed to send reply:", error);
+          // Handle error silently or show user notification
         });
     }
 
@@ -1950,7 +1950,7 @@ const TeamChat: React.FC = () => {
                   setChannels(mappedChannels);
                 }
               } catch (error) {
-                console.error('Failed to fetch channels:', error);
+                // Handle error silently or show user notification
               }
             };
             fetchChannels();
@@ -1991,7 +1991,7 @@ const TeamChat: React.FC = () => {
                   setChannels(mappedChannels);
                 }
               } catch (error) {
-                console.error('Failed to fetch channels:', error);
+                // Handle error silently or show user notification
               }
             };
             fetchChannels();

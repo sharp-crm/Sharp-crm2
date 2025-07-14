@@ -132,15 +132,18 @@ const OrgTree: React.FC = () => {
                 </div>
               </div>
               
-              {/* Render children */}
-              {childRoles.map(childRole => (
-                <TreeNode 
-                  key={childRole} 
-                  users={filterUsersByRole(childRole)} 
-                  role={childRole} 
-                  level={level + 1} 
-                />
-              ))}
+              {/* Render children - only direct reports */}
+              {childRoles.map(childRole => {
+                const directReports = filterUsersByRole(childRole).filter(u => u.reportingTo === user.id);
+                return (
+                  <TreeNode 
+                    key={childRole} 
+                    users={directReports} 
+                    role={childRole} 
+                    level={level + 1} 
+                  />
+                );
+              })}
             </div>
           );
         })}
@@ -270,10 +273,13 @@ const OrgTree: React.FC = () => {
         <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <h4 className="text-sm font-medium text-gray-900 mb-3">Role Legend</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="flex items-center space-x-2">
-              <Icons.Crown className="w-4 h-4 text-purple-600" />
-              <span className="text-sm text-gray-600">Super Admin</span>
-            </div>
+            {/* Only show Super Admin role if current user is SUPER_ADMIN */}
+            {currentUser?.role?.toUpperCase() === 'SUPER_ADMIN' && (
+              <div className="flex items-center space-x-2">
+                <Icons.Crown className="w-4 h-4 text-purple-600" />
+                <span className="text-sm text-gray-600">Super Admin</span>
+              </div>
+            )}
             <div className="flex items-center space-x-2">
               <Icons.Shield className="w-4 h-4 text-blue-600" />
               <span className="text-sm text-gray-600">Admin</span>

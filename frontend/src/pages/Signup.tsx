@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import '../index.css';
 import PhoneNumberInput from '../components/Common/PhoneNumberInput';
 import DatePicker from '../components/Common/DatePicker';
+import { registerUser } from '../api/auth';
 
 const Signup: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -27,7 +28,7 @@ const Signup: React.FC = () => {
     e.preventDefault();
     setError(null);
     try {
-      const response = await axios.post('http://localhost:3000/api/users', formData);
+      const response = await registerUser(formData);
       if (response.status === 201) {
         navigate('/login');
       }
