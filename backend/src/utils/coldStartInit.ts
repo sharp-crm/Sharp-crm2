@@ -88,7 +88,9 @@ class ColdStartInitializer {
    * Check if required DynamoDB tables exist and create them if missing
    */
   private async checkDynamoDBTables(): Promise<void> {
-    const requiredTables = ['Users', 'RefreshTokens'];
+    const usersTableName = process.env.USERS_TABLE_NAME || 'Users';
+    const refreshTokensTableName = process.env.REFRESH_TOKENS_TABLE_NAME || 'RefreshTokens';
+    const requiredTables = [usersTableName, refreshTokensTableName];
     
     try {
       console.log('🔍 Checking DynamoDB tables...');
@@ -98,34 +100,20 @@ class ColdStartInitializer {
       const existingTables = listTablesResponse.TableNames || [];
       
       console.log('📋 Existing DynamoDB tables:', existingTables);
+      let allTablesExist = true;
       
-      // Check each required table and create if missing
+      // Check each required table
       for (const tableName of requiredTables) {
         if (existingTables.includes(tableName)) {
           console.log(`✅ Table '${tableName}' exists`);
-          
-          // Check table status
-          try {
-            const describeResponse = await client.send(
-              new DescribeTableCommand({ TableName: tableName })
-            );
-            
-            const tableStatus = describeResponse.Table?.TableStatus;
-            if (tableStatus === 'ACTIVE') {
-              console.log(`✅ Table '${tableName}' is ACTIVE`);
-            } else {
-              console.log(`⚠️  Table '${tableName}' status: ${tableStatus}`);
-              await this.waitForTableActive(tableName);
-            }
-          } catch (describeError) {
-            console.warn(`⚠️  Could not describe table '${tableName}':`, describeError);
-          }
         } else {
-          console.log(`🔧 Creating missing table '${tableName}'...`);
-          await this.createTable(tableName);
-          await this.waitForTableActive(tableName);
-          console.log(`✅ Table '${tableName}' created and is ACTIVE`);
+          allTablesExist = false;
+          console.error(`❌ Table '${tableName}' is missing`);
         }
+      }
+      
+      if (!allTablesExist) {
+        throw new Error('Missing required DynamoDB tables');
       }
       
       // Special focus on AuthUsers table (if it exists)
@@ -147,11 +135,12 @@ class ColdStartInitializer {
   private async createDefaultUser(): Promise<void> {
     try {
       const email = "rootuser@sharp.com";
+      const usersTableName = process.env.USERS_TABLE_NAME || 'Users';
       
       // Check if super admin already exists
       const existingUser = await docClient.send(
         new GetCommand({
-          TableName: "Users",
+          TableName: usersTableName,
           Key: { email }
         })
       );
@@ -182,7 +171,7 @@ class ColdStartInitializer {
 
       await docClient.send(
         new PutCommand({
-          TableName: "Users",
+          TableName: usersTableName,
           Item: superAdmin
         })
       );
@@ -201,20 +190,22 @@ class ColdStartInitializer {
   private async cleanupExpiredTokens(): Promise<void> {
     try {
       console.log('🧹 Cleaning up expired refresh tokens...');
-      
-      // Check if RefreshTokens table exists before cleanup
       const listTablesResponse = await client.send(new ListTablesCommand({}));
       const existingTables = listTablesResponse.TableNames || [];
-      
+
       if (existingTables.includes('RefreshTokens')) {
-        await cleanupExpiredTokens();
-        console.log('✅ Token cleanup completed');
+        const refreshTokensTable = process.env.REFRESH_TOKENS_TABLE_NAME || process.env.REFRESH_TOKENS_TABLE;
+        if (refreshTokensTable) {
+          await cleanupExpiredTokens(refreshTokensTable);
+          console.log('✅ Token cleanup completed');
+        } else {
+          console.warn('⚠️  REFRESH_TOKENS_TABLE_NAME not set, skipping token cleanup');
+        }
       } else {
         console.log('ℹ️  RefreshTokens table not found, skipping token cleanup');
       }
     } catch (error) {
       console.warn('⚠️  Token cleanup failed:', error);
-      // Don't throw - this is not critical for startup
     }
   }
 
@@ -225,25 +216,104 @@ class ColdStartInitializer {
     status: 'healthy' | 'unhealthy';
     checks: {
       dynamodb: boolean;
+      usersTable: boolean;
+      refreshTokensTable: boolean;
+    };
+    missingTables?: string[];
+    debug?: {
+      usersTableName: string;
+      refreshTokensTableName: string;
+      existingTables: string[];
       initialization: boolean;
     };
   }> {
+    console.log('🔍 Starting health check...');
+    
     const checks = {
       dynamodb: false,
-      initialization: this.initialized
+      usersTable: false,
+      refreshTokensTable: false
     };
 
+    const missingTables: string[] = [];
+    const usersTableName = process.env.USERS_TABLE_NAME || 'Users';
+    const refreshTokensTableName = process.env.REFRESH_TOKENS_TABLE_NAME || 'RefreshTokens';
+    
+    console.log('📋 Health check configuration:', {
+      usersTableName,
+      refreshTokensTableName,
+      initialization: this.initialized
+    });
+
+    let existingTables: string[] = [];
+
     try {
-      // Test DynamoDB connectivity
-      await client.send(new ListTablesCommand({}));
+      console.log('🔍 Testing DynamoDB connectivity...');
+      
+      // Test DynamoDB connectivity and get table list
+      const listTablesResponse = await client.send(new ListTablesCommand({}));
+      existingTables = listTablesResponse.TableNames || [];
+      
       checks.dynamodb = true;
+      console.log('✅ DynamoDB connectivity successful');
+      console.log('📋 Available tables:', existingTables);
+      
+      // Check if Users table exists
+      if (existingTables.includes(usersTableName)) {
+        checks.usersTable = true;
+        console.log(`✅ Health check: Users table '${usersTableName}' exists`);
+      } else {
+        missingTables.push(usersTableName);
+        console.error(`❌ Health check: Users table '${usersTableName}' is missing`);
+        console.error('Available tables:', existingTables);
+      }
+      
+      // Check if RefreshTokens table exists
+      if (existingTables.includes(refreshTokensTableName)) {
+        checks.refreshTokensTable = true;
+        console.log(`✅ Health check: RefreshTokens table '${refreshTokensTableName}' exists`);
+      } else {
+        missingTables.push(refreshTokensTableName);
+        console.error(`❌ Health check: RefreshTokens table '${refreshTokensTableName}' is missing`);
+        console.error('Available tables:', existingTables);
+      }
+      
     } catch (error) {
-      console.error('DynamoDB health check failed:', error);
+      console.error('❌ DynamoDB health check failed:', error);
     }
 
-    const status = checks.dynamodb && checks.initialization ? 'healthy' : 'unhealthy';
+    // Health is considered good if:
+    // 1. DynamoDB is reachable
+    // 2. Both required tables exist
+    // Note: Initialization status is NOT required for health - it's just a startup optimization
+    const isHealthy = checks.dynamodb && checks.usersTable && checks.refreshTokensTable;
+    const status = isHealthy ? 'healthy' : 'unhealthy';
+    const statusCode = isHealthy ? 200 : 503;
     
-    return { status, checks };
+    console.log('🔍 Health check details:', {
+      checks,
+      statusCode,
+      isHealthy,
+      missingTables: missingTables.length > 0 ? missingTables : 'none'
+    });
+    
+    const result: any = { status, checks };
+    
+    if (missingTables.length > 0) {
+      result.missingTables = missingTables;
+    }
+    
+    // Add debug info in development
+    if (process.env.NODE_ENV === 'development') {
+      result.debug = {
+        usersTableName,
+        refreshTokensTableName,
+        existingTables,
+        initialization: this.initialized
+      };
+    }
+    
+    return result;
   }
 
   /**

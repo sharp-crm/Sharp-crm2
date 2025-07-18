@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { create } from 'zustand';
 import { User } from '../types';
+import { API_CONFIG } from '../config/api';
 
 interface AuthState {
   user: User | null;
@@ -54,7 +55,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     try {
-      await axios.post('http://localhost:3000/api/auth/logout', {}, { withCredentials: true });
+      await axios.post(`${API_CONFIG.BASE_URL}/auth/logout`, {}, { withCredentials: true });
     } catch (err) {
       console.warn('Logout API failed or not implemented.');
     }

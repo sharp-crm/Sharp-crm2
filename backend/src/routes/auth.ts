@@ -21,6 +21,17 @@ import { docClient } from '../services/dynamoClient';
 
 const router = Router();
 
+// Get table names from environment variables
+const USERS_TABLE = process.env.USERS_TABLE_NAME || process.env.USERS_TABLE || 'Users';
+const REFRESH_TOKENS_TABLE = process.env.REFRESH_TOKENS_TABLE_NAME || process.env.REFRESH_TOKENS_TABLE || 'RefreshTokens';
+
+// Debug table names
+console.log("=== TABLE NAMES DEBUG ===");
+console.log("USERS_TABLE_NAME env:", process.env.USERS_TABLE_NAME);
+console.log("USERS_TABLE env:", process.env.USERS_TABLE);
+console.log("Resolved USERS_TABLE:", USERS_TABLE);
+console.log("=========================");
+
 // Register new user
 const register: RequestHandler = async (req, res, next) => {
   try {
@@ -30,7 +41,7 @@ const register: RequestHandler = async (req, res, next) => {
     let existingUser;
     try {
       existingUser = await docClient.send(new GetCommand({
-        TableName: "Users",
+        TableName: USERS_TABLE,
         Key: { email }
       }));
     } catch (dbError) {
@@ -50,6 +61,12 @@ const register: RequestHandler = async (req, res, next) => {
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
+    
+    // Debug log for registration
+    console.log("=== REGISTRATION DEBUG ===");
+    console.log("Plain password:", password);
+    console.log("Hashed password during registration:", hashedPassword);
+    console.log("=========================");
 
     // Create new user
     const userId = uuidv4();
@@ -76,7 +93,7 @@ const register: RequestHandler = async (req, res, next) => {
     }
 
     await docClient.send(new PutCommand({
-      TableName: "Users",
+      TableName: USERS_TABLE,
       Item: newUser
     }));
 
@@ -86,7 +103,7 @@ const register: RequestHandler = async (req, res, next) => {
       email, 
       role, 
       tenantId: "UNASSIGNED" 
-    });
+    }, REFRESH_TOKENS_TABLE);
 
     // Set secure HTTP-only cookie for refresh token
     setRefreshTokenCookie(res, tokens.refreshToken);
@@ -120,7 +137,7 @@ const login: RequestHandler = async (req, res, next) => {
     let result;
     try {
       result = await docClient.send(new GetCommand({
-        TableName: "Users",
+        TableName: USERS_TABLE,
         Key: { email }
       }));
     } catch (dbError) {
@@ -147,25 +164,53 @@ const login: RequestHandler = async (req, res, next) => {
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);
+    
+    // Debug logs for password comparison
+    console.log("=== PASSWORD COMPARISON DEBUG ===");
+    console.log("Entered password:", password);
+    console.log("Stored hashed password:", user.password);
+    console.log("Password valid:", isValidPassword);
+    console.log("User found:", {
+      email: user.email,
+      userId: user.userId,
+      role: user.role,
+      isDeleted: user.isDeleted
+    });
+    console.log("===================================");
 
     if (!isValidPassword) {
       res.status(401).json({ message: "Invalid credentials" });
       return;
     }
 
-    // Invalidate any existing refresh tokens for security
-    await invalidateAllUserRefreshTokens(user.userId);
+    // Invalidate any existing refresh tokens for security (optional)
+    try {
+      await invalidateAllUserRefreshTokens(user.userId, REFRESH_TOKENS_TABLE);
+    } catch (error) {
+      console.warn('Failed to invalidate existing refresh tokens (non-critical):', error instanceof Error ? error.message : 'Unknown error');
+    }
 
     // Generate new token pair
-    const tokens = await generateTokenPair({ 
-      userId: user.userId, 
-      email: user.email, 
-      role: user.role,
-      tenantId: user.tenantId
-    });
+    let tokens;
+    try {
+      tokens = await generateTokenPair({ 
+        userId: user.userId, 
+        email: user.email, 
+        role: user.role,
+        tenantId: user.tenantId
+      }, REFRESH_TOKENS_TABLE);
+    } catch (tokenError) {
+      console.error('Token generation error:', tokenError);
+      res.status(500).json({ message: "Failed to generate authentication tokens" });
+      return;
+    }
 
     // Set secure HTTP-only cookie for refresh token
-    setRefreshTokenCookie(res, tokens.refreshToken);
+    try {
+      setRefreshTokenCookie(res, tokens.refreshToken);
+    } catch (cookieError) {
+      console.warn('Failed to set refresh token cookie (non-critical):', cookieError instanceof Error ? cookieError.message : 'Unknown error');
+    }
 
     res.json({
       accessToken: tokens.accessToken,
@@ -199,13 +244,13 @@ const refresh: RequestHandler = async (req, res, next) => {
     }
 
     try {
-      const decoded = await verifyRefreshToken(refreshToken);
+      const decoded = await verifyRefreshToken(refreshToken, REFRESH_TOKENS_TABLE);
 
       // Verify user still exists and is not soft deleted
       let userResult;
       try {
         userResult = await docClient.send(new GetCommand({
-          TableName: "Users",
+          TableName: USERS_TABLE,
           Key: { email: decoded.email }
         }));
       } catch (dbError) {
@@ -235,11 +280,11 @@ const refresh: RequestHandler = async (req, res, next) => {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId
-      });
+      }, REFRESH_TOKENS_TABLE);
 
       // Invalidate old refresh token
       if (decoded.jti) {
-        await invalidateRefreshToken(decoded.jti);
+        await invalidateRefreshToken(decoded.jti, REFRESH_TOKENS_TABLE);
       }
 
       // Set new refresh token in secure cookie
@@ -284,7 +329,7 @@ const updateProfile: RequestHandler = async (req, res, next) => {
     const timestamp = new Date().toISOString();
 
     const result = await docClient.send(new UpdateCommand({
-      TableName: "Users",
+      TableName: USERS_TABLE,
       Key: { userId },
       UpdateExpression: "set #firstName = :firstName, #lastName = :lastName, #phoneNumber = :phoneNumber, #updatedAt = :updatedAt",
       ExpressionAttributeNames: {
@@ -335,7 +380,7 @@ const changePassword: RequestHandler = async (req, res, next) => {
 
     // Get current user
     const result = await docClient.send(new GetCommand({
-      TableName: "Users",
+      TableName: USERS_TABLE,
       Key: { userId }
     }));
 
@@ -360,7 +405,7 @@ const changePassword: RequestHandler = async (req, res, next) => {
 
     // Update password
     await docClient.send(new UpdateCommand({
-      TableName: "Users",
+      TableName: USERS_TABLE,
       Key: { userId },
       UpdateExpression: "set #password = :password, #updatedAt = :updatedAt",
       ExpressionAttributeNames: {
@@ -389,7 +434,7 @@ const getProfile: RequestHandler = async (req, res, next) => {
     const { userId } = req.body;
 
     const result = await docClient.send(new GetCommand({
-      TableName: "Users",
+      TableName: USERS_TABLE,
       Key: { userId }
     }));
 
@@ -431,7 +476,7 @@ const autoRefresh: RequestHandler = async (req, res, next) => {
       return;
     }
 
-    const result = await autoRefreshTokens(accessToken, refreshToken);
+    const result = await autoRefreshTokens(accessToken, refreshToken, REFRESH_TOKENS_TABLE, USERS_TABLE);
 
     if (!result.shouldRefresh) {
       res.json({ 
@@ -469,11 +514,11 @@ const logout: RequestHandler = async (req, res, next) => {
     if (refreshToken) {
       try {
         // Validate and get token info
-        const decoded = await verifyRefreshToken(refreshToken);
+        const decoded = await verifyRefreshToken(refreshToken, REFRESH_TOKENS_TABLE);
         
         // Invalidate this specific refresh token
         if (decoded.jti) {
-          await invalidateRefreshToken(decoded.jti);
+          await invalidateRefreshToken(decoded.jti, REFRESH_TOKENS_TABLE);
         }
       } catch (error) {
         console.log('Refresh token already invalid or expired');
@@ -482,7 +527,7 @@ const logout: RequestHandler = async (req, res, next) => {
 
     // Optional: Invalidate all refresh tokens for this user
     if (userId) {
-      await invalidateAllUserRefreshTokens(userId);
+      await invalidateAllUserRefreshTokens(userId, REFRESH_TOKENS_TABLE);
     }
 
     // Clear refresh token cookie

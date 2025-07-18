@@ -21,21 +21,37 @@ import { errorHandler } from "./middlewares/errorHandler";
 import { requestLogger } from "./middlewares/requestLogger";
 import { tokenRefreshHeaders, tokenCorsHeaders } from "./middlewares/tokenRefreshHeaders";
 
-dotenv.config();
+// Load environment variables first (only in non-Lambda environments)
+if (!process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  dotenv.config();
+}
 
 const app = express();
 
-// CORS configuration
-app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:5175"
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// Custom dynamic CORS middleware
+const allowedOrigins = [
+  "https://d9xj0evv3ouwa.cloudfront.net",
+  "http://localhost:5174",
+  "http://localhost:5175"
+];
+
+app.use((req: express.Request, res: express.Response, next: express.NextFunction): void => {
+  const origin = req.headers.origin;
+
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  next();
+});
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -82,6 +98,34 @@ app.get('/health', async (req, res) => {
       error: 'Health check failed'
     });
   }
+});
+
+// Add this simple test route before other routes
+app.get('/test', (req, res) => {
+  res.json({ message: 'Direct route works' });
+});
+
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'API prefix route works' });
+});
+
+// Add this at the top, before other routes
+app.get('/test-simple', (req, res) => {
+  res.json({ 
+    message: 'Simple route works!',
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/test-api', (req, res) => {
+  res.json({ 
+    message: 'API route works!',
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Public routes (only auth routes should be public)

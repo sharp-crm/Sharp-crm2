@@ -1,0 +1,68 @@
+# SAM Configuration file
+# This file stores default parameters for SAM CLI commands
+
+version = 0.1
+
+[default]
+[default.global]
+[default.global.parameters]
+stack_name = "sharp-crm-infrastructure-v2"
+region = "us-east-1"
+confirm_changeset = true
+resolve_s3 = true
+s3_prefix = "sharp-crm-infrastructure"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = [
+    "Environment=development",
+    "TablePrefix=SharpCRM"
+]
+
+[default.build]
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.deploy]
+[default.deploy.parameters]
+parameter_overrides = "Environment=\"development\" TablePrefix=\"SharpCRM\""
+image_repositories = []
+stack_name = "sharp-crm-infrastructure"
+
+[default.local_start_api]
+[default.local_start_api.parameters]
+warm_containers = "EAGER"
+
+[default.local_start_lambda]
+[default.local_start_lambda.parameters]
+warm_containers = "EAGER"
+
+[default.local_invoke]
+[default.local_invoke.parameters]
+warm_containers = "EAGER"
+
+# Production environment configuration
+[production]
+[production.global]
+[production.global.parameters]
+stack_name = "sharp-crm-infrastructure-prod"
+region = "us-east-1"
+confirm_changeset = true
+resolve_s3 = true
+s3_prefix = "sharp-crm-infrastructure-prod"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = [
+    "Environment=production",
+    "TablePrefix=SharpCRM-Prod"
+]
+
+[production.deploy]
+[production.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+resolve_s3 = true
+s3_prefix = "sharp-crm-infrastructure-prod"
+region = "us-east-1"
+parameter_overrides = [
+    "Environment=production",
+    "TablePrefix=SharpCRM-Prod"
+]

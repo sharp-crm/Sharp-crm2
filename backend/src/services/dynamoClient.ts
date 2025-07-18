@@ -9,16 +9,7 @@ const isLocal = process.env.DYNAMODB_LOCAL === 'true';
  * DynamoDB Client Configuration based on environment
  */
 const getClientConfig = () => {
-  if (isProduction) {
-    // Production AWS Configuration
-    return {
-      region: process.env.AWS_REGION || "us-east-1",
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!
-      }
-    };
-  } else if (isLocal) {
+  if (isLocal) {
     // Local Development Configuration (Docker)
     console.log(`🐳 Using local DynamoDB at http://localhost:8000`);
     return {
@@ -29,6 +20,22 @@ const getClientConfig = () => {
       credentials: {
         accessKeyId: "fakeMyKeyId",
         secretAccessKey: "fakeSecretAccessKey"
+      }
+    };
+  } else if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    // Lambda environment - AWS provides credentials automatically via IAM role
+    console.log(`🚀 Running in Lambda - using IAM role credentials`);
+    return {
+      region: process.env.AWS_REGION || "us-east-1"
+      // No explicit credentials needed - Lambda provides them automatically
+    };
+  } else if (isProduction) {
+    // Production AWS Configuration (non-Lambda)
+    return {
+      region: process.env.AWS_REGION || "us-east-1",
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!
       }
     };
   } else {
@@ -45,15 +52,18 @@ const getClientConfig = () => {
 };
 
 // Initialize DynamoDB client with configuration
-// Force local configuration for now
-const clientConfig = {
-  region: "us-east-1",
-  endpoint: "http://localhost:8000",
-  credentials: {
-    accessKeyId: "fakeMyKeyId",
-    secretAccessKey: "fakeSecretAccessKey"
-  }
-};
+const clientConfig = getClientConfig();
+
+// Uncomment below for forced local development (and comment out the line above)
+// const clientConfig = {
+//   region: "us-east-1",
+//   endpoint: "http://localhost:8000",
+//   credentials: {
+//     accessKeyId: "fakeMyKeyId",
+//     secretAccessKey: "fakeSecretAccessKey"
+//   }
+// };
+
 console.log('DynamoDB Client Config:', clientConfig);
 const client = new DynamoDBClient(clientConfig);
 

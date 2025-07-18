@@ -1,5 +1,8 @@
 import dotenv from 'dotenv';
-dotenv.config();
+// Load environment variables first (only in non-Lambda environments)
+if (!process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  dotenv.config();
+}
 
 import express from 'express';
 import http from 'http';

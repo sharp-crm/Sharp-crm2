@@ -46,7 +46,7 @@ export const generateAccessToken = (payload: TokenPayload): string => {
   );
 };
 
-export const generateRefreshToken = async (payload: TokenPayload): Promise<string> => {
+export const generateRefreshToken = async (payload: TokenPayload, refreshTokensTable: string): Promise<string> => {
   const jti = uuidv4(); // Unique identifier for the token
   const refreshToken = jwt.sign(
     {
@@ -60,7 +60,7 @@ export const generateRefreshToken = async (payload: TokenPayload): Promise<strin
   // Store refresh token in DynamoDB
   try {
     await docClient.send(new PutCommand({
-      TableName: "RefreshTokens",
+      TableName: refreshTokensTable,
       Item: {
         jti,
         userId: payload.userId,
@@ -80,9 +80,9 @@ export const generateRefreshToken = async (payload: TokenPayload): Promise<strin
 /**
  * Generate both access and refresh tokens as a pair
  */
-export const generateTokenPair = async (payload: TokenPayload): Promise<TokenPair> => {
+export const generateTokenPair = async (payload: TokenPayload, refreshTokensTable: string): Promise<TokenPair> => {
   const accessToken = generateAccessToken(payload);
-  const refreshToken = await generateRefreshToken(payload);
+  const refreshToken = await generateRefreshToken(payload, refreshTokensTable);
   
   // Calculate expiry times
   const accessTokenDecoded = jwt.decode(accessToken) as any;
@@ -129,14 +129,14 @@ export const verifyAccessToken = (token: string): TokenPayload => {
   return jwt.verify(token, JWT_SECRET) as TokenPayload;
 };
 
-export const verifyRefreshToken = async (token: string): Promise<TokenPayload> => {
+export const verifyRefreshToken = async (token: string, refreshTokensTable: string): Promise<TokenPayload> => {
   const decoded = jwt.verify(token, JWT_REFRESH_SECRET) as TokenPayload & { jti: string };
   
   // Check if token exists in database
   let result;
   try {
     result = await docClient.send(new GetCommand({
-      TableName: "RefreshTokens",
+      TableName: refreshTokensTable,
       Key: { jti: decoded.jti }
     }));
   } catch (dbError) {
@@ -151,7 +151,7 @@ export const verifyRefreshToken = async (token: string): Promise<TokenPayload> =
   // Check if token is expired
   if (new Date(result.Item.expiresAt) < new Date()) {
     try {
-      await invalidateRefreshToken(decoded.jti);
+      await invalidateRefreshToken(decoded.jti, refreshTokensTable);
     } catch (error) {
       console.warn('Failed to invalidate expired token:', error);
     }
@@ -161,7 +161,7 @@ export const verifyRefreshToken = async (token: string): Promise<TokenPayload> =
   // Update last used timestamp
   try {
     await docClient.send(new PutCommand({
-      TableName: "RefreshTokens",
+      TableName: refreshTokensTable,
       Item: {
         ...result.Item,
         lastUsed: new Date().toISOString()
@@ -175,9 +175,9 @@ export const verifyRefreshToken = async (token: string): Promise<TokenPayload> =
   return decoded;
 };
 
-export const invalidateRefreshToken = async (jti: string): Promise<void> => {
+export const invalidateRefreshToken = async (jti: string, refreshTokensTable: string): Promise<void> => {
   await docClient.send(new DeleteCommand({
-    TableName: "RefreshTokens",
+    TableName: refreshTokensTable,
     Key: { jti }
   }));
 };
@@ -185,11 +185,11 @@ export const invalidateRefreshToken = async (jti: string): Promise<void> => {
 /**
  * Invalidate all refresh tokens for a user using GSI
  */
-export const invalidateAllUserRefreshTokens = async (userId: string): Promise<void> => {
+export const invalidateAllUserRefreshTokens = async (userId: string, refreshTokensTable: string): Promise<void> => {
   try {
     // Query all tokens for the user using GSI
     const result = await docClient.send(new ScanCommand({
-      TableName: "RefreshTokens",
+      TableName: refreshTokensTable,
       FilterExpression: "userId = :userId",
       ExpressionAttributeValues: {
         ":userId": userId
@@ -200,7 +200,7 @@ export const invalidateAllUserRefreshTokens = async (userId: string): Promise<vo
     if (result.Items && result.Items.length > 0) {
       const deletePromises = result.Items.map(item => 
         docClient.send(new DeleteCommand({
-          TableName: "RefreshTokens",
+          TableName: refreshTokensTable,
           Key: { jti: item.jti }
         }))
       );
@@ -217,13 +217,13 @@ export const invalidateAllUserRefreshTokens = async (userId: string): Promise<vo
 /**
  * Clean up expired refresh tokens
  */
-export const cleanupExpiredTokens = async (): Promise<void> => {
+export const cleanupExpiredTokens = async (refreshTokensTable: string): Promise<void> => {
   try {
     const now = new Date().toISOString();
     
     // Scan for expired tokens
     const result = await docClient.send(new ScanCommand({
-      TableName: "RefreshTokens",
+      TableName: refreshTokensTable,
       FilterExpression: "expiresAt < :now",
       ExpressionAttributeValues: {
         ":now": now
@@ -234,7 +234,7 @@ export const cleanupExpiredTokens = async (): Promise<void> => {
     if (result.Items && result.Items.length > 0) {
       const deletePromises = result.Items.map(item => 
         docClient.send(new DeleteCommand({
-          TableName: "RefreshTokens",
+          TableName: refreshTokensTable,
           Key: { jti: item.jti }
         }))
       );
@@ -252,7 +252,9 @@ export const cleanupExpiredTokens = async (): Promise<void> => {
  */
 export const autoRefreshTokens = async (
   accessToken: string, 
-  refreshToken: string
+  refreshToken: string,
+  refreshTokensTable: string,
+  usersTable: string
 ): Promise<{ shouldRefresh: boolean; tokens?: TokenPair }> => {
   try {
     // Check if access token is near expiry
@@ -261,11 +263,11 @@ export const autoRefreshTokens = async (
     }
 
     // Verify refresh token and get user data
-    const decoded = await verifyRefreshToken(refreshToken);
+    const decoded = await verifyRefreshToken(refreshToken, refreshTokensTable);
     
     // Get fresh user data from database
     const userResult = await docClient.send(new GetCommand({
-      TableName: "Users",
+      TableName: usersTable,
       Key: { email: decoded.email }
     }));
 
@@ -279,11 +281,11 @@ export const autoRefreshTokens = async (
       email: userResult.Item.email,
       role: userResult.Item.role,
       tenantId: userResult.Item.tenantId
-    });
+    }, refreshTokensTable);
 
     // Invalidate old refresh token
     if (decoded.jti) {
-      await invalidateRefreshToken(decoded.jti);
+      await invalidateRefreshToken(decoded.jti, refreshTokensTable);
     }
 
     return {
