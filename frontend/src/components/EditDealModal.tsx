@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog } from '@headlessui/react';
 import * as Icons from 'lucide-react';
 import { Deal, dealsApi } from '../api/services';
+import { DEAL_STAGES } from '../types';
 
 interface EditDealModalProps {
   isOpen: boolean;
@@ -86,10 +87,7 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, deal, on
     'Seminar Partner', 'Internal Seminar', 'Trade Show', 'Web Download', 'Web Research', 'Chat'
   ];
 
-  const stageOptions = [
-    'Needs Analysis', 'Value Proposition', 'Identify Decision Makers',
-    'Negotiation/Review', 'Closed Won', 'Closed Lost', 'Closed Lost to Competition'
-  ];
+  const stageOptions = [...DEAL_STAGES];
 
   if (!deal) return null;
 
