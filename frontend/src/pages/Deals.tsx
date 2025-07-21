@@ -10,7 +10,7 @@ import GridView from '../components/Views/GridView';
 import TimelineView from '../components/Views/TimelineView';
 import ChartView from '../components/Views/ChartView';
 import { dealsApi } from '../api/services';
-import { ViewType, Deal } from '../types';
+import { ViewType, Deal, DEAL_STAGES } from '../types';
 import AddNewModal from '../components/Common/AddNewModal';
 import ViewDealModal from '../components/ViewDealModal';
 import EditDealModal from '../components/EditDealModal';
@@ -369,8 +369,8 @@ const Deals: React.FC = () => {
       {currentView === 'list' && (
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Deal Pipeline</h3>
-          <div className="grid grid-cols-6 gap-4">
-            {['Needs Analysis', 'Value Proposition', 'Identify Decision Makers', 'Negotiation/Review', 'Closed Won', 'Closed Lost'].map((stage) => {
+          <div className="grid grid-cols-7 gap-4">
+            {DEAL_STAGES.map((stage) => {
               const stageDeals = deals.filter(deal => deal.stage === stage);
               const stageValue = stageDeals.reduce((sum, deal) => sum + (deal.amount || deal.value || 0), 0);
               return (
