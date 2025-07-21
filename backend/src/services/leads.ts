@@ -1,7 +1,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
-import { docClient } from '../services/dynamoClient';
+import { docClient, TABLES } from '../services/dynamoClient';
 
 // Lead interface based on AddNewModal fields + auditing
 export interface Lead {
@@ -87,7 +87,7 @@ export interface UpdateLeadInput {
 }
 
 export class LeadsService {
-  private tableName = 'Leads';
+  private tableName = TABLES.LEADS;
 
   // Create a new lead
   async createLead(input: CreateLeadInput, userId: string, userEmail: string, tenantId: string): Promise<Lead> {
@@ -156,13 +156,12 @@ export class LeadsService {
   async getLeadsByTenant(tenantId: string, userId: string, includeDeleted = false): Promise<Lead[]> {
     console.log('🔍 getLeadsByTenant called with:', { tenantId, userId, includeDeleted });
     
-    const result = await docClient.send(new QueryCommand({
+    // Use ScanCommand instead of QueryCommand since TenantIdIndex doesn't exist
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
       FilterExpression: includeDeleted 
-        ? '(attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)'
-        : 'isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+        ? 'tenantId = :tenantId AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)'
+        : 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ':userId': userId,
@@ -185,11 +184,9 @@ export class LeadsService {
 
   // Get leads by owner
   async getLeadsByOwner(leadOwner: string, tenantId: string, userId: string): Promise<Lead[]> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'LeadOwnerIndex',
-      KeyConditionExpression: 'leadOwner = :leadOwner',
-      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+      FilterExpression: 'leadOwner = :leadOwner AND tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
       ExpressionAttributeValues: {
         ':leadOwner': leadOwner,
         ':tenantId': tenantId,
@@ -204,13 +201,11 @@ export class LeadsService {
 
   // Get lead by email
   async getLeadByEmail(email: string, tenantId: string, userId?: string): Promise<Lead | null> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'EmailIndex',
-      KeyConditionExpression: 'email = :email',
       FilterExpression: userId 
-        ? 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)'
-        : 'tenantId = :tenantId AND isDeleted = :isDeleted',
+        ? 'email = :email AND tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)'
+        : 'email = :email AND tenantId = :tenantId AND isDeleted = :isDeleted',
       ExpressionAttributeValues: {
         ':email': email,
         ':tenantId': tenantId,
@@ -352,11 +347,9 @@ export class LeadsService {
 
   // Search leads by various criteria
   async searchLeads(tenantId: string, userId: string, searchTerm: string): Promise<Lead[]> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
-      FilterExpression: 'isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId) AND (contains(firstName, :searchTerm) OR contains(lastName, :searchTerm) OR contains(company, :searchTerm) OR contains(email, :searchTerm))',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId) AND (contains(firstName, :searchTerm) OR contains(lastName, :searchTerm) OR contains(company, :searchTerm) OR contains(email, :searchTerm))',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ':userId': userId,
@@ -378,11 +371,9 @@ export class LeadsService {
     avgValue: number;
     recentCount: number;
   }> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
-      FilterExpression: 'isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ':userId': userId,

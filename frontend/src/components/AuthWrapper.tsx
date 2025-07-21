@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { isTokenExpired, clearAllTokens } from '../utils/auth';
+import { isTokenValid } from '../utils/token';
 
 const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { initialize, accessToken, user, logout } = useAuthStore((s) => ({
@@ -19,10 +20,25 @@ const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Initialize auth state from storage
   useEffect(() => {
     if (!initialized.current) {
+      // Double-check storage directly before proceeding
+      const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
+      const storedToken = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      
+      console.log('🔄 AuthWrapper initializing:', {
+        hasStoredUser: !!storedUser,
+        hasStoredToken: !!storedToken,
+        tokenLength: storedToken?.length
+      });
+      
       initialize();
       initialized.current = true;
-      // Add a small delay to ensure state is fully updated
-      setTimeout(() => setHydrated(true), 10);
+      
+      // Give more time for state restoration, especially if we have stored data
+      const delay = (storedUser && storedToken) ? 150 : 50;
+      setTimeout(() => {
+        console.log('⏰ Setting hydrated after', delay, 'ms');
+        setHydrated(true);
+      }, delay);
     }
   }, [initialize]);
 
@@ -33,15 +49,40 @@ const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const publicPaths = ['/login', '/signup', '/forgot-password'];
     const isPublicPath = publicPaths.includes(location.pathname);
 
-    // Check if we have a valid token and user
-    const hasValidAuth = accessToken && user && !isTokenExpired(accessToken);
+    // Enhanced auth check - check both store state AND storage directly
+    const storeHasAuth = !!(accessToken && user);
+    const storageHasAuth = !!(
+      (localStorage.getItem('user') || sessionStorage.getItem('user')) &&
+      (localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken'))
+    );
+    
+    // If store doesn't have auth but storage does, try to reinitialize
+    if (!storeHasAuth && storageHasAuth) {
+      console.log('🔄 Store empty but storage has data, reinitializing...');
+      initialize();
+      return; // Let the next render handle the routing
+    }
+
+    // Validate token
+    const tokenToCheck = accessToken || localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    const tokenValidation = tokenToCheck ? isTokenValid(tokenToCheck) : false;
+    const hasValidAuth = storeHasAuth && tokenValidation;
+
+    console.log('🎯 Auth check result:', {
+      storeHasAuth,
+      storageHasAuth, 
+      tokenValid: tokenValidation,
+      hasValidAuth,
+      isPublicPath,
+      currentPath: location.pathname
+    });
 
     if (!hasValidAuth) {
       // Clear any invalid tokens
-      if (accessToken && isTokenExpired(accessToken)) {
-        console.warn('Token expired, clearing auth state');
+      if (tokenToCheck && !tokenValidation) {
+        console.warn('Token invalid, clearing auth state');
         clearAllTokens();
-        useAuthStore.getState().logout();
+        logout();
       }
       
       // Redirect to login if not on a public path
@@ -54,7 +95,7 @@ const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       console.log('User authenticated, redirecting to home');
       navigate('/', { replace: true });
     }
-  }, [hydrated, accessToken, user, location.pathname, navigate]);
+  }, [hydrated, accessToken, user, location.pathname, navigate, initialize, logout]);
 
   // Show loading spinner while initializing
   if (!hydrated) {

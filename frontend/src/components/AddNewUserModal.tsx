@@ -161,7 +161,7 @@ const AddNewUserModal: React.FC<AddNewUserModalProps> = ({ isOpen, onClose, onUs
     >
       <div className="bg-white rounded-xl p-8 w-full max-w-lg shadow-lg max-h-[90vh] overflow-y-auto">
         <h2 className="text-2xl font-bold text-center mb-4">
-          {isSuperAdmin ? 'Add New Admin' : 'Add New User'}
+          {isSuperAdmin ? 'Add New Client' : 'Add New User'}
         </h2>
         {error && (
           <div className="text-red-600 text-sm mb-4 bg-red-100 px-4 py-2 rounded">{error}</div>

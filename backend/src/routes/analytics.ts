@@ -1,6 +1,6 @@
 import express from "express";
 import { ScanCommand } from "@aws-sdk/lib-dynamodb";
-import { docClient } from "../services/dynamoClient";
+import { docClient, TABLES } from "../services/dynamoClient";
 import { createError } from "../middlewares/errorHandler";
 
 const router = express.Router();
@@ -15,10 +15,10 @@ router.get("/overview", async (req, res, next) => {
 
     // Fetch data from all relevant tables
     const [dealsResult, leadsResult, tasksResult, contactsResult] = await Promise.all([
-      docClient.send(new ScanCommand({ TableName: "Deals" })),
-      docClient.send(new ScanCommand({ TableName: "Leads" })),
-      docClient.send(new ScanCommand({ TableName: "Tasks" })),
-      docClient.send(new ScanCommand({ TableName: "Contacts" }))
+      docClient.send(new ScanCommand({ TableName: TABLES.DEALS })),
+              docClient.send(new ScanCommand({ TableName: TABLES.LEADS })),
+      docClient.send(new ScanCommand({ TableName: TABLES.TASKS })),
+      docClient.send(new ScanCommand({ TableName: TABLES.CONTACTS }))
     ]);
 
     const deals = dealsResult.Items || [];
@@ -148,7 +148,7 @@ router.get("/overview", async (req, res, next) => {
 // Get lead analytics
 router.get("/leads", async (req, res, next) => {
   try {
-    const result = await docClient.send(new ScanCommand({ TableName: "Leads" }));
+    const result = await docClient.send(new ScanCommand({ TableName: TABLES.LEADS }));
     const leads = result.Items || [];
 
     // Lead status distribution
@@ -203,7 +203,7 @@ router.get("/leads", async (req, res, next) => {
 // Get deal insights
 router.get("/deals", async (req, res, next) => {
   try {
-    const result = await docClient.send(new ScanCommand({ TableName: "Deals" }));
+    const result = await docClient.send(new ScanCommand({ TableName: TABLES.DEALS }));
     const deals = result.Items || [];
 
     // Stage distribution
@@ -262,9 +262,9 @@ router.get("/deals", async (req, res, next) => {
 router.get("/activity", async (req, res, next) => {
   try {
     const [tasksResult, dealsResult, leadsResult] = await Promise.all([
-      docClient.send(new ScanCommand({ TableName: "Tasks" })),
-      docClient.send(new ScanCommand({ TableName: "Deals" })),
-      docClient.send(new ScanCommand({ TableName: "Leads" }))
+      docClient.send(new ScanCommand({ TableName: TABLES.TASKS })),
+      docClient.send(new ScanCommand({ TableName: TABLES.DEALS })),
+              docClient.send(new ScanCommand({ TableName: TABLES.LEADS }))
     ]);
 
     const tasks = tasksResult.Items || [];
@@ -322,8 +322,8 @@ router.get("/activity", async (req, res, next) => {
 router.get("/team", async (req, res, next) => {
   try {
     const [dealsResult, tasksResult, usersResult] = await Promise.all([
-      docClient.send(new ScanCommand({ TableName: "Deals" })),
-      docClient.send(new ScanCommand({ TableName: "Tasks" })),
+      docClient.send(new ScanCommand({ TableName: TABLES.DEALS })),
+      docClient.send(new ScanCommand({ TableName: TABLES.TASKS })),
       docClient.send(new ScanCommand({ TableName: "Users" }))
     ]);
 

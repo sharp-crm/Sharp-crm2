@@ -47,7 +47,7 @@ const ScheduledReports: React.FC = () => {
   const handleRunReport = async (reportId: string) => {
     try {
       // Run the report manually
-      await fetch(`http://localhost:3000/api/reports/${reportId}/run`, {
+      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/reports/${reportId}/run`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken')}`,
@@ -62,7 +62,7 @@ const ScheduledReports: React.FC = () => {
     }
   };
 
-  const getScheduleColor = (schedule: string) => {
+  const getScheduleColor = (schedule: string | null | undefined) => {
     switch (schedule) {
       case 'daily': return 'bg-blue-100 text-blue-800';
       case 'weekly': return 'bg-green-100 text-green-800';
@@ -90,7 +90,7 @@ const ScheduledReports: React.FC = () => {
       sortable: true,
       render: (value: string) => (
         <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
-          {value.charAt(0).toUpperCase() + value.slice(1).replace('-', ' ')}
+          {value ? value.charAt(0).toUpperCase() + value.slice(1).replace('-', ' ') : 'Unknown'}
         </span>
       )
     },
@@ -99,9 +99,9 @@ const ScheduledReports: React.FC = () => {
       label: 'Schedule',
       sortable: true,
       render: (value: string) => (
-        <span className={`flex items-center px-2 py-1 text-xs font-medium rounded-full ${getScheduleColor(value)}`}>
+        <span className={`flex items-center px-2 py-1 text-xs font-medium rounded-full ${getScheduleColor(value || '')}`}>
           <Icons.Clock className="w-3 h-3 mr-1" />
-          {value.charAt(0).toUpperCase() + value.slice(1)}
+          {value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Not set'}
         </span>
       )
     },
@@ -111,7 +111,7 @@ const ScheduledReports: React.FC = () => {
       sortable: true,
       render: (value?: string) => (
         <div className="text-sm">
-          {value ? (
+          {value && value !== 'null' && value !== 'undefined' ? (
             <div>
               <div className="text-gray-900">{new Date(value).toLocaleDateString()}</div>
               <div className="text-gray-500 text-xs">{new Date(value).toLocaleTimeString()}</div>
@@ -138,7 +138,7 @@ const ScheduledReports: React.FC = () => {
         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
           value === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
         }`}>
-          {value.charAt(0).toUpperCase() + value.slice(1)}
+          {value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Unknown'}
         </span>
       )
     },
@@ -266,7 +266,7 @@ const ScheduledReports: React.FC = () => {
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-600">Active</p>
                 <p className="text-lg font-semibold text-gray-900">
-                  {scheduledReports.filter(r => r.status === 'active').length}
+                  {scheduledReports.filter(r => r.status === 'active' || r.status == null).length}
                 </p>
               </div>
             </div>
@@ -307,9 +307,11 @@ const ScheduledReports: React.FC = () => {
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Scheduled Reports</h2>
         {scheduledReports.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
-            <Icons.Clock className="h-12 w-12 text-gray-400 mb-4" />
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <Icons.Calendar className="h-8 w-8 text-gray-400" />
+            </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Scheduled Reports</h3>
-            <p className="text-gray-600 mb-4">Set up automatic report generation by adding schedules to your reports.</p>
+            <p className="text-gray-600 mb-4">Schedule reports from the All Reports page to see them here.</p>
             <button
               onClick={() => window.location.href = '/reports'}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

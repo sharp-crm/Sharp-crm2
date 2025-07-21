@@ -1,6 +1,6 @@
 import { Router, Request, Response, RequestHandler } from 'express';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { 
@@ -17,20 +17,10 @@ import {
   clearRefreshTokenCookie,
   getRefreshTokenFromCookie
 } from '../utils/tokenUtils';
-import { docClient } from '../services/dynamoClient';
+import { docClient, TABLES } from '../services/dynamoClient';
+import { authenticate } from '../middlewares/authenticate';
 
 const router = Router();
-
-// Get table names from environment variables
-const USERS_TABLE = process.env.USERS_TABLE_NAME || process.env.USERS_TABLE || 'Users';
-const REFRESH_TOKENS_TABLE = process.env.REFRESH_TOKENS_TABLE_NAME || process.env.REFRESH_TOKENS_TABLE || 'RefreshTokens';
-
-// Debug table names
-console.log("=== TABLE NAMES DEBUG ===");
-console.log("USERS_TABLE_NAME env:", process.env.USERS_TABLE_NAME);
-console.log("USERS_TABLE env:", process.env.USERS_TABLE);
-console.log("Resolved USERS_TABLE:", USERS_TABLE);
-console.log("=========================");
 
 // Register new user
 const register: RequestHandler = async (req, res, next) => {
@@ -41,7 +31,7 @@ const register: RequestHandler = async (req, res, next) => {
     let existingUser;
     try {
       existingUser = await docClient.send(new GetCommand({
-        TableName: USERS_TABLE,
+        TableName: TABLES.USERS,
         Key: { email }
       }));
     } catch (dbError) {
@@ -93,7 +83,7 @@ const register: RequestHandler = async (req, res, next) => {
     }
 
     await docClient.send(new PutCommand({
-      TableName: USERS_TABLE,
+      TableName: TABLES.USERS,
       Item: newUser
     }));
 
@@ -103,7 +93,7 @@ const register: RequestHandler = async (req, res, next) => {
       email, 
       role, 
       tenantId: "UNASSIGNED" 
-    }, REFRESH_TOKENS_TABLE);
+    }, TABLES.REFRESH_TOKENS);
 
     // Set secure HTTP-only cookie for refresh token
     setRefreshTokenCookie(res, tokens.refreshToken);
@@ -137,7 +127,7 @@ const login: RequestHandler = async (req, res, next) => {
     let result;
     try {
       result = await docClient.send(new GetCommand({
-        TableName: USERS_TABLE,
+        TableName: TABLES.USERS,
         Key: { email }
       }));
     } catch (dbError) {
@@ -185,7 +175,7 @@ const login: RequestHandler = async (req, res, next) => {
 
     // Invalidate any existing refresh tokens for security (optional)
     try {
-      await invalidateAllUserRefreshTokens(user.userId, REFRESH_TOKENS_TABLE);
+      await invalidateAllUserRefreshTokens(user.userId, TABLES.REFRESH_TOKENS);
     } catch (error) {
       console.warn('Failed to invalidate existing refresh tokens (non-critical):', error instanceof Error ? error.message : 'Unknown error');
     }
@@ -198,7 +188,7 @@ const login: RequestHandler = async (req, res, next) => {
         email: user.email, 
         role: user.role,
         tenantId: user.tenantId
-      }, REFRESH_TOKENS_TABLE);
+      }, TABLES.REFRESH_TOKENS);
     } catch (tokenError) {
       console.error('Token generation error:', tokenError);
       res.status(500).json({ message: "Failed to generate authentication tokens" });
@@ -244,13 +234,13 @@ const refresh: RequestHandler = async (req, res, next) => {
     }
 
     try {
-      const decoded = await verifyRefreshToken(refreshToken, REFRESH_TOKENS_TABLE);
+      const decoded = await verifyRefreshToken(refreshToken, TABLES.REFRESH_TOKENS);
 
       // Verify user still exists and is not soft deleted
       let userResult;
       try {
         userResult = await docClient.send(new GetCommand({
-          TableName: USERS_TABLE,
+          TableName: TABLES.USERS,
           Key: { email: decoded.email }
         }));
       } catch (dbError) {
@@ -280,11 +270,11 @@ const refresh: RequestHandler = async (req, res, next) => {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId
-      }, REFRESH_TOKENS_TABLE);
+      }, TABLES.REFRESH_TOKENS);
 
       // Invalidate old refresh token
       if (decoded.jti) {
-        await invalidateRefreshToken(decoded.jti, REFRESH_TOKENS_TABLE);
+        await invalidateRefreshToken(decoded.jti, TABLES.REFRESH_TOKENS);
       }
 
       // Set new refresh token in secure cookie
@@ -318,7 +308,13 @@ const refresh: RequestHandler = async (req, res, next) => {
 // Update profile
 const updateProfile: RequestHandler = async (req, res, next) => {
   try {
-    const { userId } = req.body;
+    const currentUser = (req as any).user;
+    if (!currentUser) {
+      res.status(401).json({ message: "User not found in token" });
+      return;
+    }
+    
+    const userId = currentUser.userId;
     const updateData = req.body;
 
     // Remove sensitive/unchangeable fields
@@ -328,9 +324,34 @@ const updateProfile: RequestHandler = async (req, res, next) => {
 
     const timestamp = new Date().toISOString();
 
+    // Get user by userId first to find email (primary key)
+    console.log("=== PROFILE UPDATE DEBUG ===");
+    console.log("Looking for userId:", userId);
+    console.log("Current user from token:", currentUser);
+    console.log("Table name:", TABLES.USERS);
+    
+    const getUserResult = await docClient.send(new ScanCommand({
+      TableName: TABLES.USERS,
+      FilterExpression: "userId = :userId",
+      ExpressionAttributeValues: {
+        ":userId": userId
+      }
+    }));
+
+    console.log("Scan result:", getUserResult.Items?.length || 0, "items found");
+    if (getUserResult.Items && getUserResult.Items.length > 0) {
+      console.log("First item userId:", getUserResult.Items[0].userId);
+    }
+
+    const user = getUserResult.Items?.[0] as any;
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
     const result = await docClient.send(new UpdateCommand({
-      TableName: USERS_TABLE,
-      Key: { userId },
+      TableName: TABLES.USERS,
+      Key: { email: user.email },
       UpdateExpression: "set #firstName = :firstName, #lastName = :lastName, #phoneNumber = :phoneNumber, #updatedAt = :updatedAt",
       ExpressionAttributeNames: {
         "#firstName": "firstName",
@@ -380,7 +401,7 @@ const changePassword: RequestHandler = async (req, res, next) => {
 
     // Get current user
     const result = await docClient.send(new GetCommand({
-      TableName: USERS_TABLE,
+      TableName: TABLES.USERS,
       Key: { userId }
     }));
 
@@ -405,7 +426,7 @@ const changePassword: RequestHandler = async (req, res, next) => {
 
     // Update password
     await docClient.send(new UpdateCommand({
-      TableName: USERS_TABLE,
+      TableName: TABLES.USERS,
       Key: { userId },
       UpdateExpression: "set #password = :password, #updatedAt = :updatedAt",
       ExpressionAttributeNames: {
@@ -434,7 +455,7 @@ const getProfile: RequestHandler = async (req, res, next) => {
     const { userId } = req.body;
 
     const result = await docClient.send(new GetCommand({
-      TableName: USERS_TABLE,
+      TableName: TABLES.USERS,
       Key: { userId }
     }));
 
@@ -476,7 +497,7 @@ const autoRefresh: RequestHandler = async (req, res, next) => {
       return;
     }
 
-    const result = await autoRefreshTokens(accessToken, refreshToken, REFRESH_TOKENS_TABLE, USERS_TABLE);
+    const result = await autoRefreshTokens(accessToken, refreshToken, TABLES.REFRESH_TOKENS, TABLES.USERS);
 
     if (!result.shouldRefresh) {
       res.json({ 
@@ -514,11 +535,11 @@ const logout: RequestHandler = async (req, res, next) => {
     if (refreshToken) {
       try {
         // Validate and get token info
-        const decoded = await verifyRefreshToken(refreshToken, REFRESH_TOKENS_TABLE);
+        const decoded = await verifyRefreshToken(refreshToken, TABLES.REFRESH_TOKENS);
         
         // Invalidate this specific refresh token
         if (decoded.jti) {
-          await invalidateRefreshToken(decoded.jti, REFRESH_TOKENS_TABLE);
+          await invalidateRefreshToken(decoded.jti, TABLES.REFRESH_TOKENS);
         }
       } catch (error) {
         console.log('Refresh token already invalid or expired');
@@ -527,7 +548,7 @@ const logout: RequestHandler = async (req, res, next) => {
 
     // Optional: Invalidate all refresh tokens for this user
     if (userId) {
-      await invalidateAllUserRefreshTokens(userId, REFRESH_TOKENS_TABLE);
+      await invalidateAllUserRefreshTokens(userId, TABLES.REFRESH_TOKENS);
     }
 
     // Clear refresh token cookie
@@ -572,7 +593,7 @@ router.post("/refresh", refresh);
 router.post("/auto-refresh", autoRefresh);
 router.post("/logout", logout);
 router.post("/validate-token", validateToken);
-router.put("/profile", updateProfile);
+router.put("/profile", authenticate as any, updateProfile);
 router.post("/change-password", changePassword);
 router.get("/profile", getProfile);
 

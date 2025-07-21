@@ -49,7 +49,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
 
   // Get filtered record types based on user role
   const getFilteredRecordTypes = () => {
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' || user?.role === 'Admin' || user?.role === 'SuperAdmin';
+    const isAdmin = user?.role?.name === 'ADMIN' || user?.role?.name === 'SUPER_ADMIN' || user?.role?.name === 'Admin' || user?.role?.name === 'SuperAdmin';
 
     // Base record types available to all roles
     const baseTypes = [
@@ -115,7 +115,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           message: 'You do not have permission to create this type of record.'
         });
         onClose();
-        return;
+        return;ƒ
       }
 
       setSelectedType(defaultType);
@@ -242,7 +242,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           { name: 'email', label: 'Email', type: 'email', required: true },
           { name: 'leadSource', label: 'Lead Source', type: 'select', options: leadSourceOptions, required: true },
           { name: 'leadStatus', label: 'Lead Status', type: 'select', options: leadStatusOptions, required: true },
-          { name: 'value', label: 'Lead Value', type: 'number', required: true, min: 0, step: "0.01" },
+          { name: 'value', label: 'Lead Value', type: 'number', required: true },
           { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers), required: false },
           { name: 'street', label: 'Street', type: 'text', required: false, group: 'address' },
           { name: 'area', label: 'Area', type: 'text', required: false, group: 'address' },
@@ -304,6 +304,12 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           { name: 'email', label: 'Email', type: 'email', required: true },
           { name: 'phone', label: 'Phone', type: 'tel', required: true },
           { name: 'company', label: 'Company', type: 'text', required: true },
+          { name: 'location', label: 'Location', type: 'text', required: false },
+          { name: 'territory', label: 'Territory', type: 'text', required: false },
+          { name: 'status', label: 'Status', type: 'select', options: [
+            { value: 'Active', label: 'Active' },
+            { value: 'Inactive', label: 'Inactive' }
+          ], required: true },
           { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers) }
         ];
       case 'subsidiary':
@@ -312,7 +318,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           { name: 'email', label: 'Email', type: 'email', required: true },
           { name: 'contact', label: 'Contact Number', type: 'tel', required: true },
           { name: 'address', label: 'Address', type: 'textarea', required: true },
-          { name: 'numberOfEmployees', label: 'Number of Employees', type: 'number', required: true },
+          { name: 'totalEmployees', label: 'Total Employees', type: 'number', required: true },
           { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers) }
         ];
       default:
@@ -450,7 +456,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           dueDate: formData.dueDate,
             assignee: formData.assignedTo || user?.userId || '',
             type: 'Follow-up',
-            tenantId: user?.tenantId || '',
+            tenantId: '',
             visibleTo: formData.visibleTo || []
           });
           addNotification({
@@ -472,7 +478,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             email: formData.email || '',
             contact: formData.contact || '',
             address: formData.address || '',
-            numberOfEmployees: parseInt(formData.numberOfEmployees) || 0,
+            totalEmployees: parseInt(formData.totalEmployees) || 0,
             visibleTo: formData.visibleTo || []
           });
           addNotification({
@@ -494,6 +500,9 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             email: formData.email || '',
             phone: formData.phone || '',
             company: formData.company || '',
+            location: formData.location || '',
+            territory: formData.territory || '',
+            status: formData.status || 'Active',
             visibleTo: formData.visibleTo || []
           });
           addNotification({

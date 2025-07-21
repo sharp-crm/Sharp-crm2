@@ -1,7 +1,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
-import { docClient } from '../services/dynamoClient';
+import { docClient, TABLES } from '../services/dynamoClient';
 
 // Deal interface based on AddNewModal fields + auditing
 export interface Deal {
@@ -61,7 +61,7 @@ export interface UpdateDealInput {
 }
 
 export class DealsService {
-  private tableName = 'Deals';
+  private tableName = TABLES.DEALS;
 
   // Create a new deal
   async createDeal(input: CreateDealInput, userId: string, userEmail: string, tenantId: string): Promise<Deal> {
@@ -170,13 +170,12 @@ export class DealsService {
   async getDealsByTenant(tenantId: string, userId: string, includeDeleted = false): Promise<Deal[]> {
     console.log('🔍 Getting deals by tenant:', { tenantId, userId, includeDeleted });
     
-    const result = await docClient.send(new QueryCommand({
+    // Use ScanCommand instead of QueryCommand since TenantIdIndex doesn't exist
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
       FilterExpression: includeDeleted 
-        ? '(attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)'
-        : 'isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+        ? 'tenantId = :tenantId AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)'
+        : 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ':userId': userId,
@@ -191,11 +190,9 @@ export class DealsService {
 
   // Get deals by owner
   async getDealsByOwner(dealOwner: string, tenantId: string, userId: string): Promise<Deal[]> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'DealOwnerIndex',
-      KeyConditionExpression: 'dealOwner = :dealOwner',
-      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+      FilterExpression: 'dealOwner = :dealOwner AND tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
       ExpressionAttributeValues: {
         ':dealOwner': dealOwner,
         ':tenantId': tenantId,
@@ -210,11 +207,9 @@ export class DealsService {
 
   // Get deals by stage
   async getDealsByStage(stage: string, tenantId: string, userId: string): Promise<Deal[]> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'StageIndex',
-      KeyConditionExpression: 'stage = :stage',
-      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+      FilterExpression: 'stage = :stage AND tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
       ExpressionAttributeValues: {
         ':stage': stage,
         ':tenantId': tenantId,
@@ -229,11 +224,9 @@ export class DealsService {
 
   // Search deals
   async searchDeals(tenantId: string, userId: string, query: string): Promise<Deal[]> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
-      FilterExpression: 'isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId) AND (contains(dealName, :query) OR contains(dealOwner, :query))',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId) AND (contains(dealName, :query) OR contains(dealOwner, :query))',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ':userId': userId,
@@ -406,11 +399,9 @@ export class DealsService {
     avgValue: number;
     recentCount: number;
   }> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
-      FilterExpression: 'isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ':userId': userId,

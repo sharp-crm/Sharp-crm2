@@ -101,17 +101,48 @@ const Home: React.FC = () => {
       const currentMonth = new Date().getMonth();
       const currentYear = new Date().getFullYear();
       
+      console.log('🔍 Debugging deals closing this month:');
+      console.log('Current month:', currentMonth + 1, 'Current year:', currentYear);
+      console.log('Total deals fetched:', deals.length);
+      
+      deals.forEach((deal, index) => {
+        console.log(`Deal ${index + 1}:`, {
+          dealName: deal.dealName,
+          closeDate: deal.closeDate,
+          stage: deal.stage,
+          parsedDate: deal.closeDate ? new Date(deal.closeDate) : 'No date',
+          month: deal.closeDate ? new Date(deal.closeDate).getMonth() + 1 : 'N/A',
+          year: deal.closeDate ? new Date(deal.closeDate).getFullYear() : 'N/A'
+        });
+      });
+      
       const closingDeals = deals
         .filter(deal => {
-          if (!deal.expectedCloseDate) return false;
-          const closeDate = new Date(deal.expectedCloseDate);
-          return closeDate.getMonth() === currentMonth && 
-                 closeDate.getFullYear() === currentYear &&
-                 deal.stage !== 'Closed Won' && 
-                 deal.stage !== 'Closed Lost';
+          if (!deal.closeDate) {
+            console.log('❌ Filtered out (no closeDate):', deal.dealName);
+            return false;
+          }
+          const closeDate = new Date(deal.closeDate);
+          const isCurrentMonth = closeDate.getMonth() === currentMonth;
+          const isCurrentYear = closeDate.getFullYear() === currentYear;
+          const isNotClosed = deal.stage !== 'Closed Won' && deal.stage !== 'Closed Lost';
+          
+          console.log('🔍 Deal filter check:', {
+            name: deal.dealName,
+            closeDate: deal.closeDate,
+            isCurrentMonth,
+            isCurrentYear, 
+            isNotClosed,
+            stage: deal.stage,
+            passed: isCurrentMonth && isCurrentYear && isNotClosed
+          });
+          
+          return isCurrentMonth && isCurrentYear && isNotClosed;
         })
-        .sort((a, b) => new Date(a.expectedCloseDate).getTime() - new Date(b.expectedCloseDate).getTime())
+        .sort((a, b) => new Date(a.closeDate!).getTime() - new Date(b.closeDate!).getTime())
         .slice(0, 3);
+        
+      console.log('✅ Final closing deals:', closingDeals.length, closingDeals.map(d => d.dealName));
       setUpcomingDeals(closingDeals);
     } catch (error) {
       // Handle error silently
@@ -137,9 +168,11 @@ const Home: React.FC = () => {
     
     const randomMessage = messages[Math.floor(Math.random() * messages.length)];
     addNotification({
-      type: randomMessage.type,
+      type: randomMessage.type as 'success' | 'info' | 'warning' | 'error',
       title: randomMessage.title,
       message: randomMessage.message,
+      timestamp: new Date().toISOString(),
+      read: false,
     });
   };
 
@@ -201,6 +234,134 @@ const Home: React.FC = () => {
             <StatCard label="Total Leads" value={stats.totalLeads} icon={Icons.Users} />
           </>
         )}
+      </div>
+
+      {/* Leads and Deals Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Recent Leads */}
+        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-semibold text-gray-800">Recent Leads</h3>
+            <button
+              onClick={() => navigate('/leads')}
+              className="text-blue-600 hover:text-blue-800 font-medium text-sm underline-offset-4 hover:underline transition-colors"
+            >
+              View All
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm table-auto">
+              <thead>
+                <tr className="text-left text-gray-500 border-b border-gray-200">
+                  <th className="pb-4 px-6"><span className="flex items-center"><Icons.User className="w-5 h-5 mr-2" /> Name</span></th>
+                  <th className="pb-4 px-6"><span className="flex items-center"><Icons.Mail className="w-5 h-5 mr-2" /> Email</span></th>
+                  <th className="pb-4 px-6"><span className="flex items-center"><Icons.Phone className="w-5 h-5 mr-2" /> Phone</span></th>
+                  <th className="pb-4 px-6"><span className="flex items-center"><Icons.Building2 className="w-5 h-5 mr-2" /> Company</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  // Loading skeleton for leads
+                  Array.from({ length: 3 }).map((_, index) => (
+                    <tr key={index} className="border-t border-gray-100 animate-pulse">
+                      <td className="py-4 px-6"><div className="h-4 bg-gray-200 rounded w-32"></div></td>
+                      <td className="py-4 px-6"><div className="h-4 bg-gray-200 rounded w-48"></div></td>
+                      <td className="py-4 px-6"><div className="h-4 bg-gray-200 rounded w-28"></div></td>
+                      <td className="py-4 px-6"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
+                    </tr>
+                  ))
+                ) : recentLeads.length > 0 ? (
+                  recentLeads.map((lead, index) => (
+                    <tr
+                      key={lead.id}
+                      className={`border-t border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors ${
+                        index % 2 === 0 ? "bg-white" : "bg-gray-50"
+                      }`}
+                      onClick={() => navigate('/leads')}
+                    >
+                      <td className="py-4 px-6 text-gray-800">{lead.firstName} {lead.lastName}</td>
+                      <td className="py-4 px-6 text-gray-600">{lead.email}</td>
+                      <td className="py-4 px-6 text-gray-600">{lead.phone || 'N/A'}</td>
+                      <td className="py-4 px-6 text-gray-700">{lead.company || 'N/A'}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="py-8 px-6 text-center text-gray-500">
+                      <div className="flex flex-col items-center">
+                        <Icons.Users className="h-8 w-8 text-gray-400 mb-2" />
+                        <p>No recent leads</p>
+                        <p className="text-sm text-gray-400 mt-1">Recent leads will appear here</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Deals Closing This Month */}
+        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-semibold text-gray-800">Deals Closing This Month</h3>
+            <button
+              onClick={() => navigate('/deals')}
+              className="text-blue-600 hover:text-blue-800 font-medium text-sm underline-offset-4 hover:underline transition-colors"
+            >
+              View All
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm table-auto">
+              <thead>
+                <tr className="text-left text-gray-500 border-b border-gray-200">
+                  <th className="pb-4 px-6"><span className="flex items-center"><Icons.Target className="w-5 h-5 mr-2" /> Deal Name</span></th>
+                  <th className="pb-4 px-6"><span className="flex items-center"><Icons.Info className="w-5 h-5 mr-2" /> Stage</span></th>
+                  <th className="pb-4 px-6"><span className="flex items-center"><Icons.Calendar className="w-5 h-5 mr-2" /> Expected Close Date</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  // Loading skeleton for deals
+                  Array.from({ length: 3 }).map((_, index) => (
+                    <tr key={index} className="border-t border-gray-100 animate-pulse">
+                      <td className="py-4 px-6"><div className="h-4 bg-gray-200 rounded w-36"></div></td>
+                      <td className="py-4 px-6"><div className="h-4 bg-gray-200 rounded w-28"></div></td>
+                      <td className="py-4 px-6"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
+                    </tr>
+                  ))
+                ) : upcomingDeals.length > 0 ? (
+                  upcomingDeals.map((deal, index) => (
+                    <tr
+                      key={deal.id}
+                      className={`border-t border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors ${
+                        index % 2 === 0 ? "bg-white" : "bg-gray-50"
+                      }`}
+                      onClick={() => navigate('/deals')}
+                    >
+                      <td className="py-4 px-6 text-gray-800">{deal.dealName}</td>
+                      <td className="py-4 px-6"><StatusBadge status={deal.stage} /></td>
+                      <td className="py-4 px-6 text-gray-600">
+                        {deal.closeDate ? new Date(deal.closeDate).toLocaleDateString() : 'N/A'}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={3} className="py-8 px-6 text-center text-gray-500">
+                      <div className="flex flex-col items-center">
+                        <Icons.Target className="h-8 w-8 text-gray-400 mb-2" />
+                        <p>No deals closing this month</p>
+                        <p className="text-sm text-gray-400 mt-1">Deals with close dates this month will appear here</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       {/* Tasks and Notifications Section */}
@@ -313,134 +474,6 @@ const Home: React.FC = () => {
                         <Icons.Bell className="h-8 w-8 text-gray-400 mb-2" />
                         <p>No recent notifications</p>
                         <p className="text-sm text-gray-400 mt-1">Notifications will appear here when available</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      {/* Leads and Deals Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Recent Leads */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xl font-semibold text-gray-800">Recent Leads</h3>
-            <button
-              onClick={() => navigate('/leads')}
-              className="text-blue-600 hover:text-blue-800 font-medium text-sm underline-offset-4 hover:underline transition-colors"
-            >
-              View All
-            </button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm table-auto">
-              <thead>
-                <tr className="text-left text-gray-500 border-b border-gray-200">
-                  <th className="pb-4 px-6"><span className="flex items-center"><Icons.User className="w-5 h-5 mr-2" /> Name</span></th>
-                  <th className="pb-4 px-6"><span className="flex items-center"><Icons.Mail className="w-5 h-5 mr-2" /> Email</span></th>
-                  <th className="pb-4 px-6"><span className="flex items-center"><Icons.Phone className="w-5 h-5 mr-2" /> Phone</span></th>
-                  <th className="pb-4 px-6"><span className="flex items-center"><Icons.Building2 className="w-5 h-5 mr-2" /> Company</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  // Loading skeleton for leads
-                  Array.from({ length: 3 }).map((_, index) => (
-                    <tr key={index} className="border-t border-gray-100 animate-pulse">
-                      <td className="py-4 px-6"><div className="h-4 bg-gray-200 rounded w-32"></div></td>
-                      <td className="py-4 px-6"><div className="h-4 bg-gray-200 rounded w-48"></div></td>
-                      <td className="py-4 px-6"><div className="h-4 bg-gray-200 rounded w-28"></div></td>
-                      <td className="py-4 px-6"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
-                    </tr>
-                  ))
-                ) : recentLeads.length > 0 ? (
-                  recentLeads.map((lead, index) => (
-                    <tr
-                      key={lead.id}
-                      className={`border-t border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors ${
-                        index % 2 === 0 ? "bg-white" : "bg-gray-50"
-                      }`}
-                      onClick={() => navigate('/leads')}
-                    >
-                      <td className="py-4 px-6 text-gray-800">{lead.firstName} {lead.lastName}</td>
-                      <td className="py-4 px-6 text-gray-600">{lead.email}</td>
-                      <td className="py-4 px-6 text-gray-600">{lead.phone || 'N/A'}</td>
-                      <td className="py-4 px-6 text-gray-700">{lead.company || 'N/A'}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={4} className="py-8 px-6 text-center text-gray-500">
-                      <div className="flex flex-col items-center">
-                        <Icons.Users className="h-8 w-8 text-gray-400 mb-2" />
-                        <p>No recent leads</p>
-                        <p className="text-sm text-gray-400 mt-1">Recent leads will appear here</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Deals Closing This Month */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xl font-semibold text-gray-800">Deals Closing This Month</h3>
-            <button
-              onClick={() => navigate('/deals')}
-              className="text-blue-600 hover:text-blue-800 font-medium text-sm underline-offset-4 hover:underline transition-colors"
-            >
-              View All
-            </button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm table-auto">
-              <thead>
-                <tr className="text-left text-gray-500 border-b border-gray-200">
-                  <th className="pb-4 px-6"><span className="flex items-center"><Icons.Target className="w-5 h-5 mr-2" /> Deal Name</span></th>
-                  <th className="pb-4 px-6"><span className="flex items-center"><Icons.Info className="w-5 h-5 mr-2" /> Stage</span></th>
-                  <th className="pb-4 px-6"><span className="flex items-center"><Icons.Calendar className="w-5 h-5 mr-2" /> Expected Close Date</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  // Loading skeleton for deals
-                  Array.from({ length: 3 }).map((_, index) => (
-                    <tr key={index} className="border-t border-gray-100 animate-pulse">
-                      <td className="py-4 px-6"><div className="h-4 bg-gray-200 rounded w-36"></div></td>
-                      <td className="py-4 px-6"><div className="h-4 bg-gray-200 rounded w-28"></div></td>
-                      <td className="py-4 px-6"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
-                    </tr>
-                  ))
-                ) : upcomingDeals.length > 0 ? (
-                  upcomingDeals.map((deal, index) => (
-                    <tr
-                      key={deal.id}
-                      className={`border-t border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors ${
-                        index % 2 === 0 ? "bg-white" : "bg-gray-50"
-                      }`}
-                      onClick={() => navigate('/deals')}
-                    >
-                      <td className="py-4 px-6 text-gray-800">{deal.title}</td>
-                      <td className="py-4 px-6"><StatusBadge status={deal.stage} /></td>
-                      <td className="py-4 px-6 text-gray-600">
-                        {deal.expectedCloseDate ? new Date(deal.expectedCloseDate).toLocaleDateString() : 'N/A'}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={3} className="py-8 px-6 text-center text-gray-500">
-                      <div className="flex flex-col items-center">
-                        <Icons.Target className="h-8 w-8 text-gray-400 mb-2" />
-                        <p>No deals closing this month</p>
-                        <p className="text-sm text-gray-400 mt-1">Deals with close dates this month will appear here</p>
                       </div>
                     </td>
                   </tr>

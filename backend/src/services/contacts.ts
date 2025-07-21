@@ -1,7 +1,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
-import { docClient } from '../services/dynamoClient';
+import { docClient, TABLES } from '../services/dynamoClient';
 
 // Contact interface based on AddNewModal fields + auditing
 export interface Contact {
@@ -86,7 +86,7 @@ export interface UpdateContactInput {
 }
 
 export class ContactsService {
-  private tableName = 'Contacts';
+  private tableName = TABLES.CONTACTS;
 
   // Create a new contact
   async createContact(input: CreateContactInput, userId: string, userEmail: string, tenantId: string): Promise<Contact> {
@@ -154,13 +154,12 @@ export class ContactsService {
   async getContactsByTenant(tenantId: string, userId: string, includeDeleted = false): Promise<Contact[]> {
     console.log('🔍 getContactsByTenant called with:', { tenantId, userId, includeDeleted });
     
-    const result = await docClient.send(new QueryCommand({
+    // Use ScanCommand instead of QueryCommand since TenantIdIndex doesn't exist
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
       FilterExpression: includeDeleted 
-        ? '(attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR createdBy = :userId)'
-        : 'isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR createdBy = :userId)',
+        ? 'tenantId = :tenantId AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR createdBy = :userId)'
+        : 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR createdBy = :userId)',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ':userId': userId,
@@ -359,11 +358,9 @@ export class ContactsService {
 
   // Search contacts by various criteria
   async searchContacts(tenantId: string, userId: string, searchTerm: string): Promise<Contact[]> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
-      FilterExpression: 'isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId) AND (contains(firstName, :searchTerm) OR contains(companyName, :searchTerm) OR contains(email, :searchTerm))',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId) AND (contains(firstName, :searchTerm) OR contains(companyName, :searchTerm) OR contains(email, :searchTerm))',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ':userId': userId,
@@ -384,11 +381,9 @@ export class ContactsService {
     byStatus: Record<string, number>;
     bySource: Record<string, number>;
   }> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
-      FilterExpression: '(attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+      FilterExpression: 'tenantId = :tenantId AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ':userId': userId,

@@ -1,5 +1,6 @@
 import { Router, RequestHandler } from 'express';
 import { contactsService, CreateContactInput, UpdateContactInput } from '../services/contacts';
+import { logError, logOperationStart, logOperationSuccess, logOperationInfo, logValidationError } from '../utils/routeLogger';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -25,10 +26,10 @@ const validateEmail = (email: string) => {
 
 // Get all contacts for tenant
 const getAllContacts: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  const includeDeleted = req.query.includeDeleted === 'true';
+  
   try {
-    const { tenantId, userId } = req.user;
-    const includeDeleted = req.query.includeDeleted === 'true';
-    
     if (!tenantId) {
       res.status(400).json({ error: "Tenant ID required" });
       return;
@@ -42,16 +43,17 @@ const getAllContacts: RequestHandler = async (req: any, res) => {
       message: `Retrieved ${contacts.length} contacts`
     });
   } catch (error) {
-    console.error('Get contacts error:', error);
+    logError('getAllContacts', error, { tenantId, userId, includeDeleted });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Get contact by ID
 const getContactById: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  const { id } = req.params;
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { id } = req.params;
     
     if (!tenantId) {
       res.status(400).json({ error: "Tenant ID required" });
@@ -67,16 +69,17 @@ const getContactById: RequestHandler = async (req: any, res) => {
 
     res.json({ data: contact });
   } catch (error) {
-    console.error('Get contact error:', error);
+    logError('getContactById', error, { tenantId, userId, contactId: id });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Get contacts by owner
 const getContactsByOwner: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  const { owner } = req.params;
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { owner } = req.params;
     
     if (!tenantId) {
       res.status(400).json({ error: "Tenant ID required" });
@@ -90,16 +93,17 @@ const getContactsByOwner: RequestHandler = async (req: any, res) => {
       total: contacts.length 
     });
   } catch (error) {
-    console.error('Get contacts by owner error:', error);
+    logError('getContactsByOwner', error, { tenantId, userId, owner });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Search contacts
 const searchContacts: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  const { q } = req.query;
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { q } = req.query;
     
     if (!tenantId) {
       res.status(400).json({ error: "Tenant ID required" });
@@ -119,15 +123,16 @@ const searchContacts: RequestHandler = async (req: any, res) => {
       query: q
     });
   } catch (error) {
-    console.error('Search contacts error:', error);
+    logError('searchContacts', error, { tenantId, userId, query: q });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Create new contact
 const createContact: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  
   try {
-    const { tenantId, userId } = req.user;
     
     if (!tenantId || !userId) {
       res.status(400).json({ error: "User authentication required" });
@@ -186,16 +191,17 @@ const createContact: RequestHandler = async (req: any, res) => {
       data: contact 
     });
   } catch (error) {
-    console.error('Create contact error:', error);
+    logError('createContact', error, { tenantId, userId, email: req.body.email });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Update contact
 const updateContact: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  const { id } = req.params;
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { id } = req.params;
     
     if (!tenantId || !userId) {
       res.status(400).json({ error: "User authentication required" });
@@ -252,7 +258,7 @@ const updateContact: RequestHandler = async (req: any, res) => {
       data: updatedContact 
     });
   } catch (error) {
-    console.error('Update contact error:', error);
+    logError('updateContact', error, { tenantId, userId, contactId: id });
     if (error instanceof Error && error.message === 'visibleTo must be an array of user IDs') {
       res.status(400).json({ error: error.message });
     } else {
@@ -263,9 +269,10 @@ const updateContact: RequestHandler = async (req: any, res) => {
 
 // Soft delete contact
 const deleteContact: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  const { id } = req.params;
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { id } = req.params;
     
     if (!tenantId || !userId) {
       res.status(400).json({ error: "User authentication required" });
@@ -281,16 +288,17 @@ const deleteContact: RequestHandler = async (req: any, res) => {
 
     res.json({ message: "Contact deleted successfully" });
   } catch (error) {
-    console.error('Delete contact error:', error);
+    logError('deleteContact', error, { tenantId, userId, contactId: id });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Restore soft deleted contact
 const restoreContact: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  const { id } = req.params;
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { id } = req.params;
     
     if (!tenantId || !userId) {
       res.status(400).json({ error: "User authentication required" });
@@ -306,16 +314,17 @@ const restoreContact: RequestHandler = async (req: any, res) => {
 
     res.json({ message: "Contact restored successfully" });
   } catch (error) {
-    console.error('Restore contact error:', error);
+    logError('restoreContact', error, { tenantId, userId, contactId: id });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Hard delete contact (permanent)
 const hardDeleteContact: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId, role } = req.user || {};
+  const { id } = req.params;
+  
   try {
-    const { tenantId, userId, role } = req.user;
-    const { id } = req.params;
     
     if (!tenantId || !userId) {
       res.status(400).json({ error: "User authentication required" });
@@ -337,15 +346,16 @@ const hardDeleteContact: RequestHandler = async (req: any, res) => {
 
     res.json({ message: "Contact permanently deleted" });
   } catch (error) {
-    console.error('Hard delete contact error:', error);
+    logError('hardDeleteContact', error, { tenantId, userId, contactId: id });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Get contacts statistics
 const getContactsStats: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  
   try {
-    const { tenantId, userId } = req.user;
     
     if (!tenantId) {
       res.status(400).json({ error: "Tenant ID required" });
@@ -356,7 +366,7 @@ const getContactsStats: RequestHandler = async (req: any, res) => {
     
     res.json({ data: stats });
   } catch (error) {
-    console.error('Get contacts stats error:', error);
+    logError('getContactsStats', error, { tenantId, userId });
     res.status(500).json({ message: "Internal server error" });
   }
 };

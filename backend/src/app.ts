@@ -109,6 +109,10 @@ app.get('/api/test', (req, res) => {
   res.json({ message: 'API prefix route works' });
 });
 
+app.get('/api/users/test-unprotected', (req, res) => {
+  res.json({ message: 'Users route works without auth!', timestamp: new Date().toISOString() });
+});
+
 // Add this at the top, before other routes
 app.get('/test-simple', (req, res) => {
   res.json({ 

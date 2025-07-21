@@ -36,6 +36,9 @@ const EditDealerModal: React.FC<EditDealerModalProps> = ({
     email: '',
     phone: '',
     company: '',
+    location: '',
+    territory: '',
+    status: 'Active',
     visibleTo: []
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -70,6 +73,9 @@ const EditDealerModal: React.FC<EditDealerModalProps> = ({
         email: dealer.email || '',
         phone: dealer.phone || '',
         company: dealer.company || '',
+        location: dealer.location || '',
+        territory: dealer.territory || '',
+        status: dealer.status || 'Active',
         visibleTo: dealer.visibleTo || []
       });
     }
@@ -101,6 +107,7 @@ const EditDealerModal: React.FC<EditDealerModalProps> = ({
       if (!formData.email?.trim()) throw new Error('Email is required');
       if (!formData.phone?.trim()) throw new Error('Phone is required');
       if (!formData.company?.trim()) throw new Error('Company is required');
+      if (!formData.status?.trim()) throw new Error('Status is required');
 
       // Update dealer
       await dealersApi.update(dealer.id, formData);
@@ -201,7 +208,7 @@ const EditDealerModal: React.FC<EditDealerModalProps> = ({
                       Phone <span className="text-red-500">*</span>
                     </label>
                     <PhoneNumberInput
-                      value={formData.phone}
+                      value={formData.phone || ''}
                       onChange={(value) => handleInputChange('phone', value)}
                       required
                     />
@@ -217,6 +224,44 @@ const EditDealerModal: React.FC<EditDealerModalProps> = ({
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Location
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.location || ''}
+                      onChange={(e) => handleInputChange('location', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter location"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Territory
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.territory || ''}
+                      onChange={(e) => handleInputChange('territory', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter territory"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Status <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.status || 'Active'}
+                      onChange={(e) => handleInputChange('status', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
                   </div>
                 </div>
               </div>

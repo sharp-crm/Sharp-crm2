@@ -442,7 +442,7 @@ export interface Subsidiary {
   email: string;
   contact: string;
   address: string;
-  numberOfEmployees: number;
+  totalEmployees: number;
   visibleTo?: string[];
   createdBy: string;
   createdAt: string;

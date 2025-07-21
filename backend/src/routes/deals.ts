@@ -1,5 +1,6 @@
 import { Router, RequestHandler } from 'express';
 import { dealsService, CreateDealInput, UpdateDealInput } from '../services/deals';
+import { logError, logOperationStart, logOperationSuccess, logOperationInfo, logValidationError } from '../utils/routeLogger';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -25,33 +26,41 @@ const validateEmail = (email: string): boolean => {
 
 // Get all deals for tenant
 const getAllDeals: RequestHandler = async (req: any, res) => {
+  const operation = 'getAllDeals';
+  const { tenantId, userId } = req.user || {};
+  
+  logOperationStart(operation, { tenantId, userId });
+  
   try {
-    const { tenantId, userId } = req.user;
     const includeDeleted = req.query.includeDeleted === 'true';
     
     if (!tenantId) {
+      logValidationError(operation, 'Missing tenant ID');
       res.status(400).json({ error: "Tenant ID required" });
       return;
     }
 
+    logOperationInfo(operation, { tenantId, includeDeleted });
     const deals = await dealsService.getDealsByTenant(tenantId, userId, includeDeleted);
 
+    logOperationSuccess(operation, { count: deals.length });
     res.json({ 
       data: deals,
       total: deals.length,
       message: `Retrieved ${deals.length} deals`
     });
   } catch (error) {
-    console.error('Get deals error:', error);
+    logError(operation, error, { tenantId, userId });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Get deal by ID
 const getDealById: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  const { id } = req.params;
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { id } = req.params;
     
     if (!tenantId) {
       res.status(400).json({ error: "Tenant ID required" });
@@ -67,16 +76,17 @@ const getDealById: RequestHandler = async (req: any, res) => {
 
     res.json({ data: deal });
   } catch (error) {
-    console.error('Get deal error:', error);
+    logError('getDealById', error, { tenantId, userId, dealId: id });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Get deals by owner
 const getDealsByOwner: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  const { owner } = req.params;
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { owner } = req.params;
     
     if (!tenantId) {
       res.status(400).json({ error: "Tenant ID required" });
@@ -90,16 +100,17 @@ const getDealsByOwner: RequestHandler = async (req: any, res) => {
       total: deals.length 
     });
   } catch (error) {
-    console.error('Get deals by owner error:', error);
+    logError('getDealsByOwner', error, { tenantId, userId, owner });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Get deals by stage
 const getDealsByStage: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  const { stage } = req.params;
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { stage } = req.params;
     
     if (!tenantId) {
       res.status(400).json({ error: "Tenant ID required" });
@@ -113,16 +124,17 @@ const getDealsByStage: RequestHandler = async (req: any, res) => {
       total: deals.length 
     });
   } catch (error) {
-    console.error('Get deals by stage error:', error);
+    logError('getDealsByStage', error, { tenantId, userId, stage });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Search deals
 const searchDeals: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  const { q } = req.query;
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { q } = req.query;
     
     if (!tenantId) {
       res.status(400).json({ error: "Tenant ID required" });
@@ -142,15 +154,16 @@ const searchDeals: RequestHandler = async (req: any, res) => {
       query: q
     });
   } catch (error) {
-    console.error('Search deals error:', error);
+    logError('searchDeals', error, { tenantId, userId, query: q });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Create new deal
 const createDeal: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  
   try {
-    const { tenantId, userId } = req.user;
     
     if (!tenantId || !userId) {
       res.status(400).json({ error: "User authentication required" });
@@ -214,7 +227,7 @@ const createDeal: RequestHandler = async (req: any, res) => {
       data: deal 
     });
   } catch (error) {
-    console.error('Create deal error:', error);
+    logError('createDeal', error, { tenantId, userId, dealName: req.body.dealName });
     if (error instanceof Error) {
       res.status(400).json({ error: error.message });
     } else {
@@ -225,9 +238,10 @@ const createDeal: RequestHandler = async (req: any, res) => {
 
 // Update deal
 const updateDeal: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  const { id } = req.params;
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { id } = req.params;
     
     if (!tenantId || !userId) {
       res.status(400).json({ error: "User authentication required" });
@@ -286,7 +300,7 @@ const updateDeal: RequestHandler = async (req: any, res) => {
       data: updatedDeal 
     });
   } catch (error) {
-    console.error('Update deal error:', error);
+    logError('updateDeal', error, { tenantId, userId, dealId: id });
     if (error instanceof Error) {
       res.status(400).json({ error: error.message });
     } else {
@@ -297,9 +311,10 @@ const updateDeal: RequestHandler = async (req: any, res) => {
 
 // Soft delete deal
 const deleteDeal: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  const { id } = req.params;
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { id } = req.params;
     
     if (!tenantId || !userId) {
       res.status(400).json({ error: "User authentication required" });
@@ -322,7 +337,7 @@ const deleteDeal: RequestHandler = async (req: any, res) => {
 
     res.json({ message: "Deal deleted successfully" });
   } catch (error) {
-    console.error('Delete deal error:', error);
+    logError('deleteDeal', error, { tenantId, userId, dealId: id });
     if (error instanceof Error) {
       res.status(400).json({ error: error.message });
     } else {
@@ -333,9 +348,10 @@ const deleteDeal: RequestHandler = async (req: any, res) => {
 
 // Restore soft deleted deal
 const restoreDeal: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  const { id } = req.params;
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { id } = req.params;
     
     if (!tenantId || !userId) {
       res.status(400).json({ error: "User authentication required" });
@@ -351,16 +367,17 @@ const restoreDeal: RequestHandler = async (req: any, res) => {
 
     res.json({ message: "Deal restored successfully" });
   } catch (error) {
-    console.error('Restore deal error:', error);
+    logError('restoreDeal', error, { tenantId, userId, dealId: id });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Hard delete deal (permanent)
 const hardDeleteDeal: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId, role } = req.user || {};
+  const { id } = req.params;
+  
   try {
-    const { tenantId, userId, role } = req.user;
-    const { id } = req.params;
     
     if (!tenantId || !userId) {
       res.status(400).json({ error: "User authentication required" });
@@ -382,15 +399,16 @@ const hardDeleteDeal: RequestHandler = async (req: any, res) => {
 
     res.json({ message: "Deal permanently deleted" });
   } catch (error) {
-    console.error('Hard delete deal error:', error);
+    logError('hardDeleteDeal', error, { tenantId, userId, dealId: id });
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Get deals statistics
 const getDealsStats: RequestHandler = async (req: any, res) => {
+  const { tenantId, userId } = req.user || {};
+  
   try {
-    const { tenantId, userId } = req.user;
     
     if (!tenantId) {
       res.status(400).json({ error: "Tenant ID required" });
@@ -401,7 +419,7 @@ const getDealsStats: RequestHandler = async (req: any, res) => {
     
     res.json({ data: stats });
   } catch (error) {
-    console.error('Get deals stats error:', error);
+    logError('getDealsStats', error, { tenantId, userId });
     res.status(500).json({ message: "Internal server error" });
   }
 };

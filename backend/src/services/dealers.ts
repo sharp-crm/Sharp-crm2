@@ -1,4 +1,4 @@
-import { docClient } from './dynamoClient';
+import { docClient, TABLES } from './dynamoClient';
 import { 
   GetCommand, 
   PutCommand, 
@@ -65,7 +65,7 @@ export interface DealerStats {
 }
 
 export class DealersService {
-  private tableName = 'Dealers';
+  private tableName = TABLES.DEALERS;
 
   async createDealer(
     input: CreateDealerInput,
@@ -109,11 +109,10 @@ export class DealersService {
   }
 
   async getDealersByTenant(tenantId: string, userId: string, userRole: string): Promise<Dealer[]> {
-    const result = await docClient.send(new QueryCommand({
+    // Use ScanCommand instead of QueryCommand since TenantIdIndex doesn't exist
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
-      FilterExpression: 'isDeleted <> :deleted',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted <> :deleted',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ':deleted': true
@@ -140,11 +139,9 @@ export class DealersService {
   }
 
   async getDealersByCreator(createdBy: string, tenantId: string): Promise<Dealer[]> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'CreatedByIndex',
-      KeyConditionExpression: 'createdBy = :createdBy',
-      FilterExpression: 'tenantId = :tenantId AND isDeleted <> :deleted',
+      FilterExpression: 'createdBy = :createdBy AND tenantId = :tenantId AND isDeleted <> :deleted',
       ExpressionAttributeValues: {
         ':createdBy': createdBy,
         ':tenantId': tenantId,
@@ -156,11 +153,9 @@ export class DealersService {
   }
 
   async getDealersByTerritory(territory: string, tenantId: string): Promise<Dealer[]> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TerritoryIndex',
-      KeyConditionExpression: 'territory = :territory',
-      FilterExpression: 'tenantId = :tenantId AND isDeleted <> :deleted',
+      FilterExpression: 'territory = :territory AND tenantId = :tenantId AND isDeleted <> :deleted',
       ExpressionAttributeValues: {
         ':territory': territory,
         ':tenantId': tenantId,
@@ -172,11 +167,9 @@ export class DealersService {
   }
 
   async getDealerByName(name: string, tenantId: string): Promise<Dealer | null> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'NameIndex',
-      KeyConditionExpression: '#name = :name',
-      FilterExpression: 'tenantId = :tenantId AND isDeleted <> :deleted',
+      FilterExpression: '#name = :name AND tenantId = :tenantId AND isDeleted <> :deleted',
       ExpressionAttributeNames: {
         '#name': 'name'
       },
@@ -306,11 +299,9 @@ export class DealersService {
     tenantId: string,
     limit: number = 50
   ): Promise<Dealer[]> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
-      FilterExpression: 'isDeleted <> :deleted AND (contains(#name, :searchTerm) OR contains(email, :searchTerm) OR contains(company, :searchTerm) OR contains(territory, :searchTerm))',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted <> :deleted AND (contains(#name, :searchTerm) OR contains(email, :searchTerm) OR contains(company, :searchTerm) OR contains(territory, :searchTerm))',
       ExpressionAttributeNames: {
         '#name': 'name'
       },
@@ -326,10 +317,9 @@ export class DealersService {
   }
 
   async getDealersStats(tenantId: string): Promise<DealerStats> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
+      FilterExpression: 'tenantId = :tenantId',
       ExpressionAttributeValues: {
         ':tenantId': tenantId
       }

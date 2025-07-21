@@ -1,6 +1,6 @@
 import express, { Router, RequestHandler } from "express";
 import { PutCommand, GetCommand, ScanCommand, UpdateCommand, DeleteCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
-import { docClient } from "../services/dynamoClient";
+import { docClient, TABLES } from "../services/dynamoClient";
 import { v4 as uuidv4 } from "uuid";
 import { createError } from "../middlewares/errorHandler";
 import { dealsService } from '../services/deals';
@@ -32,7 +32,7 @@ router.get("/", async (req, res, next) => {
     // Get all reports in the tenant
     const result = await docClient.send(
       new ScanCommand({
-        TableName: "Reports",
+        TableName: TABLES.REPORTS,
         FilterExpression: "tenantId = :tenantId",
         ExpressionAttributeValues: {
           ":tenantId": tenantId
@@ -72,7 +72,75 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-// Get report by ID
+// Get favorite reports (MOVED BEFORE /:id route)
+router.get("/favorites/list", async (req, res, next) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const tenantId = (req as any).user?.tenantId;
+    
+    const result = await docClient.send(
+      new ScanCommand({
+        TableName: TABLES.REPORTS,
+        FilterExpression: "tenantId = :tenantId AND (createdBy = :userId OR contains(sharedWith, :userId) OR isPublic = :isPublic) AND isFavorite = :isFavorite",
+        ExpressionAttributeValues: {
+          ":tenantId": tenantId,
+          ":userId": userId,
+          ":isPublic": true,
+          ":isFavorite": true
+        }
+      })
+    );
+
+    const reports = (result.Items || [])
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+    res.json({ data: reports });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get scheduled reports (MOVED BEFORE /:id route)  
+router.get("/scheduled/list", async (req, res, next) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const tenantId = (req as any).user?.tenantId;
+    
+    const result = await docClient.send(
+      new ScanCommand({
+        TableName: TABLES.REPORTS,
+        FilterExpression: "tenantId = :tenantId AND attribute_exists(schedule) AND schedule <> :emptySchedule",
+        ExpressionAttributeValues: {
+          ":tenantId": tenantId,
+          ":emptySchedule": ""
+        }
+      })
+    );
+
+    // Filter reports based on visibility (same logic as main reports endpoint)
+    const reports = (result.Items || []).filter(report => {
+      // User can see reports they created
+      if (report.createdBy === userId) return true;
+      
+      // User can see public reports
+      if (report.isPublic) return true;
+      
+      // User can see reports shared with them
+      if (report.sharedWith && report.sharedWith.includes(userId)) return true;
+      
+      return false;
+    });
+
+    // Sort by creation date descending
+    const sortedReports = reports.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+
+    res.json({ data: sortedReports });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get report by ID (MOVED AFTER specific routes)
 router.get("/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -81,7 +149,7 @@ router.get("/:id", async (req, res, next) => {
     
     const result = await docClient.send(
       new GetCommand({
-        TableName: "Reports",
+        TableName: TABLES.REPORTS,
         Key: { id }
       })
     );
@@ -156,7 +224,7 @@ router.post("/", async (req, res, next) => {
 
     await docClient.send(
       new PutCommand({
-        TableName: "Reports",
+        TableName: TABLES.REPORTS,
         Item: report
       })
     );
@@ -177,7 +245,7 @@ router.post("/:id/run", async (req, res, next) => {
     // Get report configuration
     const reportResult = await docClient.send(
       new GetCommand({
-        TableName: "Reports",
+        TableName: TABLES.REPORTS,
         Key: { id }
       })
     );
@@ -199,7 +267,7 @@ router.post("/:id/run", async (req, res, next) => {
     // Update report run statistics
     await docClient.send(
       new UpdateCommand({
-        TableName: "Reports",
+        TableName: TABLES.REPORTS,
         Key: { id },
         UpdateExpression: "SET lastRun = :lastRun, runCount = runCount + :increment, #data = :data",
         ExpressionAttributeNames: {
@@ -289,10 +357,9 @@ async function generateReportData(reportType: string, tenantId: string, userId: 
     }
 
     case 'lead-conversion': {
-      const leads = await docClient.send(new QueryCommand({
-        TableName: 'Leads',
-        IndexName: 'TenantIdIndex',
-        KeyConditionExpression: 'tenantId = :tenantId',
+      const leads = await docClient.send(new ScanCommand({
+        TableName: TABLES.LEADS,
+        FilterExpression: 'tenantId = :tenantId',
         ExpressionAttributeValues: {
           ':tenantId': tenantId
         }
@@ -329,10 +396,9 @@ async function generateReportData(reportType: string, tenantId: string, userId: 
     }
 
     case 'task-completion': {
-      const tasks = await docClient.send(new QueryCommand({
-        TableName: 'Tasks',
-        IndexName: 'TenantIdIndex',
-        KeyConditionExpression: 'tenantId = :tenantId',
+      const tasks = await docClient.send(new ScanCommand({
+        TableName: TABLES.TASKS,
+        FilterExpression: 'tenantId = :tenantId',
         ExpressionAttributeValues: {
           ':tenantId': tenantId
         }
@@ -370,19 +436,17 @@ async function generateReportData(reportType: string, tenantId: string, userId: 
     }
 
     case 'contact-engagement': {
-      const contacts = await docClient.send(new QueryCommand({
-        TableName: 'Contacts',
-        IndexName: 'TenantIdIndex',
-        KeyConditionExpression: 'tenantId = :tenantId',
+      const contacts = await docClient.send(new ScanCommand({
+        TableName: TABLES.CONTACTS,
+        FilterExpression: 'tenantId = :tenantId',
         ExpressionAttributeValues: {
           ':tenantId': tenantId
         }
       }));
 
-      const tasks = await docClient.send(new QueryCommand({
-        TableName: 'Tasks',
-        IndexName: 'TenantIdIndex',
-        KeyConditionExpression: 'tenantId = :tenantId',
+      const tasks = await docClient.send(new ScanCommand({
+        TableName: TABLES.TASKS,
+        FilterExpression: 'tenantId = :tenantId',
         ExpressionAttributeValues: {
           ':tenantId': tenantId
         }
@@ -433,7 +497,7 @@ router.put("/:id", async (req, res, next) => {
     // First check if report exists and user has access
     const getResult = await docClient.send(
       new GetCommand({
-        TableName: "Reports",
+        TableName: TABLES.REPORTS,
         Key: { id }
       })
     );
@@ -472,7 +536,7 @@ router.put("/:id", async (req, res, next) => {
 
     const result = await docClient.send(
       new UpdateCommand({
-        TableName: "Reports",
+        TableName: TABLES.REPORTS,
         Key: { id },
         UpdateExpression: `SET ${updateExpressions.join(', ')}`,
         ExpressionAttributeNames: expressionAttributeNames,
@@ -496,7 +560,7 @@ router.delete("/:id", async (req, res, next) => {
     // First check if report exists and user has access
     const getResult = await docClient.send(
       new GetCommand({
-        TableName: "Reports",
+        TableName: TABLES.REPORTS,
         Key: { id }
       })
     );
@@ -512,7 +576,7 @@ router.delete("/:id", async (req, res, next) => {
 
     await docClient.send(
       new DeleteCommand({
-        TableName: "Reports",
+        TableName: TABLES.REPORTS,
         Key: { id }
       })
     );
@@ -533,7 +597,7 @@ router.patch("/:id/favorite", async (req, res, next) => {
     // First check if report exists and user has access
     const getResult = await docClient.send(
       new GetCommand({
-        TableName: "Reports",
+        TableName: TABLES.REPORTS,
         Key: { id }
       })
     );
@@ -551,7 +615,7 @@ router.patch("/:id/favorite", async (req, res, next) => {
 
     const result = await docClient.send(
       new UpdateCommand({
-        TableName: "Reports",
+        TableName: TABLES.REPORTS,
         Key: { id },
         UpdateExpression: "SET isFavorite = :isFavorite",
         ExpressionAttributeValues: {
@@ -567,74 +631,7 @@ router.patch("/:id/favorite", async (req, res, next) => {
   }
 });
 
-// Get favorite reports
-router.get("/favorites/list", async (req, res, next) => {
-  try {
-    const userId = (req as any).user?.userId;
-    const tenantId = (req as any).user?.tenantId;
-    
-    const result = await docClient.send(
-      new ScanCommand({
-        TableName: "Reports",
-        FilterExpression: "tenantId = :tenantId AND (createdBy = :userId OR contains(sharedWith, :userId) OR isPublic = :isPublic) AND isFavorite = :isFavorite",
-        ExpressionAttributeValues: {
-          ":tenantId": tenantId,
-          ":userId": userId,
-          ":isPublic": true,
-          ":isFavorite": true
-        }
-      })
-    );
 
-    const reports = (result.Items || [])
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-
-    res.json({ data: reports });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// Get scheduled reports
-router.get("/scheduled/list", async (req, res, next) => {
-  try {
-    const userId = (req as any).user?.userId;
-    const tenantId = (req as any).user?.tenantId;
-    
-    const result = await docClient.send(
-      new ScanCommand({
-        TableName: "Reports",
-        FilterExpression: "tenantId = :tenantId AND attribute_exists(schedule) AND schedule <> :emptySchedule",
-        ExpressionAttributeValues: {
-          ":tenantId": tenantId,
-          ":userId": userId,
-          ":emptySchedule": ""
-        }
-      })
-    );
-
-    // Filter reports based on visibility (same logic as main reports endpoint)
-    const reports = (result.Items || []).filter(report => {
-      // User can see reports they created
-      if (report.createdBy === userId) return true;
-      
-      // User can see public reports
-      if (report.isPublic) return true;
-      
-      // User can see reports shared with them
-      if (report.sharedWith && report.sharedWith.includes(userId)) return true;
-      
-      return false;
-    });
-
-    // Sort by creation date descending
-    const sortedReports = reports.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
-
-    res.json({ data: sortedReports });
-  } catch (error) {
-    next(error);
-  }
-});
 
 // Share report with other users
 router.post("/:id/share", async (req, res, next) => {
@@ -646,7 +643,7 @@ router.post("/:id/share", async (req, res, next) => {
     // First check if report exists and user has access
     const getResult = await docClient.send(
       new GetCommand({
-        TableName: "Reports",
+        TableName: TABLES.REPORTS,
         Key: { id }
       })
     );
@@ -666,10 +663,9 @@ router.post("/:id/share", async (req, res, next) => {
       const userResults = await Promise.all(
         userIds.map(uid => 
           docClient.send(
-            new QueryCommand({
-              TableName: "Users",
-              IndexName: "UserIdIndex",
-              KeyConditionExpression: "userId = :userId",
+            new ScanCommand({
+              TableName: TABLES.USERS,
+              FilterExpression: "userId = :userId",
               ExpressionAttributeValues: {
                 ":userId": uid
               }
@@ -704,7 +700,7 @@ router.post("/:id/share", async (req, res, next) => {
 
     const result = await docClient.send(
       new UpdateCommand({
-        TableName: "Reports",
+        TableName: TABLES.REPORTS,
         Key: { id },
         UpdateExpression: `SET ${updateExpression.join(', ')}, updatedAt = :updatedAt`,
         ExpressionAttributeValues: {
@@ -726,10 +722,9 @@ const getAllReports: RequestHandler = async (req: any, res) => {
   try {
     const { tenantId } = req.user;
 
-    const result = await docClient.send(new QueryCommand({
-      TableName: 'Reports',
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
+    const result = await docClient.send(new ScanCommand({
+      TableName: TABLES.REPORTS,
+      FilterExpression: 'tenantId = :tenantId',
       ExpressionAttributeValues: {
         ':tenantId': tenantId
       }
@@ -828,10 +823,9 @@ const generateReport: RequestHandler = async (req: any, res) => {
       }
 
       case 'lead-conversion': {
-        const leads = await docClient.send(new QueryCommand({
-          TableName: 'Leads',
-          IndexName: 'TenantIdIndex',
-          KeyConditionExpression: 'tenantId = :tenantId',
+        const leads = await docClient.send(new ScanCommand({
+          TableName: TABLES.LEADS,
+          FilterExpression: 'tenantId = :tenantId',
           ExpressionAttributeValues: {
             ':tenantId': tenantId
           }
@@ -869,10 +863,9 @@ const generateReport: RequestHandler = async (req: any, res) => {
       }
 
       case 'task-completion': {
-        const tasks = await docClient.send(new QueryCommand({
-          TableName: 'Tasks',
-          IndexName: 'TenantIdIndex',
-          KeyConditionExpression: 'tenantId = :tenantId',
+        const tasks = await docClient.send(new ScanCommand({
+          TableName: TABLES.TASKS,
+          FilterExpression: 'tenantId = :tenantId',
           ExpressionAttributeValues: {
             ':tenantId': tenantId
           }
@@ -911,19 +904,17 @@ const generateReport: RequestHandler = async (req: any, res) => {
       }
 
       case 'contact-engagement': {
-        const contacts = await docClient.send(new QueryCommand({
-          TableName: 'Contacts',
-          IndexName: 'TenantIdIndex',
-          KeyConditionExpression: 'tenantId = :tenantId',
+        const contacts = await docClient.send(new ScanCommand({
+          TableName: TABLES.CONTACTS,
+          FilterExpression: 'tenantId = :tenantId',
           ExpressionAttributeValues: {
             ':tenantId': tenantId
           }
         }));
 
-        const tasks = await docClient.send(new QueryCommand({
-          TableName: 'Tasks',
-          IndexName: 'TenantIdIndex',
-          KeyConditionExpression: 'tenantId = :tenantId',
+        const tasks = await docClient.send(new ScanCommand({
+          TableName: TABLES.TASKS,
+          FilterExpression: 'tenantId = :tenantId',
           ExpressionAttributeValues: {
             ':tenantId': tenantId
           }
@@ -982,7 +973,7 @@ const generateReport: RequestHandler = async (req: any, res) => {
     };
 
     await docClient.send(new PutCommand({
-      TableName: 'Reports',
+      TableName: TABLES.REPORTS,
       Item: report
     }));
 
@@ -995,9 +986,5 @@ const generateReport: RequestHandler = async (req: any, res) => {
     res.status(500).json({ error: 'Failed to generate report' });
   }
 };
-
-// Routes
-router.get('/', getAllReports);
-router.post('/generate', generateReport);
 
 export default router; 

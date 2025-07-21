@@ -33,6 +33,7 @@ const Login: React.FC = () => {
         const { userId, firstName, lastName, role, email: userEmail, tenantId, createdBy, phoneNumber } = user;
 
         // Store in Zustand (refresh token is now in cookie)
+        // The login function will automatically set axios headers
         login({ 
           userId, 
           firstName, 
@@ -44,9 +45,6 @@ const Login: React.FC = () => {
           phoneNumber, 
           accessToken
         });
-
-        // Set axios default for future requests
-        axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
 
         // Don't navigate here - let AuthWrapper handle it
         // This prevents race conditions with authentication state

@@ -1,6 +1,6 @@
 import express from "express";
 import { PutCommand, GetCommand, ScanCommand, UpdateCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
-import { docClient } from "../services/dynamoClient";
+import { docClient, TABLES } from "../services/dynamoClient";
 import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import { createError } from "../middlewares/errorHandler";
@@ -30,7 +30,7 @@ router.post('/profile-image', authenticate as express.RequestHandler, upload.sin
     // Update user profile with new image URL
     await docClient.send(
       new UpdateCommand({
-        TableName: "Users",
+        TableName: TABLES.USERS,
         Key: {
           userId: currentUser.userId
         },
@@ -94,7 +94,7 @@ router.get("/managers", async (req, res, next) => {
     // Get all sales managers in the same tenant
     const result = await docClient.send(
       new ScanCommand({
-        TableName: "Users",
+        TableName: TABLES.USERS,
         FilterExpression: "tenantId = :tenantId AND #role = :role AND isDeleted = :isDeleted",
         ExpressionAttributeNames: {
           "#role": "role"
@@ -135,7 +135,7 @@ router.get("/tenant-users", async (req, res, next) => {
     // Scan all users
     const result = await docClient.send(
       new ScanCommand({
-        TableName: "Users"
+        TableName: TABLES.USERS
       })
     );
 
@@ -190,7 +190,7 @@ router.get("/", async (req, res, next) => {
 
     const result = await docClient.send(
       new ScanCommand({
-        TableName: "Users"
+        TableName: TABLES.USERS
       })
     );
 
@@ -222,7 +222,7 @@ router.get("/:id", async (req, res, next) => {
     // First find the user by userId to get their email (since email is the primary key)
     const scanResult = await docClient.send(
       new ScanCommand({
-        TableName: "Users",
+        TableName: TABLES.USERS,
         FilterExpression: "userId = :userId",
         ExpressionAttributeValues: {
           ":userId": id
@@ -299,7 +299,7 @@ router.post("/", async (req, res, next) => {
     // Check if user already exists with this email
     const existingUser = await docClient.send(
       new GetCommand({
-        TableName: "Users",
+        TableName: TABLES.USERS,
         Key: { email }
       })
     );
@@ -311,10 +311,9 @@ router.post("/", async (req, res, next) => {
     // Check if phone number already exists (if provided)
     if (phoneNumber) {
       const existingPhoneUser = await docClient.send(
-        new QueryCommand({
-          TableName: "Users",
-          IndexName: "PhoneNumberIndex",
-          KeyConditionExpression: "phoneNumber = :phoneNumber",
+        new ScanCommand({
+          TableName: TABLES.USERS,
+          FilterExpression: "phoneNumber = :phoneNumber",
           ExpressionAttributeValues: {
             ":phoneNumber": phoneNumber
           }
@@ -357,7 +356,7 @@ router.post("/", async (req, res, next) => {
         // Validate that the reportingTo user exists and is a manager in the same tenant
         const managerResult = await docClient.send(
           new ScanCommand({
-            TableName: "Users",
+            TableName: TABLES.USERS,
             FilterExpression: "userId = :userId AND tenantId = :tenantId AND #role = :role AND isDeleted = :isDeleted",
             ExpressionAttributeNames: {
               "#role": "role"
@@ -405,7 +404,7 @@ router.post("/", async (req, res, next) => {
 
     await docClient.send(
       new PutCommand({
-        TableName: "Users",
+        TableName: TABLES.USERS,
         Item: user
       })
     );
@@ -447,7 +446,7 @@ router.put("/:id/soft-delete", async (req, res, next) => {
     // First, get the user to delete to check permissions
     const getUserResult = await docClient.send(
       new ScanCommand({
-        TableName: "Users",
+        TableName: TABLES.USERS,
         FilterExpression: "userId = :userId",
         ExpressionAttributeValues: {
           ":userId": id
@@ -487,7 +486,7 @@ router.put("/:id/soft-delete", async (req, res, next) => {
     // Perform soft delete using email as key
     const result = await docClient.send(
       new UpdateCommand({
-        TableName: "Users",
+        TableName: TABLES.USERS,
         Key: { email: userToDelete.email },
         UpdateExpression: "SET isDeleted = :isDeleted, updatedAt = :updatedAt, deletedBy = :deletedBy, deletedAt = :deletedAt",
         ExpressionAttributeValues: {
@@ -505,6 +504,86 @@ router.put("/:id/soft-delete", async (req, res, next) => {
     }
 
     res.json({ message: "User soft deleted successfully" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Update user profile (current user) - MUST come before /:id route
+router.put("/profile", async (req, res, next) => {
+  try {
+    console.log("=== PUT /profile route hit ===");
+    console.log("Request method:", req.method);
+    console.log("Request URL:", req.url);
+    console.log("Headers:", req.headers);
+    
+    const currentUser = (req as any).user;
+    if (!currentUser) {
+      console.log("No current user found in token");
+      throw createError("User not found in token", 401);
+    }
+    
+    console.log("Current user:", currentUser);
+
+    const { firstName, lastName, phoneNumber } = req.body;
+
+    // Get current user data to find their email (primary key)
+    const getUserResult = await docClient.send(
+      new ScanCommand({
+        TableName: TABLES.USERS,
+        FilterExpression: "userId = :userId",
+        ExpressionAttributeValues: {
+          ":userId": currentUser.userId
+        }
+      })
+    );
+
+    const userToUpdate = getUserResult.Items?.[0];
+    if (!userToUpdate) {
+      throw createError("User not found", 404);
+    }
+
+    // Update user profile using email as key
+    const result = await docClient.send(
+      new UpdateCommand({
+        TableName: TABLES.USERS,
+        Key: { email: userToUpdate.email },
+        UpdateExpression: "SET #firstName = :firstName, #lastName = :lastName, #phoneNumber = :phoneNumber, #updatedAt = :updatedAt",
+        ExpressionAttributeNames: {
+          "#firstName": "firstName",
+          "#lastName": "lastName", 
+          "#phoneNumber": "phoneNumber",
+          "#updatedAt": "updatedAt"
+        },
+        ExpressionAttributeValues: {
+          ":firstName": firstName,
+          ":lastName": lastName,
+          ":phoneNumber": phoneNumber,
+          ":updatedAt": new Date().toISOString()
+        },
+        ReturnValues: "ALL_NEW"
+      })
+    );
+
+    if (!result.Attributes) {
+      throw createError("Failed to update profile", 500);
+    }
+
+    const updatedUser = {
+      userId: result.Attributes.userId,
+      email: result.Attributes.email,
+      firstName: result.Attributes.firstName,
+      lastName: result.Attributes.lastName,
+      role: result.Attributes.role,
+      tenantId: result.Attributes.tenantId,
+      phoneNumber: result.Attributes.phoneNumber,
+      updatedAt: result.Attributes.updatedAt
+    };
+
+    res.json({ 
+      message: "Profile updated successfully",
+      user: updatedUser 
+    });
   } catch (error) {
     next(error);
   }
@@ -529,7 +608,7 @@ router.put("/:id", async (req, res, next) => {
     // First get the user to find their current email (since email is the primary key)
     const getUserResult = await docClient.send(
       new ScanCommand({
-        TableName: "Users",
+        TableName: TABLES.USERS,
         FilterExpression: "userId = :userId",
         ExpressionAttributeValues: {
           ":userId": id
@@ -551,7 +630,7 @@ router.put("/:id", async (req, res, next) => {
       // For now, let's do a simple scan to check phone number uniqueness
       const phoneCheckResult = await docClient.send(
         new ScanCommand({
-          TableName: "Users",
+          TableName: TABLES.USERS,
           FilterExpression: "phoneNumber = :phoneNumber AND userId <> :currentUserId",
           ExpressionAttributeValues: {
             ":phoneNumber": updates.phoneNumber,
@@ -575,7 +654,7 @@ router.put("/:id", async (req, res, next) => {
       // Check if the new email already exists
       const emailCheckResult = await docClient.send(
         new GetCommand({
-          TableName: "Users",
+          TableName: TABLES.USERS,
           Key: { email: updates.email }
         })
       );
@@ -622,7 +701,7 @@ router.put("/:id", async (req, res, next) => {
 
     const result = await docClient.send(
       new UpdateCommand({
-        TableName: "Users",
+        TableName: TABLES.USERS,
         Key: { email: userToUpdate.email },
         UpdateExpression: `SET ${updateExpressions.join(', ')}, updatedAt = :updatedAt`,
         ExpressionAttributeNames: expressionAttributeNames,
@@ -661,6 +740,12 @@ router.put("/:id", async (req, res, next) => {
   }
 });
 
+
+// Test route to verify routing works
+router.get("/profile/test", async (req, res) => {
+  res.json({ message: "Profile route is working!", timestamp: new Date().toISOString() });
+});
+
 // Get user profile (current user)
 router.get("/profile/me", async (req, res, next) => {
   try {
@@ -668,7 +753,7 @@ router.get("/profile/me", async (req, res, next) => {
     
     const result = await docClient.send(
       new GetCommand({
-        TableName: "Users",
+        TableName: TABLES.USERS,
         Key: { email }
       })
     );

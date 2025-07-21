@@ -5,10 +5,11 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 // 1. Axios Instance for protected API calls (with interceptor)
 const API = axios.create({
-  baseURL: `${API_URL}/auth`,
+  baseURL: API_URL, // Remove /auth from base URL for general API calls
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Include cookies for cross-origin requests
 });
 
 // 2. Separate Axios instance for auth endpoints (without interceptor)

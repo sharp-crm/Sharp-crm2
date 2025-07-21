@@ -283,7 +283,7 @@ const Dealers: React.FC = () => {
                 </div>
               )}
             </div>
-            <div>
+            {/* <div>
               <label className="flex items-center">
                 <input type="checkbox" className="mr-2 h-4 w-4" checked={filters.status} onChange={() => handleCheckboxChange('status')} />
                 Status
@@ -301,7 +301,7 @@ const Dealers: React.FC = () => {
                   </select>
                 </div>
               )}
-            </div>
+            </div> */}
             <div>
               <label className="flex items-center">
                 <input type="checkbox" className="mr-2 h-4 w-4" checked={filters.company} onChange={() => handleCheckboxChange('company')} />

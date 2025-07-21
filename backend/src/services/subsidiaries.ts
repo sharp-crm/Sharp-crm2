@@ -1,4 +1,4 @@
-import { docClient } from './dynamoClient';
+import { docClient, TABLES } from './dynamoClient';
 import { 
   GetCommand, 
   PutCommand, 
@@ -58,7 +58,7 @@ export interface SubsidiaryStats {
 }
 
 export class SubsidiariesService {
-  private tableName = 'Subsidiaries';
+  private tableName = TABLES.SUBSIDIARIES;
 
   async createSubsidiary(
     input: CreateSubsidiaryInput,
@@ -102,11 +102,10 @@ export class SubsidiariesService {
   }
 
   async getSubsidiariesByTenant(tenantId: string, userId: string, userRole: string): Promise<Subsidiary[]> {
-    const result = await docClient.send(new QueryCommand({
+    // Use ScanCommand instead of QueryCommand since TenantIdIndex doesn't exist
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
-      FilterExpression: 'isDeleted <> :deleted',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted <> :deleted',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ':deleted': true
@@ -133,11 +132,9 @@ export class SubsidiariesService {
   }
 
   async getSubsidiariesByCreator(createdBy: string, tenantId: string): Promise<Subsidiary[]> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'CreatedByIndex',
-      KeyConditionExpression: 'createdBy = :createdBy',
-      FilterExpression: 'tenantId = :tenantId AND isDeleted <> :deleted',
+      FilterExpression: 'createdBy = :createdBy AND tenantId = :tenantId AND isDeleted <> :deleted',
       ExpressionAttributeValues: {
         ':createdBy': createdBy,
         ':tenantId': tenantId,
@@ -149,11 +146,9 @@ export class SubsidiariesService {
   }
 
   async getSubsidiaryByName(name: string, tenantId: string): Promise<Subsidiary | null> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'NameIndex',
-      KeyConditionExpression: '#name = :name',
-      FilterExpression: 'tenantId = :tenantId AND isDeleted <> :deleted',
+      FilterExpression: '#name = :name AND tenantId = :tenantId AND isDeleted <> :deleted',
       ExpressionAttributeNames: {
         '#name': 'name'
       },
@@ -283,11 +278,9 @@ export class SubsidiariesService {
     tenantId: string,
     limit: number = 50
   ): Promise<Subsidiary[]> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
-      FilterExpression: 'isDeleted <> :deleted AND (contains(#name, :searchTerm) OR contains(email, :searchTerm) OR contains(address, :searchTerm))',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted <> :deleted AND (contains(#name, :searchTerm) OR contains(email, :searchTerm) OR contains(address, :searchTerm))',
       ExpressionAttributeNames: {
         '#name': 'name'
       },
@@ -303,10 +296,9 @@ export class SubsidiariesService {
   }
 
   async getSubsidiariesStats(tenantId: string): Promise<SubsidiaryStats> {
-    const result = await docClient.send(new QueryCommand({
+    const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      IndexName: 'TenantIdIndex',
-      KeyConditionExpression: 'tenantId = :tenantId',
+      FilterExpression: 'tenantId = :tenantId',
       ExpressionAttributeValues: {
         ':tenantId': tenantId
       }

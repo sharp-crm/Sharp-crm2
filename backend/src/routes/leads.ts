@@ -25,49 +25,75 @@ function validateEmail(email: string): boolean {
 
 // Get all leads for tenant
 const getAllLeads: RequestHandler = async (req: any, res) => {
+  const operation = 'getAllLeads';
+  const { tenantId, userId } = req.user || {};
+  
+  console.log(`🔍 [${operation}] Starting request - TenantId: ${tenantId}, UserId: ${userId}`);
+  
   try {
-    const { tenantId, userId } = req.user;
     const includeDeleted = req.query.includeDeleted === 'true';
     
     if (!tenantId) {
+      console.log(`❌ [${operation}] Missing tenant ID`);
       res.status(400).json({ error: "Tenant ID required" });
       return;
     }
 
+    console.log(`📊 [${operation}] Fetching leads - TenantId: ${tenantId}, IncludeDeleted: ${includeDeleted}`);
     const leads = await leadsService.getLeadsByTenant(tenantId, userId, includeDeleted);
     
+    console.log(`✅ [${operation}] Successfully retrieved ${leads.length} leads`);
     res.json({ 
       data: leads,
       total: leads.length,
       message: `Retrieved ${leads.length} leads`
     });
   } catch (error) {
-    console.error('Get leads error:', error);
+    console.error(`❌ [${operation}] Error occurred:`);
+    console.error(`   - Error message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error(`   - Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
+    if (error && typeof error === 'object' && 'code' in error) {
+      console.error(`   - DynamoDB error code: ${(error as any).code}`);
+      console.error(`   - DynamoDB error details: ${JSON.stringify(error, null, 2)}`);
+    }
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
 // Get lead by ID
 const getLeadById: RequestHandler = async (req: any, res) => {
+  const operation = 'getLeadById';
+  const { tenantId, userId } = req.user || {};
+  const { id } = req.params;
+  
+  console.log(`🔍 [${operation}] Starting request - TenantId: ${tenantId}, UserId: ${userId}, LeadId: ${id}`);
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { id } = req.params;
-    
     if (!tenantId) {
+      console.log(`❌ [${operation}] Missing tenant ID`);
       res.status(400).json({ error: "Tenant ID required" });
       return;
     }
 
+    console.log(`📊 [${operation}] Fetching lead by ID - LeadId: ${id}`);
     const lead = await leadsService.getLeadById(id, tenantId, userId);
     
     if (!lead) {
+      console.log(`❌ [${operation}] Lead not found - LeadId: ${id}`);
       res.status(404).json({ message: "Lead not found" });
       return;
     }
 
+    console.log(`✅ [${operation}] Successfully retrieved lead - LeadId: ${id}`);
     res.json({ data: lead });
   } catch (error) {
-    console.error('Get lead error:', error);
+    console.error(`❌ [${operation}] Error occurred:`);
+    console.error(`   - Error message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error(`   - Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
+    if (error && typeof error === 'object' && 'code' in error) {
+      console.error(`   - DynamoDB error code: ${(error as any).code}`);
+      console.error(`   - DynamoDB error details: ${JSON.stringify(error, null, 2)}`);
+    }
     res.status(500).json({ message: "Internal server error" });
   }
 };

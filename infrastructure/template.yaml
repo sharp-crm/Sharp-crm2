@@ -32,25 +32,9 @@ Globals:
         FRONTEND_URL_ALT_2: "http://localhost:5175"
   Api:
     Cors:
-      AllowMethods:
-        - DELETE
-        - GET
-        - HEAD
-        - OPTIONS
-        - PATCH
-        - POST
-        - PUT
-      AllowHeaders:
-        - Content-Type
-        - X-Amz-Date
-        - Authorization
-        - X-Api-Key
-        - X-Amz-Security-Token
-      AllowOrigin:
-        - https://d9xj0evv3ouwa.cloudfront.net
-        - http://localhost:5173
-        - http://localhost:5174
-        - http://localhost:5175
+      AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD'"
+      AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      AllowOrigin: "'https://d9xj0evv3ouwa.cloudfront.net'"
       AllowCredentials: true
       MaxAge: 600
     GatewayResponses:
@@ -185,11 +169,23 @@ Resources:
             Path: /{proxy+}
             Method: ANY
             RestApiId: !Ref BackendApi
+        ApiOptionsEvent:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: OPTIONS
+            RestApiId: !Ref BackendApi
         HealthCheck:
           Type: Api
           Properties:
             Path: /health
             Method: GET
+            RestApiId: !Ref BackendApi
+        HealthCheckOptions:
+          Type: Api
+          Properties:
+            Path: /health
+            Method: OPTIONS
             RestApiId: !Ref BackendApi
       Policies:
         - AWSLambdaBasicExecutionRole
@@ -230,6 +226,27 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
+                - dynamodb:Query
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Scan
+                - dynamodb:BatchGetItem
+                - dynamodb:BatchWriteItem
+                - dynamodb:ConditionCheckItem
+                - dynamodb:DescribeStream
+                - dynamodb:GetRecords
+                - dynamodb:GetShardIterator
+                - dynamodb:ListStreams
+              Resource: 
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/*"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/*/index/*"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/*/stream/*"
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
                 - logs:CreateLogGroup
                 - logs:CreateLogStream
                 - logs:PutLogEvents
@@ -242,25 +259,9 @@ Resources:
       Name: !Sub "${TablePrefix}-API-${Environment}"
       StageName: !Ref Environment
       Cors:
-        AllowMethods:
-          - DELETE
-          - GET
-          - HEAD
-          - PATCH
-          - POST
-          - PUT
-          - OPTIONS
-        AllowHeaders:
-          - Content-Type
-          - X-Amz-Date
-          - Authorization
-          - X-Api-Key
-          - X-Amz-Security-Token
-        AllowOrigin:
-          - https://d9xj0evv3ouwa.cloudfront.net
-          - http://localhost:5173
-          - http://localhost:5174
-          - http://localhost:5175
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD'"
+        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'https://d9xj0evv3ouwa.cloudfront.net'"
         AllowCredentials: true
         MaxAge: 600
       GatewayResponses:

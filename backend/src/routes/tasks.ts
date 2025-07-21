@@ -1,6 +1,6 @@
 import express, { Response, NextFunction } from "express";
-import { PutCommand, GetCommand, QueryCommand, UpdateCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
-import { docClient } from "../services/dynamoClient";
+import { PutCommand, GetCommand, QueryCommand, UpdateCommand, DeleteCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { docClient, TABLES } from "../services/dynamoClient";
 import { v4 as uuidv4 } from "uuid";
 import { AuthenticatedRequest } from "../middlewares/authenticate";
 
@@ -28,10 +28,9 @@ router.get("/", (async (req: AuthenticatedRequest, res: Response, next: NextFunc
     }
 
     const result = await docClient.send(
-      new QueryCommand({
-        TableName: "Tasks",
-        IndexName: "TenantIdIndex",
-        KeyConditionExpression: "tenantId = :tenantId",
+      new ScanCommand({
+        TableName: TABLES.TASKS,
+        FilterExpression: "tenantId = :tenantId",
         ExpressionAttributeValues: {
           ":tenantId": tenantId
         }
@@ -56,7 +55,7 @@ router.get("/:id", (async (req: AuthenticatedRequest, res: Response, next: NextF
     
     const result = await docClient.send(
       new GetCommand({
-        TableName: "Tasks",
+        TableName: TABLES.TASKS,
         Key: { id }
       })
     );
@@ -112,7 +111,7 @@ router.post("/", (async (req: AuthenticatedRequest, res: Response, next: NextFun
 
     await docClient.send(
       new PutCommand({
-        TableName: "Tasks",
+        TableName: TABLES.TASKS,
         Item: task
       })
     );
@@ -137,7 +136,7 @@ router.put("/:id", (async (req: AuthenticatedRequest, res: Response, next: NextF
     // First check if task exists and belongs to tenant
     const existingTask = await docClient.send(
       new GetCommand({
-        TableName: "Tasks",
+        TableName: TABLES.TASKS,
         Key: { id }
       })
     );
@@ -165,7 +164,7 @@ router.put("/:id", (async (req: AuthenticatedRequest, res: Response, next: NextF
 
     const result = await docClient.send(
       new UpdateCommand({
-        TableName: "Tasks",
+        TableName: TABLES.TASKS,
         Key: { id },
         UpdateExpression: `SET ${updateExpressions.join(', ')}`,
         ExpressionAttributeNames: expressionAttributeNames,
@@ -193,7 +192,7 @@ router.delete("/:id", (async (req: AuthenticatedRequest, res: Response, next: Ne
     // First check if task exists and belongs to tenant
     const existingTask = await docClient.send(
       new GetCommand({
-        TableName: "Tasks",
+        TableName: TABLES.TASKS,
         Key: { id }
       })
     );
@@ -204,7 +203,7 @@ router.delete("/:id", (async (req: AuthenticatedRequest, res: Response, next: Ne
 
     await docClient.send(
       new DeleteCommand({
-        TableName: "Tasks",
+        TableName: TABLES.TASKS,
         Key: { id }
       })
     );

@@ -79,18 +79,35 @@ export const docClient = DynamoDBDocumentClient.from(client, {
   },
 });
 
-// Table names for easy reference
+// Table names for easy reference - using environment variables with fallbacks
 export const TABLES = {
-  USERS: "Users",
-  CONTACTS: "Contacts",
-  LEADS: "Leads",
-  DEALS: "Deals",
-  TASKS: "Tasks",
-  SUBSIDIARIES: "Subsidiaries",
-  DEALERS: "Dealers",
-  NOTIFICATIONS: "Notifications",
-  REPORTS: "Reports"
+  USERS: process.env.USERS_TABLE_NAME || process.env.USERS_TABLE || 'SharpCRM-Users-development',
+  CONTACTS: process.env.CONTACTS_TABLE_NAME || process.env.CONTACTS_TABLE || 'SharpCRM-Contacts-development',
+  LEADS: process.env.LEADS_TABLE_NAME || process.env.LEADS_TABLE || 'SharpCRM-Leads-development',
+  DEALS: process.env.DEALS_TABLE_NAME || process.env.DEALS_TABLE || 'SharpCRM-Deals-development',
+  TASKS: process.env.TASKS_TABLE_NAME || process.env.TASKS_TABLE || 'SharpCRM-Tasks-development',
+  SUBSIDIARIES: process.env.SUBSIDIARIES_TABLE_NAME || process.env.SUBSIDIARIES_TABLE || 'SharpCRM-Subsidiaries-development',
+  DEALERS: process.env.DEALERS_TABLE_NAME || process.env.DEALERS_TABLE || 'SharpCRM-Dealers-development',
+  NOTIFICATIONS: process.env.NOTIFICATIONS_TABLE_NAME || process.env.NOTIFICATIONS_TABLE || 'SharpCRM-Notifications-development',
+  REPORTS: process.env.REPORTS_TABLE_NAME || process.env.REPORTS_TABLE || 'SharpCRM-Reports-development',
+  REFRESH_TOKENS: process.env.REFRESH_TOKENS_TABLE_NAME || process.env.REFRESH_TOKENS_TABLE || 'SharpCRM-RefreshTokens-development'
 } as const;
+
+// Debug table names (same pattern as auth routes)
+console.log("=== DYNAMODB CLIENT TABLE NAMES DEBUG ===");
+console.log("Environment variables:");
+console.log("- USERS_TABLE_NAME:", process.env.USERS_TABLE_NAME);
+console.log("- CONTACTS_TABLE_NAME:", process.env.CONTACTS_TABLE_NAME);
+console.log("- LEADS_TABLE_NAME:", process.env.LEADS_TABLE_NAME);
+console.log("- DEALS_TABLE_NAME:", process.env.DEALS_TABLE_NAME);
+console.log("- TASKS_TABLE_NAME:", process.env.TASKS_TABLE_NAME);
+console.log("Resolved table names:");
+console.log("- USERS:", TABLES.USERS);
+console.log("- CONTACTS:", TABLES.CONTACTS);
+console.log("- LEADS:", TABLES.LEADS);
+console.log("- DEALS:", TABLES.DEALS);
+console.log("- TASKS:", TABLES.TASKS);
+console.log("============================================");
 
 // Error types for better error handling
 export type DynamoDBErrorType = 

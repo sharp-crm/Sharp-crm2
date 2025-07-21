@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
-import { docClient } from "../services/dynamoClient";
+import { docClient, TABLES } from "../services/dynamoClient";
 import { 
   verifyAccessToken, 
   isTokenNearExpiry, 
@@ -52,7 +52,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       try {
         const userResult = await docClient.send(
           new GetCommand({
-            TableName: "Users",
+            TableName: TABLES.USERS,
             Key: { email: decoded.email }
           })
         );

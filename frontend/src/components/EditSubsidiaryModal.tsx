@@ -209,7 +209,7 @@ const EditSubsidiaryModal: React.FC<EditSubsidiaryModalProps> = ({
                       Contact Number <span className="text-red-500">*</span>
                     </label>
                     <PhoneNumberInput
-                      value={formData.contact}
+                      value={formData.contact || ''}
                       onChange={(value) => handleInputChange('contact', value)}
                       required
                     />
@@ -221,7 +221,7 @@ const EditSubsidiaryModal: React.FC<EditSubsidiaryModalProps> = ({
                     <input
                       type="number"
                       min="0"
-                      value={formData.totalEmployees}
+                      value={formData.totalEmployees || 0}
                       onChange={(e) => handleInputChange('totalEmployees', parseInt(e.target.value) || 0)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required

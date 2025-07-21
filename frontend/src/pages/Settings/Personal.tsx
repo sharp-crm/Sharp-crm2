@@ -60,13 +60,32 @@ const Personal: React.FC = () => {
       const response = await API.put('/users/profile', formData);
       setSuccess('Profile updated successfully.');
 
-      const updatedUser = {
-        ...user!,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        phoneNumber: formData.phoneNumber,
-      };
-      updateUser(updatedUser);
+      // Use the actual response data from the server
+      if (response.data?.user) {
+        const updatedUser = {
+          ...user!,
+          ...response.data.user, // Use all data from server response
+          firstName: response.data.user.firstName,
+          lastName: response.data.user.lastName,
+          phoneNumber: response.data.user.phoneNumber,
+          updatedAt: response.data.user.updatedAt
+        };
+        updateUser(updatedUser);
+        
+        // Also update local storage to persist the changes
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        sessionStorage.setItem('user', JSON.stringify(updatedUser));
+        
+        // Update form data to reflect the saved changes
+        setFormData({
+          firstName: response.data.user.firstName || '',
+          lastName: response.data.user.lastName || '', 
+          email: response.data.user.email || '',
+          phoneNumber: response.data.user.phoneNumber || '',
+          password: '',
+          confirmPassword: '',
+        });
+      }
 
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to update profile');
