@@ -100,64 +100,127 @@ const LeadAnalytics: React.FC = () => {
           </div>
 
           {/* Charts */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Lead Source Pie Chart */}
-            <div className="bg-white rounded-2xl shadow p-4">
-              <h3 className="text-lg font-semibold mb-2">Lead Sources</h3>
+          <div className="space-y-8">
+            {/* Lead Source Chart - Full Width */}
+            <div className="bg-white rounded-2xl shadow p-6">
+              <h3 className="text-xl font-semibold mb-6">Lead Sources Distribution</h3>
               {analytics.leadSources.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
-                  <PieChart>
-                    <Pie 
-                      data={analytics.leadSources} 
-                      dataKey="value" 
-                      nameKey="name" 
-                      outerRadius={80}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    >
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
+                  {/* Pie Chart */}
+                  <div className="lg:col-span-2">
+                    <ResponsiveContainer width="100%" height={280}>
+                      <PieChart>
+                        <Pie 
+                          data={analytics.leadSources} 
+                          dataKey="value" 
+                          nameKey="name" 
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={140}
+                          innerRadius={70}
+                          paddingAngle={2}
+                          label={false}
+                        >
+                          {analytics.leadSources.map((entry: any, index: number) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          formatter={(value: number, name: string) => [
+                            `${value} leads (${((value / analytics.totalLeads) * 100).toFixed(1)}%)`,
+                            name
+                          ]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  
+                  {/* Legend */}
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-4">Sources</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {analytics.leadSources.map((entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        <div key={entry.name} className="flex items-center space-x-2">
+                          <div 
+                            className="w-3 h-3 rounded-full flex-shrink-0" 
+                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium text-gray-900 truncate">
+                              {entry.name}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {entry.value} ({((entry.value / analytics.totalLeads) * 100).toFixed(1)}%)
+                            </div>
+                          </div>
+                        </div>
                       ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
               ) : (
-                <div className="flex items-center justify-center h-[250px] text-gray-500">
-                  <p>No lead source data available</p>
+                <div className="flex items-center justify-center h-[280px] text-gray-500">
+                  <div className="text-center">
+                    <Icons.PieChart className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p>No lead source data available</p>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Lead Status Bar Chart */}
-            <div className="bg-white rounded-2xl shadow p-4">
-              <h3 className="text-lg font-semibold mb-2">Lead Status</h3>
-              {analytics.leadStatusData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={analytics.leadStatusData}>
-                    <XAxis dataKey="status" />
+            {/* Secondary Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Lead Status Bar Chart */}
+              <div className="bg-white rounded-2xl shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Lead Status Distribution</h3>
+                {analytics.leadStatusData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={analytics.leadStatusData}>
+                      <XAxis dataKey="status" />
+                      <YAxis />
+                      <Tooltip 
+                        formatter={(value: number, name: string) => [
+                          `${value} leads`,
+                          'Count'
+                        ]}
+                      />
+                      <Bar dataKey="count" fill="#8884d8" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-[260px] text-gray-500">
+                    <div className="text-center">
+                      <Icons.BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <p>No lead status data available</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Recent Leads Line Chart */}
+              <div className="bg-white rounded-2xl shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Lead Trends (Sample Data)</h3>
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={recentLeads}>
+                    <XAxis dataKey="date" />
                     <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="count" fill="#8884d8" />
-                  </BarChart>
+                    <Tooltip 
+                      formatter={(value: number, name: string) => [
+                        `${value} leads`,
+                        'Leads Generated'
+                      ]}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="leads" 
+                      stroke="#82ca9d" 
+                      strokeWidth={3}
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
                 </ResponsiveContainer>
-              ) : (
-                <div className="flex items-center justify-center h-[250px] text-gray-500">
-                  <p>No lead status data available</p>
-                </div>
-              )}
-            </div>
-
-            {/* Recent Leads Line Chart */}
-            <div className="bg-white rounded-2xl shadow p-4 md:col-span-2">
-              <h3 className="text-lg font-semibold mb-2">Lead Trends (Sample Data)</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={recentLeads}>
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="leads" stroke="#82ca9d" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
+              </div>
             </div>
           </div>
         </>

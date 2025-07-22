@@ -876,10 +876,17 @@ export const analyticsApi = {
     try {
       const leads = await leadsApi.getAll();
 
-      // Calculate lead sources
+      // Calculate lead sources (check both leadSource and source fields)
       const sourceMap = new Map();
       leads.forEach(lead => {
-        const source = lead.source || 'Unknown';
+        // Use leadSource first, fallback to source field, then 'Unknown'
+        let source = lead.leadSource || lead.source;
+        
+        // Clean up the source value
+        if (!source || source.trim() === '' || source === 'undefined' || source === 'null') {
+          source = 'Unknown';
+        }
+        
         sourceMap.set(source, (sourceMap.get(source) || 0) + 1);
       });
 
@@ -888,10 +895,16 @@ export const analyticsApi = {
         value
       }));
 
-      // Calculate lead status distribution
+      // Calculate lead status distribution (try both leadStatus and status fields)
       const statusMap = new Map();
       leads.forEach(lead => {
-        const status = lead.status || 'New';
+        let status = lead.leadStatus || lead.status;
+        
+        // Clean up the status value
+        if (!status || status.trim() === '' || status === 'undefined' || status === 'null') {
+          status = 'New';
+        }
+        
         statusMap.set(status, (statusMap.get(status) || 0) + 1);
       });
 
@@ -900,8 +913,11 @@ export const analyticsApi = {
         count
       }));
 
-      // Calculate conversion rate
-      const qualifiedLeads = leads.filter(l => l.status === 'Qualified').length;
+      // Calculate conversion rate (use both status fields)
+      const qualifiedLeads = leads.filter(l => {
+        const status = l.leadStatus || l.status || '';
+        return status.toLowerCase().includes('qualified');
+      }).length;
       const conversionRate = leads.length > 0 ? ((qualifiedLeads / leads.length) * 100) : 0;
 
       return {
