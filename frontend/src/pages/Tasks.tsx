@@ -9,7 +9,7 @@ import GridView from '../components/Views/GridView';
 import TimelineView from '../components/Views/TimelineView';
 import ChartView from '../components/Views/ChartView';
 import { tasksApi, Task, usersApi } from '../api/services';
-import { ViewType, Deal } from '../types';
+import { ViewType, Deal, TASK_STATUSES } from '../types';
 import AddNewModal from '../components/Common/AddNewModal';
 import ViewTaskModal from '../components/ViewTaskModal';
 import EditTaskModal from '../components/EditTaskModal';
@@ -233,6 +233,8 @@ const Tasks: React.FC = () => {
   const completedTasks = tasks.filter(task => task.status === 'Completed').length;
   const inProgressTasks = tasks.filter(task => task.status === 'In Progress').length;
   const openTasks = tasks.filter(task => task.status === 'Open').length;
+  const notStartedTasks = tasks.filter(task => task.status === 'Not Started').length;
+  const deferredTasks = tasks.filter(task => task.status === 'Deferred').length;
   const highPriorityTasks = tasks.filter(task => task.priority === 'High').length;
 
   const renderContent = () => {
@@ -272,7 +274,7 @@ const Tasks: React.FC = () => {
   }
 
   return (
-    <div className="p-6">
+    <div className={currentView === 'kanban' ? 'p-4 lg:p-6' : 'p-6'}>
       <PageHeader
         title="Tasks"
         subtitle="Manage and track your tasks"
@@ -341,8 +343,8 @@ const Tasks: React.FC = () => {
       {currentView === 'list' && (
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Task Overview</h3>
-          <div className="grid grid-cols-3 gap-4">
-            {['Open', 'In Progress', 'Completed'].map((status) => {
+          <div className="grid grid-cols-5 gap-4">
+            {TASK_STATUSES.map((status) => {
               const statusTasks = tasks.filter(task => task.status === status);
               return (
                 <div key={status} className="text-center">
@@ -350,7 +352,7 @@ const Tasks: React.FC = () => {
                     <p className="text-sm font-medium text-gray-600">{status}</p>
                     <p className="text-lg font-bold text-gray-900">{statusTasks.length}</p>
                     <p className="text-sm text-gray-500">
-                      {Math.round((statusTasks.length / tasks.length) * 100)}% of total
+                      {tasks.length > 0 ? Math.round((statusTasks.length / tasks.length) * 100) : 0}% of total
                     </p>
                   </div>
                 </div>
@@ -373,6 +375,10 @@ const Tasks: React.FC = () => {
             <Icons.Plus className="w-4 h-4 mr-2" />
             New Task
           </button>
+        </div>
+      ) : currentView === 'kanban' ? (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          {renderContent()}
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">

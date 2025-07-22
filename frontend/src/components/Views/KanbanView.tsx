@@ -18,7 +18,7 @@ import {
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import * as Icons from 'lucide-react';
-import { Deal, Task, DEAL_STAGES } from '../../types';
+import { Deal, Task, DEAL_STAGES, TASK_STATUSES } from '../../types';
 import StatusBadge from '../Common/StatusBadge';
 
 interface KanbanViewProps {
@@ -152,10 +152,9 @@ const DroppableColumn: React.FC<{
   return (
     <div 
       ref={setNodeRef}
-      className={`relative w-full min-h-[600px] transition-all duration-150 ${
+      className={`relative w-full h-full transition-all duration-150 ${
         isOver && canDrop ? 'ring-2 ring-blue-400 ring-opacity-70' : ''
       } ${isOver && !canDrop ? 'ring-2 ring-red-400 ring-opacity-70' : ''}`}
-      style={{ minHeight: '600px' }}
     >
       {/* Full column drop overlay */}
       <div className={`absolute inset-0 pointer-events-none transition-all duration-150 ${
@@ -168,9 +167,9 @@ const DroppableColumn: React.FC<{
 };
 
 const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUserName }) => {
-  const stages = type === 'deals'
+  const stages: string[] = type === 'deals'
     ? [...DEAL_STAGES]
-    : ['Open', 'In Progress', 'Follow Up', 'Completed'];
+    : [...TASK_STATUSES];
 
   const [activeItem, setActiveItem] = useState<Deal | Task | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
@@ -293,91 +292,134 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
     } else {
       const colors: Record<string, string> = {
         'Open': '#3B82F6',
+        'Not Started': '#6B7280',
+        'Deferred': '#EF4444',
         'In Progress': '#F59E0B',
-        'Follow Up': '#8B5CF6',
         'Completed': '#10B981'
       };
       return colors[stage] || '#6B7280';
     }
   };
 
-  return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={customCollisionDetection}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
-      onDragEnd={handleDragEnd}
-      onDragCancel={handleDragCancel}
-    >
-      <div className="flex space-x-6 overflow-x-auto pb-4">
-        {stages.map((stage) => {
-          const stageItems = getItemsByStage(stage);
-          const stageColor = getStageColor(stage);
-          const isOver = overId === stage;
-          const canDrop = activeItem !== null && stages.includes(stage as any);
-          const currentStage = activeItem ? (type === 'deals' ? (activeItem as Deal).stage : (activeItem as Task).status) : null;
-          const isDifferentStage = currentStage !== stage;
+    return (
+    <div className="w-full">
+      <DndContext
+        sensors={sensors}
+        collisionDetection={customCollisionDetection}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
+      >
+        {/* Fixed height container with horizontal scroll */}
+        <div className="w-full h-[calc(100vh-250px)] md:h-[calc(100vh-300px)] overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-track-gray-100 scrollbar-thumb-gray-400 hover:scrollbar-thumb-gray-500">
+        <div 
+          className="flex h-full pb-4 px-4" 
+          style={{ 
+            minWidth: stages.length <= 4 ? '100%' : `${stages.length * 320}px`,
+            width: '100%'
+          }}
+        >
+          {stages.map((stage, index) => {
+            const stageItems = getItemsByStage(stage);
+            const stageColor = getStageColor(stage);
+            const isOver = overId === stage;
+            const canDrop = activeItem !== null && stages.includes(stage as any);
+            const currentStage = activeItem ? (type === 'deals' ? (activeItem as Deal).stage : (activeItem as Task).status) : null;
+            const isDifferentStage = currentStage !== stage;
 
-          return (
-            <div key={stage} className="flex-shrink-0 w-80">
-              <DroppableColumn id={stage} isOver={isOver} canDrop={canDrop && isDifferentStage}>
-                <div className={`bg-gray-50 rounded-lg p-4 min-h-[600px] transition-all duration-150 relative ${
-                  isOver && canDrop && isDifferentStage ? 'border-2 border-blue-300 shadow-lg' : 
-                  isOver && !isDifferentStage ? 'border-2 border-yellow-300' :
-                  'border-2 border-transparent'
-                }`}>
-                  <div className="flex items-center justify-between mb-4 relative z-20">
-                    <div className="flex items-center">
-                      <div 
-                        className="w-3 h-3 rounded-full mr-2" 
-                        style={{ backgroundColor: stageColor }}
-                      />
-                      <h3 className="font-semibold text-gray-900">{stage}</h3>
+            // Calculate dynamic width based on screen size and number of columns
+            const getColumnWidth = () => {
+              // Use responsive classes for better screen utilization
+              const baseClasses = 'flex-1';
+              
+              if (stages.length <= 3) {
+                return `${baseClasses} min-w-[320px] max-w-none xl:min-w-[400px] 2xl:min-w-[450px]`;
+              }
+              if (stages.length <= 4) {
+                return `${baseClasses} min-w-[300px] max-w-none xl:min-w-[350px] 2xl:min-w-[400px]`;
+              }
+              if (stages.length <= 5) {
+                return `${baseClasses} min-w-[280px] max-w-none xl:min-w-[320px] 2xl:min-w-[360px]`;
+              }
+              if (stages.length <= 6) {
+                return `${baseClasses} min-w-[260px] max-w-none xl:min-w-[300px] 2xl:min-w-[340px]`;
+              }
+              if (stages.length <= 7) {
+                return `${baseClasses} min-w-[240px] max-w-none xl:min-w-[280px] 2xl:min-w-[320px]`;
+              }
+              return 'flex-shrink-0 w-72 xl:w-80';
+            };
+
+            return (
+              <div 
+                key={stage} 
+                className={`${getColumnWidth()} h-full ${index < stages.length - 1 ? 'mr-4 lg:mr-6 xl:mr-8 2xl:mr-10' : ''}`}
+              >
+                <DroppableColumn id={stage} isOver={isOver} canDrop={canDrop && isDifferentStage}>
+                  <div className={`bg-gray-50 rounded-lg h-full flex flex-col transition-all duration-150 relative ${
+                    isOver && canDrop && isDifferentStage ? 'border-2 border-blue-300 shadow-lg' : 
+                    isOver && !isDifferentStage ? 'border-2 border-yellow-300' :
+                    'border-2 border-transparent'
+                  }`}>
+                    {/* Fixed Header */}
+                    <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg relative z-20 flex-shrink-0">
+                      <div className="flex items-center">
+                        <div 
+                          className="w-3 h-3 rounded-full mr-2" 
+                          style={{ backgroundColor: stageColor }}
+                        />
+                        <h3 className="font-semibold text-gray-900">{stage}</h3>
+                      </div>
+                      <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">
+                        {stageItems.length}
+                      </span>
                     </div>
-                    <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">
-                      {stageItems.length}
-                    </span>
+
+                    {/* Scrollable Content Area */}
+                    <div className="flex-1 overflow-y-auto p-4 pt-2 scrollbar-thin scrollbar-track-gray-200 scrollbar-thumb-gray-400 hover:scrollbar-thumb-gray-500">
+                      <SortableContext items={stageItems.map(item => item.id)} strategy={verticalListSortingStrategy}>
+                        <div className="space-y-3 relative" style={{ zIndex: 10 }}>
+                          {/* Show drop placeholder when dragging over this column */}
+                          {isOver && canDrop && isDifferentStage && stageItems.length > 0 && (
+                            <div className="relative z-20">
+                              <DropPlaceholder />
+                            </div>
+                          )}
+                          
+                          {stageItems.map((item) => (
+                            <KanbanCard key={item.id} item={item} type={type} getUserName={getUserName} />
+                          ))}
+                          
+                          {/* Show placeholder at bottom if column is empty and being dragged over */}
+                          {stageItems.length === 0 && isOver && canDrop && isDifferentStage && (
+                            <div className="relative z-20">
+                              <DropPlaceholder />
+                            </div>
+                          )}
+                          
+                          {/* Additional padding at bottom for easier dropping */}
+                          <div className="h-20" />
+                        </div>
+                      </SortableContext>
+                    </div>
                   </div>
-
-                                      <SortableContext items={stageItems.map(item => item.id)} strategy={verticalListSortingStrategy}>
-                      <div className="space-y-3 relative" style={{ zIndex: 10 }}>
-                      {/* Show drop placeholder when dragging over this column */}
-                      {isOver && canDrop && isDifferentStage && stageItems.length > 0 && (
-                        <div className="relative z-20">
-                          <DropPlaceholder />
-                        </div>
-                      )}
-                      
-                      {stageItems.map((item) => (
-                        <KanbanCard key={item.id} item={item} type={type} getUserName={getUserName} />
-                      ))}
-                      
-                      {/* Show placeholder at bottom if column is empty and being dragged over */}
-                      {stageItems.length === 0 && isOver && canDrop && isDifferentStage && (
-                        <div className="relative z-20">
-                          <DropPlaceholder />
-                        </div>
-                      )}
-                      
-                      {/* Additional padding at bottom for easier dropping */}
-                      <div className="h-20" />
-                    </div>
-                  </SortableContext>
-                </div>
-              </DroppableColumn>
-            </div>
-          );
-        })}
+                </DroppableColumn>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      <DragOverlay dropAnimation={null}>
-        {activeItem ? (
-          <KanbanCard item={activeItem} type={type} dragOverlay getUserName={getUserName} />
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+              <DragOverlay dropAnimation={null}>
+          {activeItem ? (
+            <KanbanCard item={activeItem} type={type} dragOverlay getUserName={getUserName} />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+    </div>
   );
+
 };
 
 export default KanbanView;

@@ -293,7 +293,7 @@ const Deals: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
+    <div className={currentView === 'kanban' ? 'p-4 lg:p-6' : 'p-6'}>
       <PageHeader
         title="Deals"
         subtitle="Track your sales opportunities"
@@ -403,6 +403,10 @@ const Deals: React.FC = () => {
             <Icons.Plus className="w-4 h-4 mr-2" />
             New Deal
           </button>
+        </div>
+      ) : currentView === 'kanban' ? (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          {renderContent()}
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">

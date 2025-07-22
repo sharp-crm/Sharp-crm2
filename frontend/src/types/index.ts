@@ -80,7 +80,16 @@ export const DEAL_STAGES = [
   'Closed Lost to Competition'
 ] as const;
 
+export const TASK_STATUSES = [
+  'Open',
+  'Not Started', 
+  'Deferred',
+  'In Progress',
+  'Completed'
+] as const;
+
 export type DealStage = typeof DEAL_STAGES[number];
+export type TaskStatus = typeof TASK_STATUSES[number];
 
 export interface Deal {
   id: string;
@@ -110,7 +119,7 @@ export interface Task {
   title: string;
   description: string;
   priority: 'Low' | 'Medium' | 'High';
-  status: 'Open' | 'In Progress' | 'Follow Up' | 'Completed';
+  status: TaskStatus;
   dueDate: string;
   assignee: string;
   type: 'Call' | 'Email' | 'Meeting' | 'Follow-up' | 'Demo';

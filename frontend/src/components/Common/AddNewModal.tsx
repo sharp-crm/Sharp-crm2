@@ -7,7 +7,7 @@ import { useToastStore } from '../../store/useToastStore';
 import { contactsApi, leadsApi, dealsApi, dealersApi, subsidiariesApi, tasksApi } from '../../api/services';
 import PhoneNumberInput from './PhoneNumberInput';
 import API from '../../api/client';
-import { DEAL_STAGES } from '../../types';
+import { DEAL_STAGES, TASK_STATUSES } from '../../types';
 
 interface AddNewModalProps {
   isOpen: boolean;
@@ -201,9 +201,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
       'Lost Lead', 'Not Contacted', 'Prequalified', 'Not Qualified'
     ].map(status => ({ value: status, label: status }));
 
-    const taskStatusOptions: FormFieldOption[] = [
-      'Not Started', 'In Progress', 'Completed', 'Waiting on Someone Else', 'Deferred'
-    ].map(status => ({ value: status, label: status }));
+    const taskStatusOptions: FormFieldOption[] = TASK_STATUSES.map(status => ({ value: status, label: status }));
 
     const taskPriorityOptions: FormFieldOption[] = [
       'High', 'Normal', 'Low'

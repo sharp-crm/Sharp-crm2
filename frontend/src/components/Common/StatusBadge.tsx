@@ -29,10 +29,10 @@ const StatusBadge: React.FC<StatusBadgeProps> = ({ status, variant = 'default' }
     if (['pending', 'in progress', 'contacted', 'negotiation'].includes(lowercaseStatus)) {
       return 'warning';
     }
-    if (['inactive', 'lost', 'cancelled', 'closed lost'].includes(lowercaseStatus)) {
+    if (['inactive', 'lost', 'cancelled', 'closed lost', 'deferred'].includes(lowercaseStatus)) {
       return 'error';
     }
-    if (['new', 'scheduled', 'open'].includes(lowercaseStatus)) {
+    if (['new', 'scheduled', 'open', 'not started'].includes(lowercaseStatus)) {
       return 'info';
     }
     return 'default';

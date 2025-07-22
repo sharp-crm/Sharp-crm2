@@ -111,12 +111,14 @@ export interface Deal extends Omit<DealType, 'stage'> {
   tenantId: string;
 }
 
+import { TaskStatus } from '../types';
+
 export interface Task {
   id: string;
   title: string;
   description: string;
   priority: 'Low' | 'Medium' | 'High';
-  status: 'Open' | 'In Progress' | 'Follow Up' | 'Completed';
+  status: TaskStatus;
   dueDate: string;
   assignee: string;
   type: 'Call' | 'Email' | 'Meeting' | 'Follow-up' | 'Demo';
