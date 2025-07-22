@@ -286,10 +286,10 @@ const Contacts: React.FC = () => {
   }
 
   return (
-    <div className="p-4 sm:p-6 overflow-x-auto">
-      <div className="flex flex-col lg:flex-row gap-6">
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col xl:flex-row gap-4">
         {/* Filter Sidebar */}
-        <div className="w-full lg:w-64 bg-white p-4 border border-gray-200 rounded-lg shadow-sm h-fit">
+        <div className="w-full xl:w-72 bg-white p-4 border border-gray-200 rounded-lg shadow-sm h-fit flex-shrink-0">
           <p className="font-medium text-gray-700 mb-2">Filter Contacts by</p>
           <div className="text-sm text-gray-600 space-y-4">
             {/* Status Filter */}
@@ -383,7 +383,7 @@ const Contacts: React.FC = () => {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 w-full">
           <PageHeader
             title="Contacts"
             subtitle="Manage your business contacts"
@@ -480,7 +480,7 @@ const Contacts: React.FC = () => {
               </button>
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 w-full">
               <DataTable
                 data={Object.values(filters).some(f => f) ? filteredContacts : contacts}
                 columns={columns}

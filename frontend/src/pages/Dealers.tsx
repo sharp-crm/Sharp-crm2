@@ -260,10 +260,10 @@ const Dealers: React.FC = () => {
   }
 
   return (
-    <div className="p-6 lg:p-8 overflow-x-auto">
-      <div className="flex flex-col lg:flex-row gap-8">
+    <div className="p-6 lg:p-8">
+      <div className="flex flex-col xl:flex-row gap-4">
         {/* Filter Sidebar */}
-        <div className="w-full lg:w-72 bg-white p-6 border border-gray-200 rounded-xl shadow-sm h-fit">
+        <div className="w-full xl:w-72 bg-white p-6 border border-gray-200 rounded-xl shadow-sm h-fit flex-shrink-0">
           <p className="font-medium text-gray-700 mb-4">Filter Dealers by</p>
           <div className="text-sm text-gray-600 space-y-5">
             <div>
@@ -353,7 +353,7 @@ const Dealers: React.FC = () => {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 w-full">
           <PageHeader
             title="Dealers"
             subtitle="List of dealers and their associated subsidiaries"

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import * as Icons from 'lucide-react';
 
 interface Column {
@@ -18,6 +18,11 @@ interface DataTableProps {
 const DataTable: React.FC<DataTableProps> = ({ columns, data, onRowClick, actions }) => {
   const [sortColumn, setSortColumn] = useState<string>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  
+  // Refs for synchronized scrolling
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
 
   const handleSort = (columnKey: string) => {
     if (sortColumn === columnKey) {
@@ -41,11 +46,76 @@ const DataTable: React.FC<DataTableProps> = ({ columns, data, onRowClick, action
     });
   }, [data, sortColumn, sortDirection]);
 
+  // Synchronized scrolling effect
+  useEffect(() => {
+    const topScroll = topScrollRef.current;
+    const tableScroll = tableScrollRef.current;
+    const table = tableRef.current;
+
+    if (!topScroll || !tableScroll || !table) return;
+
+    // Set the width of the top scrollbar to match table width
+    const updateScrollWidth = () => {
+      const scrollContent = topScroll.querySelector('.scroll-content') as HTMLElement;
+      if (scrollContent && table) {
+        const tableWidth = table.scrollWidth;
+        const containerWidth = tableScroll.clientWidth;
+        
+        // Only show scrollbar if content is wider than container
+        if (tableWidth > containerWidth) {
+          scrollContent.style.width = `${tableWidth}px`;
+          topScroll.style.display = 'block';
+        } else {
+          topScroll.style.display = 'none';
+        }
+      }
+    };
+
+    // Handle top scrollbar scroll
+    const handleTopScroll = () => {
+      tableScroll.scrollLeft = topScroll.scrollLeft;
+    };
+
+    // Handle table scroll
+    const handleTableScroll = () => {
+      topScroll.scrollLeft = tableScroll.scrollLeft;
+    };
+
+    // Set up event listeners
+    topScroll.addEventListener('scroll', handleTopScroll);
+    tableScroll.addEventListener('scroll', handleTableScroll);
+
+    // Update scroll width on mount and resize
+    updateScrollWidth();
+    const resizeObserver = new ResizeObserver(updateScrollWidth);
+    resizeObserver.observe(table);
+
+    return () => {
+      topScroll.removeEventListener('scroll', handleTopScroll);
+      tableScroll.removeEventListener('scroll', handleTableScroll);
+      resizeObserver.disconnect();
+    };
+  }, [data]);
+
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      {/* Top horizontal scrollbar */}
+      <div 
+        ref={topScrollRef}
+        className="overflow-x-auto top-scrollbar border-b border-gray-200 bg-gray-50"
+        style={{ height: '16px', width: '100%' }}
+        title="Scroll horizontally to view more columns"
+      >
+        <div className="scroll-content" style={{ height: '1px', minWidth: '100%' }} />
+      </div>
+      
+      {/* Main table container */}
+      <div 
+        ref={tableScrollRef}
+        className="overflow-x-scroll overflow-y-auto table-scroll-container max-h-[60vh] lg:max-h-[calc(100vh-350px)]"
+      >
+        <table ref={tableRef} className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50 sticky top-0 z-10">
             <tr>
               {columns.map((column) => (
                 <th

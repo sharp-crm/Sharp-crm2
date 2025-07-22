@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import PageHeader from '../../components/Common/PageHeader';
 import DataTable from '../../components/Common/DataTable';
-import { reportsApi, Report } from '../../api/services';
+import { reportsApi, Report, usersApi, User } from '../../api/services';
 import ReportView from '../../components/Common/ReportView';
 import EditReportModal from '../../components/EditReportModal';
 import * as Icons from 'lucide-react';
@@ -11,6 +11,7 @@ const ScheduledReports: React.FC = () => {
   const [scheduledReports, setScheduledReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
   const [isReportViewOpen, setIsReportViewOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
@@ -18,7 +19,28 @@ const ScheduledReports: React.FC = () => {
 
   useEffect(() => {
     fetchScheduledReports();
+    fetchUsers();
   }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const usersData = await usersApi.getAll();
+      setUsers(usersData);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+    }
+  };
+
+  const getUserDisplayName = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (!user) return 'Unknown User';
+    
+    const firstName = user.firstName || 'Unknown';
+    const lastName = user.lastName || 'User';
+    const roleName = user.role || 'Unknown Role';
+    
+    return `${firstName} ${lastName} (${roleName})`;
+  };
 
   const fetchScheduledReports = async () => {
     try {

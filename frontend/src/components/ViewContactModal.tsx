@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog } from '@headlessui/react';
 import * as Icons from 'lucide-react';
-import { Contact } from '../api/services';
+import { Contact, usersApi, User } from '../api/services';
 
 interface ViewContactModalProps {
   isOpen: boolean;
@@ -10,6 +10,41 @@ interface ViewContactModalProps {
 }
 
 const ViewContactModal: React.FC<ViewContactModalProps> = ({ isOpen, onClose, contact }) => {
+  const [users, setUsers] = useState<User[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchUsers();
+    }
+  }, [isOpen]);
+
+  const fetchUsers = async () => {
+    try {
+      const usersData = await usersApi.getAll();
+      setUsers(usersData);
+    } catch (err) {
+      console.error('Error fetching users:', err);
+    }
+  };
+
+  const getUserDisplayName = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (!user) return userId; // Fallback to ID if user not found
+    
+    const firstName = user.firstName || 'Unknown';
+    const lastName = user.lastName || 'User';
+    
+    return `${firstName} ${lastName}`;
+  };
+
+  const getVisibleToDisplay = () => {
+    if (!contact?.visibleTo || contact.visibleTo.length === 0) {
+      return 'All Users';
+    }
+    
+    return contact.visibleTo.map(userId => getUserDisplayName(userId)).join(', ');
+  };
+
   if (!contact) return null;
 
   return (
@@ -116,9 +151,7 @@ const ViewContactModal: React.FC<ViewContactModalProps> = ({ isOpen, onClose, co
                     <div>
                       <p className="text-sm font-medium text-gray-600">Visible To</p>
                       <p className="text-gray-900">
-                        {contact.visibleTo && contact.visibleTo.length > 0 
-                          ? contact.visibleTo.join(', ')
-                          : 'All Users'}
+                        {getVisibleToDisplay()}
                       </p>
                     </div>
                   </div>
@@ -162,11 +195,11 @@ const ViewContactModal: React.FC<ViewContactModalProps> = ({ isOpen, onClose, co
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-gray-600">Created: {new Date(contact.createdAt).toLocaleString()}</p>
-                  <p className="text-gray-600">Created By: {contact.createdBy}</p>
+                  <p className="text-gray-600">Created By: {contact.createdBy ? getUserDisplayName(contact.createdBy) : 'Unknown User'}</p>
                 </div>
                 <div>
                   <p className="text-gray-600">Updated: {new Date(contact.updatedAt).toLocaleString()}</p>
-                  <p className="text-gray-600">Updated By: {contact.updatedBy}</p>
+                  <p className="text-gray-600">Updated By: {contact.updatedBy ? getUserDisplayName(contact.updatedBy) : 'Unknown User'}</p>
                 </div>
               </div>
             </div>

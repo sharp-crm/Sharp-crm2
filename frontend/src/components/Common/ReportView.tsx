@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog } from '@headlessui/react';
 import * as Icons from 'lucide-react';
 import { reportsApi, Report } from '../../api/services';
+import API from '../../api/client';
 
 interface ReportViewProps {
   isOpen: boolean;
@@ -29,10 +30,41 @@ const ReportView: React.FC<ReportViewProps> = ({ isOpen, onClose, reportId, onFa
       setLoading(true);
       setError(null);
       const reportData = await reportsApi.getById(reportId);
-      setReport(reportData);
+      
+      if (reportData) {
+        // If report doesn't have data, run it to generate data
+        if (!reportData.data || (!reportData.data.results && !reportData.data.pipelineData && !reportData.data.summary && !reportData.data.forecast)) {
+          console.log('Report has no data, running report to generate data...');
+          await runReport(reportData);
+        } else {
+          setReport(reportData);
+        }
+      }
     } catch (err) {
       setError('Failed to load report. Please try again.');
       console.error('Error fetching report:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const runReport = async (reportToRun: Report) => {
+    try {
+      setLoading(true);
+      const response = await API.post(`/reports/${reportToRun.id}/run`);
+      
+      // The run response contains the report data
+      const updatedReportData = {
+        ...reportToRun,
+        data: response.data.data,
+        lastRun: new Date().toISOString(),
+        runCount: (reportToRun.runCount || 0) + 1
+      };
+      
+      setReport(updatedReportData);
+    } catch (err) {
+      setError('Failed to generate report data. Please try again.');
+      console.error('Error running report:', err);
     } finally {
       setLoading(false);
     }
@@ -56,26 +88,30 @@ const ReportView: React.FC<ReportViewProps> = ({ isOpen, onClose, reportId, onFa
   const renderReportData = () => {
     if (!report?.data) return null;
 
-    const { results } = report.data;
+    // Handle both data structures: direct data or wrapped in results
+    const results = report.data.results || report.data;
     if (!results) return null;
 
     switch (report.reportType) {
       case 'deals-pipeline':
+        if (!results.pipelineData) {
+          return <div className="text-gray-500">No pipeline data available.</div>;
+        }
         return (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <h4 className="font-medium text-blue-900">Total Deals</h4>
-                <p className="text-2xl font-bold text-blue-600">{results.totalDeals}</p>
+                <p className="text-2xl font-bold text-blue-600">{results.totalDeals || 0}</p>
               </div>
               <div className="bg-green-50 p-4 rounded-lg">
                 <h4 className="font-medium text-green-900">Total Value</h4>
-                <p className="text-2xl font-bold text-green-600">${results.totalValue.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-green-600">${(results.totalValue || 0).toLocaleString()}</p>
               </div>
               <div className="bg-purple-50 p-4 rounded-lg">
                 <h4 className="font-medium text-purple-900">Avg Deal Size</h4>
                 <p className="text-2xl font-bold text-purple-600">
-                  ${results.totalDeals > 0 ? (results.totalValue / results.totalDeals).toLocaleString() : 0}
+                  ${(results.totalDeals || 0) > 0 ? ((results.totalValue || 0) / (results.totalDeals || 1)).toLocaleString() : '0'}
                 </p>
               </div>
             </div>
@@ -83,16 +119,16 @@ const ReportView: React.FC<ReportViewProps> = ({ isOpen, onClose, reportId, onFa
             <div>
               <h4 className="font-medium text-gray-900 mb-4">Pipeline by Stage</h4>
               <div className="space-y-3">
-                {results.pipelineData.map((stage: any, index: number) => (
+                {(results.pipelineData || []).map((stage: any, index: number) => (
                   <div key={index} className="bg-gray-50 p-4 rounded-lg">
                     <div className="flex justify-between items-center mb-2">
-                      <span className="font-medium text-gray-900">{stage.stage}</span>
-                      <span className="text-sm text-gray-500">{stage.count} deals</span>
+                      <span className="font-medium text-gray-900">{stage.stage || 'Unknown'}</span>
+                      <span className="text-sm text-gray-500">{stage.count || 0} deals</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-lg font-bold text-gray-900">${stage.value.toLocaleString()}</span>
+                      <span className="text-lg font-bold text-gray-900">${(stage.value || 0).toLocaleString()}</span>
                       <span className="text-sm text-gray-500">
-                        {results.totalValue > 0 ? ((stage.value / results.totalValue) * 100).toFixed(1) : 0}%
+                        {(results.totalValue || 0) > 0 ? (((stage.value || 0) / (results.totalValue || 1)) * 100).toFixed(1) : '0'}%
                       </span>
                     </div>
                   </div>
@@ -103,16 +139,19 @@ const ReportView: React.FC<ReportViewProps> = ({ isOpen, onClose, reportId, onFa
         );
 
       case 'sales-forecast':
+        if (!results.forecast || !results.timeline) {
+          return <div className="text-gray-500">No forecast data available.</div>;
+        }
         return (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <h4 className="font-medium text-blue-900">Total Pipeline</h4>
-                <p className="text-2xl font-bold text-blue-600">${results.forecast.totalPipeline.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-blue-600">${(results.forecast.totalPipeline || 0).toLocaleString()}</p>
               </div>
               <div className="bg-green-50 p-4 rounded-lg">
                 <h4 className="font-medium text-green-900">Weighted Forecast</h4>
-                <p className="text-2xl font-bold text-green-600">${results.forecast.weightedPipeline.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-green-600">${(results.forecast.weightedPipeline || 0).toLocaleString()}</p>
               </div>
             </div>
             
@@ -121,11 +160,11 @@ const ReportView: React.FC<ReportViewProps> = ({ isOpen, onClose, reportId, onFa
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h5 className="font-medium text-gray-900">This Month</h5>
-                  <p className="text-xl font-bold text-gray-600">${results.timeline.thisMonth.toLocaleString()}</p>
+                  <p className="text-xl font-bold text-gray-600">${(results.timeline.thisMonth || 0).toLocaleString()}</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h5 className="font-medium text-gray-900">Next Month</h5>
-                  <p className="text-xl font-bold text-gray-600">${results.timeline.nextMonth.toLocaleString()}</p>
+                  <p className="text-xl font-bold text-gray-600">${(results.timeline.nextMonth || 0).toLocaleString()}</p>
                 </div>
               </div>
             </div>
