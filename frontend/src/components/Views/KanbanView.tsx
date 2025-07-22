@@ -312,7 +312,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
         onDragCancel={handleDragCancel}
       >
         {/* Fixed height container with horizontal scroll */}
-        <div className="w-full h-[calc(100vh-250px)] md:h-[calc(100vh-300px)] overflow-x-auto overflow-y-hidden scrollbar-thin scrollbar-track-gray-100 scrollbar-thumb-gray-400 hover:scrollbar-thumb-gray-500">
+        <div className="w-full h-[calc(100vh-250px)] md:h-[calc(100vh-300px)] overflow-x-auto overflow-y-hidden kanban-scrollbar">
         <div 
           className="flex h-full pb-4 px-4" 
           style={{ 
@@ -377,7 +377,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
                     </div>
 
                     {/* Scrollable Content Area */}
-                    <div className="flex-1 overflow-y-auto p-4 pt-2 scrollbar-thin scrollbar-track-gray-200 scrollbar-thumb-gray-400 hover:scrollbar-thumb-gray-500">
+                    <div className="flex-1 overflow-y-auto p-4 pt-2 kanban-scrollbar">
                       <SortableContext items={stageItems.map(item => item.id)} strategy={verticalListSortingStrategy}>
                         <div className="space-y-3 relative" style={{ zIndex: 10 }}>
                           {/* Show drop placeholder when dragging over this column */}

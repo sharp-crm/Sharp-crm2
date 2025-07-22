@@ -31,3 +31,50 @@
 .hover\:scrollbar-thumb-gray-500::-webkit-scrollbar-thumb:hover {
   background-color: #6b7280;
 }
+
+/* Kanban-specific invisible scrollbars */
+.kanban-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+/* Webkit scrollbar styling for Kanban */
+.kanban-scrollbar::-webkit-scrollbar {
+  width: 4px !important;
+  height: 4px !important;
+  background: transparent;
+}
+
+.kanban-scrollbar::-webkit-scrollbar-track {
+  background: transparent !important;
+  border-radius: 0;
+}
+
+.kanban-scrollbar::-webkit-scrollbar-thumb {
+  background-color: transparent !important;
+  border-radius: 2px;
+  border: none;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.kanban-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Show scrollbar on hover */
+.kanban-scrollbar:hover {
+  scrollbar-color: rgba(156, 163, 175, 0.6) transparent;
+}
+
+.kanban-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.6) !important;
+}
+
+.kanban-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(107, 114, 128, 0.8) !important;
+}
+
+/* Additional specificity for container hover */
+.kanban-scrollbar:hover::-webkit-scrollbar {
+  background: rgba(0, 0, 0, 0.02);
+}
