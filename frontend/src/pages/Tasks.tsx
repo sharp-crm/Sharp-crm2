@@ -141,8 +141,10 @@ const Tasks: React.FC = () => {
   const handleUpdateTask = async (taskId: string, updates: Partial<Task>) => {
     try {
       setError(null);
-      await tasksApi.update(taskId, updates);
-      await fetchTasks();
+      const updatedTask = await tasksApi.update(taskId, updates);
+      setTasks(prev => prev.map(task => 
+        task.id === taskId ? updatedTask : task
+      ));
     } catch (err) {
       setError('Failed to update task. Please try again.');
       console.error('Error updating task:', err);

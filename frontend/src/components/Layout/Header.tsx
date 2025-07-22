@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -8,6 +8,20 @@ import avatar from '../../Assets/avatar.png';
 import AddNewModal from '../Common/AddNewModal';
 import CalendarModal from '../Common/CalendarModal';
 import NotificationPanel from '../Common/NotificationsPanel';
+import SearchDropdown from '../Common/SearchDropdown';
+import { globalSearchService, SearchResults, SearchResult } from '../../services/globalSearchService';
+
+// Debounce utility function
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -18,24 +32,115 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const [showAddNew, setShowAddNew] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResults>({
+    leads: [],
+    contacts: [],
+    deals: [],
+    tasks: [],
+    subsidiaries: [],
+    dealers: [],
+    total: 0
+  });
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  
   const notificationRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const user = useAuthStore((s) => s.user);
   const { notifications, unreadCount } = useNotificationStore();
 
+  // Debounced search function
+  const debouncedSearch = useCallback(
+    debounce(async (query: string) => {
+      if (query.trim().length < 2) {
+        setSearchResults({
+          leads: [],
+          contacts: [],
+          deals: [],
+          tasks: [],
+          subsidiaries: [],
+          dealers: [],
+          total: 0
+        });
+        setIsSearching(false);
+        return;
+      }
+
+      setIsSearching(true);
+      try {
+        const results = await globalSearchService.search(query);
+        setSearchResults(results);
+        setShowSearchResults(true);
+      } catch (error) {
+        console.error('Search error:', error);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300),
+    []
+  );
+
+  // Handle search query changes
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    
+    if (query.trim().length === 0) {
+      setShowSearchResults(false);
+      setSearchResults({
+        leads: [],
+        contacts: [],
+        deals: [],
+        tasks: [],
+        subsidiaries: [],
+        dealers: [],
+        total: 0
+      });
+    } else {
+      debouncedSearch(query);
+    }
+  };
+
+  // Handle search result selection
+  const handleSearchResultClick = (result: SearchResult) => {
+    setSearchQuery('');
+    setShowSearchResults(false);
+    // Navigation is handled in the SearchDropdown component
+  };
+
+  // Close search dropdown
+  const closeSearchDropdown = () => {
+    setShowSearchResults(false);
+  };
+
+  // Handle keyboard events for search
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      setShowSearchResults(false);
+      searchInputRef.current?.blur();
+    }
+  };
+
+  // Click outside handlers
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
         setShowNotifications(false);
       }
+      
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSearchResults(false);
+      }
     };
 
-    if (showNotifications) {
+    if (showNotifications || showSearchResults) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showNotifications]);
+  }, [showNotifications, showSearchResults]);
 
   return (
     <>
@@ -49,13 +154,48 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
             >
               <Icons.Menu className="w-5 h-5" />
             </button>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
-            />
+            <div className="relative w-full" ref={searchRef}>
+              <div className="relative">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="Search contacts, leads, deals, tasks..."
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  {isSearching ? (
+                    <Icons.Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                  ) : (
+                    <Icons.Search className="w-4 h-4 text-gray-400" />
+                  )}
+                </div>
+                {searchQuery && (
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setShowSearchResults(false);
+                    }}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    <Icons.X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                  </button>
+                )}
+              </div>
+              
+              {/* Search Results Dropdown */}
+              {(showSearchResults || isSearching) && (
+                <SearchDropdown
+                  results={searchResults}
+                  isLoading={isSearching}
+                  searchTerm={searchQuery}
+                  onClose={closeSearchDropdown}
+                  onResultClick={handleSearchResultClick}
+                />
+              )}
+            </div>
           </div>
 
           {/* Right: Actions */}
