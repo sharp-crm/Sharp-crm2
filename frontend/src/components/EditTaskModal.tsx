@@ -198,6 +198,8 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
                   type="date"
                   value={formData.dueDate}
                   onChange={(e) => handleInputChange('dueDate', e.target.value)}
+                  min={new Date(new Date().getFullYear() - 25, new Date().getMonth(), new Date().getDate()).toISOString().split('T')[0]}
+                  max={new Date(new Date().getFullYear() + 50, new Date().getMonth(), new Date().getDate()).toISOString().split('T')[0]}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />

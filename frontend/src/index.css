@@ -111,7 +111,7 @@
 /* Top scrollbar styling - invisible by default, light grey on hover */
 .top-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
+  scrollbar-color: rgba(158, 166, 180, 0.6) transparent;
 }
 
 .top-scrollbar::-webkit-scrollbar {

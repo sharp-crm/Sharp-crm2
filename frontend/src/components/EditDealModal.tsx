@@ -223,17 +223,19 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, deal, on
                   step="1"
                 />
               </div>
-
               {/* Close Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Close Date
+                  Close Date *
                 </label>
                 <input
                   type="date"
                   value={formData.closeDate}
                   onChange={(e) => handleInputChange('closeDate', e.target.value)}
+                  min={new Date(new Date().getFullYear() - 25, new Date().getMonth(), new Date().getDate()).toISOString().split('T')[0]}
+                  max={new Date(new Date().getFullYear() + 50, new Date().getMonth(), new Date().getDate()).toISOString().split('T')[0]}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
                 />
               </div>
             </div>

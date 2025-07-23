@@ -619,6 +619,10 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 required={field.required}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder={`Enter ${field.label.toLowerCase()}...`}
+                {...(field.type === 'date' && {
+                  min: new Date(new Date().getFullYear() - 25, 0, 1).toISOString().split('T')[0],
+                  max: new Date(new Date().getFullYear() + 50, 11, 31).toISOString().split('T')[0]
+                })}
               />
             )}
           </div>
