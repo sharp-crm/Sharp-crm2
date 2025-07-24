@@ -145,10 +145,13 @@ router.get("/tenant-users", async (req, res, next) => {
     users = users.filter(user => !user.isDeleted);
 
     // User filtering logic based on requirements
-    if (currentUser.role === 'SUPER_ADMIN' && !isUUID(currentUser.tenantId)) {
-      // SuperAdmin with non-UUID tenant ID (e.g., 'SUPER_ADMIN_TENANT') - show only users created by SuperAdmin
+    if (currentUser.role === 'SUPER_ADMIN') {
+      // SuperAdmin sees all users they created (admins) and themselves
       users = users.filter(user => 
-        user.createdBy === currentUser.userId || user.createdBy === 'SYSTEM'
+        user.createdBy === currentUser.userId || 
+        user.userId === currentUser.userId ||
+        user.createdBy === 'SYSTEM' ||
+        user.createdBy === 'SELF_REGISTRATION'
       );
     } else {
       // Any other user - show all users with the same tenant ID

@@ -49,18 +49,9 @@ const OrgTree: React.FC = () => {
       const userRole = user.role?.toUpperCase();
       const targetRole = role.toUpperCase();
       
-      // If current user is Super Admin, show all users
-      if (currentUser?.role?.toUpperCase() === 'SUPER_ADMIN') {
-        return userRole === targetRole;
-      }
-      
-      // If current user is Admin, show users with same tenantId
-      if (currentUser?.role?.toUpperCase() === 'ADMIN') {
-        return userRole === targetRole && user.tenantId === currentUser.tenantId;
-      }
-      
-      // For other roles, show users with same tenantId
-      return userRole === targetRole && user.tenantId === currentUser?.tenantId;
+      // The backend already handles filtering based on user role and tenant
+      // SuperAdmin sees users they created (admins), others see users in their tenant
+      return userRole === targetRole;
     });
   };
 
@@ -134,7 +125,13 @@ const OrgTree: React.FC = () => {
               
               {/* Render children - only direct reports */}
               {childRoles.map(childRole => {
-                const directReports = filterUsersByRole(childRole).filter(u => u.reportingTo === user.id);
+                const directReports = filterUsersByRole(childRole).filter(u => {
+                  // For SuperAdmin viewing admins, admins don't have reportingTo set
+                  if (currentUser?.role?.toUpperCase() === 'SUPER_ADMIN' && role.toUpperCase() === 'SUPER_ADMIN' && childRole.toUpperCase() === 'ADMIN') {
+                    return true; // Show all admins under SuperAdmin
+                  }
+                  return u.reportingTo === user.id;
+                });
                 return (
                   <TreeNode 
                     key={childRole} 
