@@ -117,7 +117,7 @@ export interface Task {
   id: string;
   title: string;
   description: string;
-  priority: 'Low' | 'Medium' | 'High';
+  priority: 'Low' | 'Normal' | 'High';
   status: TaskStatus;
   dueDate: string;
   assignee: string;

@@ -301,14 +301,14 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
     }
   };
 
-    return (
+  return (
     <div className="w-full">
-      <DndContext
+    <DndContext
         sensors={sensors}
         collisionDetection={customCollisionDetection}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
+      onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
         {/* Fixed height container with horizontal scroll */}
@@ -321,8 +321,8 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
           }}
         >
           {stages.map((stage, index) => {
-            const stageItems = getItemsByStage(stage);
-            const stageColor = getStageColor(stage);
+          const stageItems = getItemsByStage(stage);
+          const stageColor = getStageColor(stage);
             const isOver = overId === stage;
             const canDrop = activeItem !== null && stages.includes(stage as any);
             const currentStage = activeItem ? (type === 'deals' ? (activeItem as Deal).stage : (activeItem as Task).status) : null;
@@ -351,7 +351,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
               return 'flex-shrink-0 w-72 xl:w-80';
             };
 
-            return (
+          return (
               <div 
                 key={stage} 
                 className={`${getColumnWidth()} h-full ${index < stages.length - 1 ? 'mr-4 lg:mr-6 xl:mr-8 2xl:mr-10' : ''}`}
@@ -364,21 +364,21 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
                   }`}>
                     {/* Fixed Header */}
                     <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 rounded-t-lg relative z-20 flex-shrink-0">
-                      <div className="flex items-center">
-                        <div 
-                          className="w-3 h-3 rounded-full mr-2" 
-                          style={{ backgroundColor: stageColor }}
-                        />
-                        <h3 className="font-semibold text-gray-900">{stage}</h3>
-                      </div>
-                      <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">
-                        {stageItems.length}
-                      </span>
+                    <div className="flex items-center">
+                      <div 
+                        className="w-3 h-3 rounded-full mr-2" 
+                        style={{ backgroundColor: stageColor }}
+                      />
+                    <h3 className="font-semibold text-gray-900">{stage}</h3>
                     </div>
+                    <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">
+                      {stageItems.length}
+                    </span>
+                  </div>
 
                     {/* Scrollable Content Area */}
                     <div className="flex-1 overflow-y-auto p-4 pt-2 kanban-scrollbar">
-                      <SortableContext items={stageItems.map(item => item.id)} strategy={verticalListSortingStrategy}>
+                  <SortableContext items={stageItems.map(item => item.id)} strategy={verticalListSortingStrategy}>
                         <div className="space-y-3 relative" style={{ zIndex: 10 }}>
                           {/* Show drop placeholder when dragging over this column */}
                           {isOver && canDrop && isDifferentStage && stageItems.length > 0 && (
@@ -387,9 +387,9 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
                             </div>
                           )}
                           
-                          {stageItems.map((item) => (
-                            <KanbanCard key={item.id} item={item} type={type} getUserName={getUserName} />
-                          ))}
+                      {stageItems.map((item) => (
+                        <KanbanCard key={item.id} item={item} type={type} getUserName={getUserName} />
+                      ))}
                           
                           {/* Show placeholder at bottom if column is empty and being dragged over */}
                           {stageItems.length === 0 && isOver && canDrop && isDifferentStage && (
@@ -400,23 +400,23 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
                           
                           {/* Additional padding at bottom for easier dropping */}
                           <div className="h-20" />
-                        </div>
-                      </SortableContext>
                     </div>
-                  </div>
-                </DroppableColumn>
+                  </SortableContext>
+                </div>
               </div>
-            );
-          })}
+            </DroppableColumn>
+              </div>
+          );
+        })}
         </div>
       </div>
 
               <DragOverlay dropAnimation={null}>
-          {activeItem ? (
-            <KanbanCard item={activeItem} type={type} dragOverlay getUserName={getUserName} />
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+        {activeItem ? (
+          <KanbanCard item={activeItem} type={type} dragOverlay getUserName={getUserName} />
+        ) : null}
+      </DragOverlay>
+    </DndContext>
     </div>
   );
 

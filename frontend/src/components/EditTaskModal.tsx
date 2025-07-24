@@ -40,7 +40,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
         title: task.title || '',
         description: task.description || '',
         status: task.status || 'Open',
-        priority: task.priority || 'Medium',
+        priority: task.priority || 'Normal',
         type: task.type || 'Follow-up',
         dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
         visibleTo: task.visibleTo || users.map(user => user.id) // Default to all users if empty
@@ -85,7 +85,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
     }
   };
 
-  const priorityOptions = ['Low', 'Medium', 'High'];
+  const priorityOptions = ['Low', 'Normal', 'High'];
   const typeOptions = ['Follow-up', 'Meeting', 'Call', 'Email', 'Demo'];
 
   return (

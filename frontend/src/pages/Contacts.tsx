@@ -23,6 +23,7 @@ const Contacts: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   const [filters, setFilters] = useState({
     status: false,
@@ -246,7 +247,16 @@ const Contacts: React.FC = () => {
 
   const headerActions = (
     <>
-            <button className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+      <button 
+        className={`flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors ${
+          showFilters ? 'bg-blue-50 border-blue-300 text-blue-700' : ''
+        }`}
+        onClick={() => setShowFilters(!showFilters)}
+      >
+        <Icons.Filter className="w-4 h-4 mr-2" />
+        Filter
+      </button>
+      <button className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
         <Icons.Download className="w-4 h-4 mr-2" />
         Export
       </button>
@@ -286,12 +296,21 @@ const Contacts: React.FC = () => {
   }
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex flex-col xl:flex-row gap-4">
-        {/* Filter Sidebar */}
-        <div className="w-full xl:w-72 bg-white p-4 border border-gray-200 rounded-lg shadow-sm h-fit flex-shrink-0">
-          <p className="font-medium text-gray-700 mb-2">Filter Contacts by</p>
-          <div className="text-sm text-gray-600 space-y-4">
+    <div className="p-6 lg:p-8">
+      <div className="flex flex-col gap-4">
+        {/* Page Header */}
+        <PageHeader
+          title="Contacts"
+          subtitle="Manage your business contacts"
+          breadcrumbs={[{ name: 'Home', path: '/' }, { name: 'Contacts' }]}
+          actions={headerActions}
+        />
+
+        {/* Filter Section */}
+        {showFilters && (
+          <div className="w-full max-w-md bg-white p-4 border border-gray-200 rounded-lg shadow-sm">
+            <p className="font-medium text-gray-700 mb-3">Filter Contacts by</p>
+            <div className="text-sm text-gray-600 space-y-3">
             {/* Status Filter */}
             <div>
               <label className="flex items-center">
@@ -366,31 +385,27 @@ const Contacts: React.FC = () => {
               )}
             </div>
 
-            {/* Action Buttons */}
-            <button 
-              className="w-full mt-4 py-2 px-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-              onClick={handleApplyFilters}
-            >
-              Apply Filter
-            </button>
-            <button 
-              className="w-full mt-2 py-2 px-3 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors"
-              onClick={handleClearFilters}
-            >
-              Clear
-            </button>
+              {/* Action Buttons */}
+              <div className="flex gap-2 mt-4">
+                <button 
+                  className="flex-1 py-1.5 px-3 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors"
+                  onClick={handleApplyFilters}
+                >
+                  Apply
+                </button>
+                <button 
+                  className="flex-1 py-1.5 px-3 bg-gray-200 text-gray-800 rounded text-sm hover:bg-gray-300 transition-colors"
+                  onClick={handleClearFilters}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Main Content */}
         <div className="flex-1 min-w-0 w-full">
-          <PageHeader
-            title="Contacts"
-            subtitle="Manage your business contacts"
-            breadcrumbs={[{ name: 'Home', path: '/' }, { name: 'Contacts' }]}
-            actions={headerActions}
-          />
-
           {/* Error Message */}
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">

@@ -29,6 +29,12 @@ const Deals: React.FC = () => {
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [dealToDelete, setDealToDelete] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedStage, setSelectedStage] = useState<string>('');
+  const [selectedAmountFrom, setSelectedAmountFrom] = useState<string>('');
+  const [selectedAmountTo, setSelectedAmountTo] = useState<string>('');
+  const [selectedOwner, setSelectedOwner] = useState<string>('');
+  const [selectedDealName, setSelectedDealName] = useState<string>('');
 
   // Fetch users data on component mount
   useEffect(() => {
@@ -231,7 +237,12 @@ const Deals: React.FC = () => {
         currentView={currentView}
         onViewChange={setCurrentView}
       />
-      <button className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+      <button 
+        className={`flex items-center px-4 py-2 border border-gray-300 rounded-lg transition-colors ${
+          showFilters ? 'bg-blue-50 border-blue-300 text-blue-700' : 'hover:bg-gray-50'
+        }`}
+        onClick={() => setShowFilters(!showFilters)}
+      >
         <Icons.Filter className="w-4 h-4 mr-2" />
         Filter
       </button>
@@ -252,9 +263,44 @@ const Deals: React.FC = () => {
     </>
   );
 
-  const totalValue = deals.reduce((sum, deal) => sum + (deal.amount || deal.value || 0), 0);
-  const avgProbability = deals.length > 0 ? deals.reduce((sum, deal) => sum + (deal.probability || 0), 0) / deals.length : 0;
-  const expectedValue = deals.reduce((sum, deal) => sum + ((deal.amount || deal.value || 0) * (deal.probability || 0) / 100), 0);
+  // Filter logic
+  const filteredDeals = deals.filter(deal => {
+    // Deal Name filter
+    if (selectedDealName && selectedDealName.trim()) {
+      const dealName = (deal.dealName || deal.name || '').toLowerCase();
+      if (!dealName.includes(selectedDealName.toLowerCase().trim())) {
+        return false;
+      }
+    }
+
+    // Stage filter
+    if (selectedStage && deal.stage !== selectedStage) {
+      return false;
+    }
+
+    // Custom amount range filter
+    const amount = deal.amount || deal.value || 0;
+    if (selectedAmountFrom && parseFloat(selectedAmountFrom) > amount) {
+      return false;
+    }
+    if (selectedAmountTo && parseFloat(selectedAmountTo) < amount) {
+      return false;
+    }
+
+    // Owner filter
+    if (selectedOwner) {
+      const dealOwner = deal.dealOwner || deal.owner || deal.userId;
+      // Get the selected owner's full name
+      const selectedOwnerName = getUserName(selectedOwner);
+      if (dealOwner !== selectedOwnerName) return false;
+    }
+
+    return true;
+  });
+
+  const totalValue = filteredDeals.reduce((sum, deal) => sum + (deal.amount || deal.value || 0), 0);
+  const avgProbability = filteredDeals.length > 0 ? filteredDeals.reduce((sum, deal) => sum + (deal.probability || 0), 0) / filteredDeals.length : 0;
+  const expectedValue = filteredDeals.reduce((sum, deal) => sum + ((deal.amount || deal.value || 0) * (deal.probability || 0) / 100), 0);
 
   if (loading) {
     return (
@@ -270,21 +316,21 @@ const Deals: React.FC = () => {
     switch (currentView) {
       case 'kanban':
         return <KanbanView 
-          data={deals} 
+          data={filteredDeals} 
           onItemMove={(id, stage) => handleDealMove(id, stage as Deal['stage'])} 
           type="deals" 
         />;
       case 'grid':
-        return <GridView data={deals} type="deals" onItemClick={(item) => handleView(item as Deal)} />;
+        return <GridView data={filteredDeals} type="deals" onItemClick={(item) => handleView(item as Deal)} />;
       case 'timeline':
-        return <TimelineView data={deals} type="deals" />;
+        return <TimelineView data={filteredDeals} type="deals" />;
       case 'chart':
-        return <ChartView data={deals} type="deals" />;
+        return <ChartView data={filteredDeals} type="deals" />;
       default:
         return (
           <DataTable
             columns={columns}
-            data={deals}
+            data={filteredDeals}
             actions={actions}
             onRowClick={handleView}
           />
@@ -304,9 +350,103 @@ const Deals: React.FC = () => {
         actions={headerActions}
       />
 
+      {/* Filter Section */}
+      {showFilters && (
+        <div className="mb-8 mt-6">
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 w-1/2">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Deal Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter Deal name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={selectedDealName}
+                  onChange={(e) => setSelectedDealName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Stage
+                </label>
+                <select 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={selectedStage}
+                  onChange={(e) => setSelectedStage(e.target.value)}
+                >
+                  <option value="">All Stages</option>
+                  {DEAL_STAGES.map((stage) => (
+                    <option key={stage} value={stage}>
+                      {stage}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Amount From
+                </label>
+                <input
+                  type="number"
+                  placeholder="Min amount"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={selectedAmountFrom}
+                  onChange={(e) => setSelectedAmountFrom(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Amount To
+                </label>
+                <input
+                  type="number"
+                  placeholder="Max amount"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={selectedAmountTo}
+                  onChange={(e) => setSelectedAmountTo(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Owner
+                </label>
+                <select 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={selectedOwner}
+                  onChange={(e) => setSelectedOwner(e.target.value)}
+                >
+                  <option value="">All Owners</option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.firstName} {user.lastName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => {
+                  setSelectedDealName('');
+                  setSelectedStage('');
+                  setSelectedAmountFrom('');
+                  setSelectedAmountTo('');
+                  setSelectedOwner('');
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 mt-6">
           <div className="flex">
             <Icons.AlertCircle className="w-5 h-5 text-red-600 mr-2" />
             <p className="text-red-700">{error}</p>
@@ -315,7 +455,7 @@ const Deals: React.FC = () => {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 mt-8">
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center">
             <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -323,7 +463,7 @@ const Deals: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Deals</p>
-              <p className="text-2xl font-bold text-gray-900">{deals.length}</p>
+              <p className="text-2xl font-bold text-gray-900">{filteredDeals.length}</p>
             </div>
           </div>
         </div>
@@ -371,7 +511,7 @@ const Deals: React.FC = () => {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Deal Pipeline</h3>
           <div className="grid grid-cols-7 gap-4">
             {DEAL_STAGES.map((stage) => {
-              const stageDeals = deals.filter(deal => deal.stage === stage);
+              const stageDeals = filteredDeals.filter(deal => deal.stage === stage);
               const stageValue = stageDeals.reduce((sum, deal) => sum + (deal.amount || deal.value || 0), 0);
               return (
                 <div key={stage} className="text-center">

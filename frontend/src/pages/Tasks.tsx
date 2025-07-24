@@ -36,6 +36,14 @@ const Tasks: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Filter states
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [selectedPriority, setSelectedPriority] = useState<string>('');
+  const [selectedAssignee, setSelectedAssignee] = useState<string>('');
+  const [selectedDueDate, setSelectedDueDate] = useState<string>('all');
+  const [searchTaskName, setSearchTaskName] = useState<string>('');
 
     const fetchTasks = async () => {
       try {
@@ -214,7 +222,14 @@ const Tasks: React.FC = () => {
         currentView={currentView}
         onViewChange={setCurrentView}
       />
-      <button className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+      <button 
+        className={`flex items-center px-4 py-2 border rounded-lg transition-colors ${
+          showFilters 
+            ? 'bg-blue-50 border-blue-300 text-blue-700' 
+            : 'border-gray-300 hover:bg-gray-50'
+        }`}
+        onClick={() => setShowFilters(!showFilters)}
+      >
         <Icons.Filter className="w-4 h-4 mr-2" />
         Filter
       </button>
@@ -232,32 +247,88 @@ const Tasks: React.FC = () => {
     </>
   );
 
-  const completedTasks = tasks.filter(task => task.status === 'Completed').length;
-  const inProgressTasks = tasks.filter(task => task.status === 'In Progress').length;
-  const openTasks = tasks.filter(task => task.status === 'Open').length;
-  const notStartedTasks = tasks.filter(task => task.status === 'Not Started').length;
-  const deferredTasks = tasks.filter(task => task.status === 'Deferred').length;
-  const highPriorityTasks = tasks.filter(task => task.priority === 'High').length;
+  // Filter tasks based on selected filters
+  const filteredTasks = tasks.filter(task => {
+    // Task name search filter
+    if (searchTaskName && !task.title.toLowerCase().includes(searchTaskName.toLowerCase())) {
+      return false;
+    }
+    
+    // Status filter
+    if (selectedStatus && task.status !== selectedStatus) {
+      return false;
+    }
+    
+    // Priority filter
+    if (selectedPriority && task.priority !== selectedPriority) {
+      return false;
+    }
+    
+    // Assignee filter
+    if (selectedAssignee && task.assignee !== selectedAssignee) {
+      return false;
+    }
+    
+    // Due date filter
+    if (selectedDueDate !== 'all') {
+      const dueDate = new Date(task.dueDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      switch (selectedDueDate) {
+        case 'overdue':
+          if (dueDate >= today) return false;
+          break;
+        case 'today':
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          if (dueDate < today || dueDate >= tomorrow) return false;
+          break;
+        case 'week':
+          const nextWeek = new Date(today);
+          nextWeek.setDate(nextWeek.getDate() + 7);
+          if (dueDate < today || dueDate >= nextWeek) return false;
+          break;
+      }
+    }
+    
+    return true;
+  });
+  
+  const completedTasks = filteredTasks.filter(task => task.status === 'Completed').length;
+  const inProgressTasks = filteredTasks.filter(task => task.status === 'In Progress').length;
+  const openTasks = filteredTasks.filter(task => task.status === 'Open').length;
+  const notStartedTasks = filteredTasks.filter(task => task.status === 'Not Started').length;
+  const deferredTasks = filteredTasks.filter(task => task.status === 'Deferred').length;
+  const highPriorityTasks = filteredTasks.filter(task => task.priority === 'High').length;
 
+  const handleClearFilters = () => {
+    setSelectedStatus('');
+    setSelectedPriority('');
+    setSelectedAssignee('');
+    setSelectedDueDate('all');
+    setSearchTaskName('');
+  };
+  
   const renderContent = () => {
     switch (currentView) {
       case 'kanban':
-        return <KanbanView data={tasks} onItemMove={handleTaskMove} type="tasks" getUserName={getUserName} />;
+        return <KanbanView data={filteredTasks} onItemMove={handleTaskMove} type="tasks" getUserName={getUserName} />;
       case 'grid':
-        return <GridView data={tasks} type="tasks" onItemClick={(item) => {
+        return <GridView data={filteredTasks} type="tasks" onItemClick={(item) => {
           if ('title' in item) { // This is a Task
             setSelectedTask(item);
             setIsViewModalOpen(true);
           }
         }} />;
       case 'timeline':
-        return <TimelineView data={tasks} type="tasks" />;
+        return <TimelineView data={filteredTasks} type="tasks" />;
       case 'chart':
-        return <ChartView data={tasks} type="tasks" />;
+        return <ChartView data={filteredTasks} type="tasks" />;
       default:
         return (
           <DataTable
-            data={tasks}
+            data={filteredTasks}
             columns={columns}
             actions={actions}
           />
@@ -282,9 +353,107 @@ const Tasks: React.FC = () => {
         subtitle="Manage and track your tasks"
         actions={headerActions}
       />
+      
+      {/* Filter Section */}
+      {showFilters && (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-8 mt-6">
+          <h3 className="text-base font-semibold text-gray-900 mb-3">Filter Tasks</h3>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {/* Task Name Search */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Task Name
+              </label>
+              <input
+                type="text"
+                placeholder="Enter Task Name"
+                className="w-full px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                value={searchTaskName}
+                onChange={(e) => setSearchTaskName(e.target.value)}
+              />
+            </div>
+            
+            {/* Status Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select 
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+              >
+                <option value="">All Statuses</option>
+                {TASK_STATUSES.map(status => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Priority Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+              <select 
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={selectedPriority}
+                onChange={(e) => setSelectedPriority(e.target.value)}
+              >
+                <option value="">All Priorities</option>
+                {['High', 'Normal', 'Low'].map(priority => (
+                  <option key={priority} value={priority}>
+                    {priority}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Assignee Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Assignee</label>
+              <select 
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+                value={selectedAssignee}
+                onChange={(e) => setSelectedAssignee(e.target.value)}
+              >
+                <option value="">All Assignees</option>
+                {users.map(user => (
+                  <option key={user.id} value={user.id}>
+                    {user.firstName} {user.lastName}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Due Date Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+              <select 
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={selectedDueDate}
+                onChange={(e) => setSelectedDueDate(e.target.value)}
+              >
+                <option value="all">All Tasks</option>
+                <option value="overdue">Overdue</option>
+                <option value="today">Due Today</option>
+                <option value="week">Due This Week</option>
+              </select>
+            </div>
+          </div>
+          
+          <div className="flex justify-end mt-4">
+            <button 
+              className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+              onClick={handleClearFilters}
+            >
+              Clear Filters
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 mt-8">
         <div className="bg-white shadow-sm rounded-xl p-5 border border-gray-200">
           <div className="flex items-center">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
@@ -292,7 +461,7 @@ const Tasks: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-gray-500">Total Tasks</p>
-              <p className="text-xl font-semibold text-gray-900">{tasks.length}</p>
+              <p className="text-xl font-semibold text-gray-900">{filteredTasks.length}</p>
             </div>
           </div>
         </div>
@@ -347,14 +516,14 @@ const Tasks: React.FC = () => {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Task Overview</h3>
           <div className="grid grid-cols-5 gap-4">
             {TASK_STATUSES.map((status) => {
-              const statusTasks = tasks.filter(task => task.status === status);
+              const statusTasks = filteredTasks.filter(task => task.status === status);
               return (
                 <div key={status} className="text-center">
                   <div className="bg-gray-50 rounded-lg p-4 mb-2">
                     <p className="text-sm font-medium text-gray-600">{status}</p>
                     <p className="text-lg font-bold text-gray-900">{statusTasks.length}</p>
                     <p className="text-sm text-gray-500">
-                      {tasks.length > 0 ? Math.round((statusTasks.length / tasks.length) * 100) : 0}% of total
+                      {filteredTasks.length > 0 ? Math.round((statusTasks.length / filteredTasks.length) * 100) : 0}% of total
                     </p>
                   </div>
                 </div>
@@ -365,7 +534,7 @@ const Tasks: React.FC = () => {
       )}
 
       {/* Main Content */}
-      {tasks.length === 0 ? (
+      {filteredTasks.length === 0 ? (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
           <Icons.CheckSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No tasks found</h3>

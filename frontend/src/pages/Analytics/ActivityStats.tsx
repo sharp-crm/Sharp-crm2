@@ -232,7 +232,7 @@ const ActivityStats: React.FC = () => {
                 <div className="flex justify-between">
                   <span className="text-gray-600">Productivity</span>
                   <span className="font-semibold text-blue-600">
-                    {analytics.totalActivities > 50 ? 'High' : analytics.totalActivities > 20 ? 'Medium' : 'Low'}
+                    {analytics.totalActivities > 50 ? 'High' : analytics.totalActivities > 20 ? 'Normal' : 'Low'}
                   </span>
                 </div>
               </div>

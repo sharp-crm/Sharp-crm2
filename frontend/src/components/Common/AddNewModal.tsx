@@ -449,7 +449,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           await tasksApi.create({
           title: formData.subject,
           description: formData.description || '',
-            priority: formData.priority || 'Medium',
+            priority: formData.priority || 'Normal',
             status: formData.status || 'Open',
           dueDate: formData.dueDate,
             assignee: formData.assignedTo || user?.userId || '',

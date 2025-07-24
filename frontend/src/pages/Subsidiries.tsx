@@ -19,6 +19,7 @@ const Subsidiaries: React.FC = () => {
   const [selectedSubsidiary, setSelectedSubsidiary] = useState<Subsidiary | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [subsidiaryToDelete, setSubsidiaryToDelete] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   // Filter state
   const [filters, setFilters] = useState({
@@ -169,6 +170,16 @@ const Subsidiaries: React.FC = () => {
 
   const headerActions = (
     <>
+      <button 
+        className={`flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors ${
+          showFilters ? 'bg-blue-50 border-blue-300 text-blue-700' : ''
+        }`}
+        onClick={() => setShowFilters(!showFilters)}
+      >
+        <Icons.Filter className="w-4 h-4 mr-2" />
+        Filter
+      </button>
+
       {canCreate && (
         <button
           className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -263,11 +274,19 @@ const Subsidiaries: React.FC = () => {
 
   return (
     <div className="p-6 lg:p-8">
-      <div className="flex flex-col xl:flex-row gap-4">
-        {/* Filter Sidebar */}
-        <div className="w-full xl:w-72 bg-white p-6 border border-gray-200 rounded-xl shadow-sm h-fit flex-shrink-0">
-          <p className="font-medium text-gray-700 mb-4">Filter Subsidiaries by</p>
-          <div className="text-sm text-gray-600 space-y-5">
+      <div className="flex flex-col gap-4">
+        {/* Page Header */}
+        <PageHeader
+          title="Subsidiaries"
+          subtitle="List of company subsidiaries"
+          breadcrumbs={[{ name: 'Home', path: '/' }, { name: 'Subsidiaries' }]}
+          actions={headerActions}
+        />
+        {/* Filter Section */}
+        {showFilters && (
+          <div className="w-full max-w-md bg-white p-4 border border-gray-200 rounded-lg shadow-sm">
+            <p className="font-medium text-gray-700 mb-3">Filter Subsidiaries by</p>
+            <div className="text-sm text-gray-600 space-y-3">
             <div>
               <label className="flex items-center">
                 <input type="checkbox" className="mr-2 h-4 w-4" checked={filters.name} onChange={() => handleCheckboxChange('name')} />
@@ -344,30 +363,26 @@ const Subsidiaries: React.FC = () => {
               )}
             </div>
 
-            <button 
-              className="w-full mt-6 py-2 px-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              onClick={handleApplyFilters}
-            >
-              Apply Filter
-            </button>
-            <button 
-              className="w-full mt-3 py-2 px-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
-              onClick={handleClearFilters}
-            >
-              Clear
-            </button>
+              <div className="flex gap-2 mt-4">
+                <button 
+                  className="flex-1 py-1.5 px-3 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors"
+                  onClick={handleApplyFilters}
+                >
+                  Apply
+                </button>
+                <button 
+                  className="flex-1 py-1.5 px-3 bg-gray-200 text-gray-800 rounded text-sm hover:bg-gray-300 transition-colors"
+                  onClick={handleClearFilters}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Main Content */}
         <div className="flex-1 min-w-0 w-full">
-      <PageHeader
-        title="Subsidiaries"
-        subtitle="List of company subsidiaries"
-        breadcrumbs={[{ name: 'Home', path: '/' }, { name: 'Subsidiaries' }]}
-        actions={headerActions}
-      />
-
           {/* Error Message */}
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
