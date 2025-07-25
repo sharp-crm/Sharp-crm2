@@ -19,18 +19,19 @@ import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import * as Icons from 'lucide-react';
 import { Deal, Task, DEAL_STAGES, TASK_STATUSES } from '../../types';
+import { Lead } from '../../api/services';
 import StatusBadge from '../Common/StatusBadge';
 
 interface KanbanViewProps {
-  data: (Deal | Task)[];
-  onItemMove: (itemId: string, newStage: Deal['stage'] | Task['status']) => void;
-  type: 'deals' | 'tasks';
+  data: (Deal | Task | Lead)[];
+  onItemMove: (itemId: string, newStage: Deal['stage'] | Task['status'] | Lead['leadStatus']) => void;
+  type: 'deals' | 'tasks' | 'leads';
   getUserName?: (userId: string) => string;
 }
 
 interface KanbanCardProps {
-  item: Deal | Task;
-  type: 'deals' | 'tasks';
+  item: Deal | Task | Lead;
+  type: 'deals' | 'tasks' | 'leads';
   dragOverlay?: boolean;
   getUserName?: (userId: string) => string;
 }
@@ -73,8 +74,10 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ item, type, dragOverlay = false
       };
 
   const isDeal = type === 'deals';
+  const isLead = type === 'leads';
   const dealItem = item as Deal;
   const taskItem = item as Task;
+  const leadItem = item as Lead;
 
   return (
     <div
@@ -90,10 +93,10 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ item, type, dragOverlay = false
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
         <h4 className="font-medium text-gray-900 text-sm">
-          {isDeal ? dealItem.name : taskItem.title}
+          {isDeal ? dealItem.name : isLead ? `${leadItem.firstName} ${leadItem.lastName}` : taskItem.title}
         </h4>
           <p className="text-sm text-gray-600 mt-1 line-clamp-2">
-            {isDeal ? dealItem.dealName : taskItem.description}
+            {isDeal ? dealItem.dealName : isLead ? leadItem.company : taskItem.description}
           </p>
         </div>
         <Icons.GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" />
@@ -109,6 +112,25 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ item, type, dragOverlay = false
           </div>
           <div className="mt-2 text-xs text-gray-500">
             Close: {new Date(dealItem.closeDate || '').toLocaleDateString()}
+          </div>
+        </>
+      ) : isLead ? (
+        <>
+          <div className="flex items-center gap-2 mt-3">
+            <StatusBadge status={leadItem.leadStatus} />
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+              {leadItem.leadSource}
+            </span>
+          </div>
+          <div className="flex items-center justify-between mt-3">
+            <div className="flex items-center text-xs text-gray-500">
+              <Icons.DollarSign className="w-3 h-3 mr-1" />
+              ${(leadItem.value || 0).toLocaleString()}
+            </div>
+            <div className="flex items-center text-xs text-gray-500">
+              <Icons.User className="w-3 h-3 mr-1" />
+              {leadItem.leadOwner || 'Unknown'}
+            </div>
           </div>
         </>
       ) : (
@@ -169,9 +191,21 @@ const DroppableColumn: React.FC<{
 const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUserName }) => {
   const stages: string[] = type === 'deals'
     ? [...DEAL_STAGES]
-    : [...TASK_STATUSES];
+    : type === 'tasks'
+    ? [...TASK_STATUSES]
+    : [
+        'New',
+        'Attempted to Contact',
+        'Contact in Future',
+        'Contacted',
+        'Junk Lead',
+        'Lost Lead',
+        'Not Contacted',
+        'Pre-Qualified',
+        'Not Qualified'
+      ];
 
-  const [activeItem, setActiveItem] = useState<Deal | Task | null>(null);
+  const [activeItem, setActiveItem] = useState<Deal | Task | Lead | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
 
   // Configure drag sensors to be more responsive
@@ -253,11 +287,15 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
         return;
       }
 
-      const currentStage = type === 'deals' ? (item as Deal).stage : (item as Task).status;
+      const currentStage = type === 'deals' 
+        ? (item as Deal).stage 
+        : type === 'leads'
+        ? (item as Lead).leadStatus
+        : (item as Task).status;
 
       if (currentStage !== overContainer) {
         console.log('Moving item:', activeId, 'from', currentStage, 'to', overContainer);
-        onItemMove(activeId.toString(), overContainer as Deal['stage'] | Task['status']);
+        onItemMove(activeId.toString(), overContainer as Deal['stage'] | Task['status'] | Lead['leadStatus']);
       }
     }
   };
@@ -271,6 +309,8 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
     return data.filter(item => {
       if (type === 'deals') {
         return (item as Deal).stage === stage;
+      } else if (type === 'leads') {
+        return (item as Lead).leadStatus === stage;
       } else {
         return (item as Task).status === stage;
       }
@@ -287,6 +327,19 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
         'Closed Won': '#22C55E',
         'Closed Lost': '#6B7280',
         'Closed Lost to Competition': '#EF4444'
+      };
+      return colors[stage] || '#6B7280';
+    } else if (type === 'leads') {
+      const colors: Record<string, string> = {
+        'New': '#3B82F6',
+        'Attempted to Contact': '#F59E0B',
+        'Contact in Future': '#8B5CF6',
+        'Contacted': '#10B981',
+        'Junk Lead': '#EF4444',
+        'Lost Lead': '#6B7280',
+        'Not Contacted': '#9CA3AF',
+        'Pre-Qualified': '#22C55E',
+        'Not Qualified': '#F97316'
       };
       return colors[stage] || '#6B7280';
     } else {
@@ -325,7 +378,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
           const stageColor = getStageColor(stage);
             const isOver = overId === stage;
             const canDrop = activeItem !== null && stages.includes(stage as any);
-            const currentStage = activeItem ? (type === 'deals' ? (activeItem as Deal).stage : (activeItem as Task).status) : null;
+            const currentStage = activeItem ? (type === 'deals' ? (activeItem as Deal).stage : type === 'leads' ? (activeItem as Lead).leadStatus : (activeItem as Task).status) : null;
             const isDifferentStage = currentStage !== stage;
 
             // Calculate dynamic width based on screen size and number of columns
@@ -359,7 +412,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
                 <DroppableColumn id={stage} isOver={isOver} canDrop={canDrop && isDifferentStage}>
                   <div className={`bg-gray-50 rounded-lg h-full flex flex-col transition-all duration-150 relative ${
                     isOver && canDrop && isDifferentStage ? 'border-2 border-blue-300 shadow-lg' : 
-                    isOver && !isDifferentStage ? 'border-2 border-yellow-300' :
+                    isOver && !isDifferentStage ? 'border-2 border-gray-300' :
                     'border-2 border-transparent'
                   }`}>
                     {/* Fixed Header */}

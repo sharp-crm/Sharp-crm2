@@ -217,6 +217,7 @@ const AddNewUserModal: React.FC<AddNewUserModalProps> = ({ isOpen, onClose, onUs
               onChange={(phoneNumber) => setFormData(prev => ({ ...prev, phoneNumber }))}
               placeholder="Enter phone number"
               className="w-full"
+              defaultCountryCode="+91"
             />
           </div>
           <select name="role" value={formData.role} onChange={handleChange} required className="w-full p-2 border rounded">

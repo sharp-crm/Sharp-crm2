@@ -353,7 +353,7 @@ const Deals: React.FC = () => {
       {/* Filter Section */}
       {showFilters && (
         <div className="mb-8 mt-6">
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 w-1/2">
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 w-full">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

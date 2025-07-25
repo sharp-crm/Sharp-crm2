@@ -60,11 +60,12 @@ export interface Lead {
 
 export interface Contact {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
-  company: string;
-  position: string;
+  companyName: string;
+  title?: string;
   status: 'Active' | 'Inactive';
   createdAt: string;
   visibleTo?: string[];

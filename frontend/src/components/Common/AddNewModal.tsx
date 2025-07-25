@@ -43,6 +43,8 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
   const [selectedType, setSelectedType] = useState<string>();
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [tenantUsers, setTenantUsers] = useState<TenantUser[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const { user } = useAuthStore();
   const { addNotification } = useNotificationStore();
   const { addToast } = useToastStore();
@@ -107,7 +109,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
   useEffect(() => {
     if (isOpen && defaultType) {
       // Check if user has permission to access this type
-      const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' || user?.role === 'Admin' || user?.role === 'SuperAdmin';
+      const isAdmin = user?.role?.name === 'ADMIN' || user?.role?.name === 'SUPER_ADMIN' || user?.role?.name === 'Admin' || user?.role?.name === 'SuperAdmin';
       if ((defaultType === 'dealer' || defaultType === 'subsidiary') && !isAdmin) {
         addToast({
           type: 'error',
@@ -115,7 +117,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           message: 'You do not have permission to create this type of record.'
         });
         onClose();
-        return;ƒ
+        return;
       }
 
       setSelectedType(defaultType);
@@ -132,7 +134,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
 
   const handleTypeSelection = (typeId: string) => {
     // Check if user has permission to access this type
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' || user?.role === 'Admin' || user?.role === 'SuperAdmin';
+    const isAdmin = user?.role?.name === 'ADMIN' || user?.role?.name === 'SUPER_ADMIN' || user?.role?.name === 'Admin' || user?.role?.name === 'SuperAdmin';
     if ((typeId === 'dealer' || typeId === 'subsidiary') && !isAdmin) {
       addToast({
         type: 'error',
@@ -177,6 +179,8 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
     // Reset everything and close
     setSelectedType('');
     setFormData({});
+    setError(null);
+    setLoading(false);
     onClose();
   };
 
@@ -197,8 +201,8 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
     ].map(source => ({ value: source, label: source }));
 
     const leadStatusOptions: FormFieldOption[] = [
-      'Attempted to Contact', 'Contact in Future', 'Contacted', 'Junk Lead',
-      'Lost Lead', 'Not Contacted', 'Prequalified', 'Not Qualified'
+      'New', 'Attempted to Contact', 'Contact in Future', 'Contacted', 'Junk Lead',
+      'Lost Lead', 'Not Contacted', 'Pre-Qualified', 'Not Qualified'
     ].map(status => ({ value: status, label: status }));
 
     const taskStatusOptions: FormFieldOption[] = TASK_STATUSES.map(status => ({ value: status, label: status }));
@@ -236,8 +240,8 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           { name: 'lastName', label: 'Last Name', type: 'text', required: true },
           { name: 'company', label: 'Company', type: 'text', required: true },
           { name: 'title', label: 'Title', type: 'text', required: false },
-          { name: 'phone', label: 'Phone', type: 'tel', required: false },
-          { name: 'email', label: 'Email', type: 'email', required: true },
+          { name: 'phone', label: 'Phone', type: 'tel', required: true },
+          { name: 'email', label: 'Email', type: 'email', required: false },
           { name: 'leadSource', label: 'Lead Source', type: 'select', options: leadSourceOptions, required: true },
           { name: 'leadStatus', label: 'Lead Status', type: 'select', options: leadStatusOptions, required: true },
           { name: 'value', label: 'Lead Value', type: 'number', required: true },
@@ -256,8 +260,8 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           { name: 'firstName', label: 'First Name', type: 'text', required: true },
           { name: 'lastName', label: 'Last Name', type: 'text', required: true },
           { name: 'companyName', label: 'Company', type: 'text', required: true },
-          { name: 'email', label: 'Email', type: 'email', required: true },
-          { name: 'phone', label: 'Phone', type: 'tel', required: false },
+          { name: 'email', label: 'Email', type: 'email', required: false },
+          { name: 'phone', label: 'Phone', type: 'tel', required: true },
           { name: 'title', label: 'Title', type: 'text', required: false },
           { name: 'leadSource', label: 'Source', type: 'select', options: leadSourceOptions, required: true },
           { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers), required: false },
@@ -340,6 +344,22 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Clear any previous errors
+    setError(null);
+    setLoading(true);
+    
+    // Validate required fields
+    const formFields = getFormFields();
+    const missingFields = formFields
+      .filter(field => field.required && !formData[field.name])
+      .map(field => field.label);
+    
+    if (missingFields.length > 0) {
+      setError(`Please fill in all required fields: ${missingFields.join(', ')}`);
+      setLoading(false);
+      return;
+    }
+    
     // Debug: Log the form data to see what's being submitted
     console.log('Form data being submitted:', formData);
     console.log('visibleTo field:', formData.visibleTo);
@@ -391,8 +411,9 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           await contactsApi.create({
             contactOwner: formData.contactOwner,
             firstName: formData.firstName,
+            lastName: formData.lastName,
             companyName: formData.companyName,
-            email: formData.email,
+            email: formData.email || '',
             leadSource: formData.leadSource,
             phone: formData.phone,
             title: formData.title,
@@ -525,14 +546,19 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
       
       setFormData({});
       setSelectedType('');
+      setError(null);
       handleMainModalClose();
     } catch (error) {
       console.error('Error creating record:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create record. Please try again.';
+      setError(errorMessage);
       addToast({
         type: 'error',
         title: 'Error',
-        message: 'Failed to create record. Please try again.'
+        message: errorMessage
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -610,6 +636,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 onChange={(phoneNumber) => handleInputChange(field.name, phoneNumber)}
                 placeholder={`Enter ${field.label.toLowerCase()}...`}
                 className="w-full"
+                defaultCountryCode={selectedType === 'contact' || selectedType === 'lead' ? '+91' : undefined}
               />
             ) : (
               <input
@@ -694,6 +721,19 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                   Fill in the details below to create a new {selectedType.toLowerCase()}.
                 </p>
 
+                {/* Error Display */}
+                {error && (
+                  <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex">
+                      <Icons.AlertCircle className="w-5 h-5 text-red-600 mr-2 mt-0.5" />
+                      <div>
+                        <h3 className="text-sm font-medium text-red-800">Error</h3>
+                        <p className="text-sm text-red-700 mt-1">{error}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Form Fields */}
                 {Object.entries(groupedFields).map(([group, fields]) => (
                   <div key={group} className="mb-8">
@@ -719,9 +759,17 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  disabled={loading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                 >
-                    Create {selectedType.charAt(0).toUpperCase() + selectedType.slice(1)}
+                  {loading ? (
+                    <>
+                      <Icons.Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    `Create ${selectedType.charAt(0).toUpperCase() + selectedType.slice(1)}`
+                  )}
                 </button>
               </div>
               </form>

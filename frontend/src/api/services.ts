@@ -40,6 +40,7 @@ export interface Contact {
   // Required fields from AddNewModal
   contactOwner: string;
   firstName: string;
+  lastName: string;
   companyName: string;
   email: string;
   leadSource: string;

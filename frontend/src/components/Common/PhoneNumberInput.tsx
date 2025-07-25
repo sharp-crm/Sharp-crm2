@@ -14,6 +14,7 @@ interface PhoneNumberInputProps {
   disabled?: boolean;
   required?: boolean;
   className?: string;
+  defaultCountryCode?: string;
 }
 
 const countries: Country[] = [
@@ -45,9 +46,19 @@ const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
   placeholder = "Enter phone number",
   disabled = false,
   required = false,
-  className = ""
+  className = "",
+  defaultCountryCode
 }) => {
-  const [selectedCountry, setSelectedCountry] = useState<Country>(countries[0]);
+  // Find default country or use first country
+  const getDefaultCountry = () => {
+    if (defaultCountryCode) {
+      const defaultCountry = countries.find(c => c.dialCode === defaultCountryCode);
+      if (defaultCountry) return defaultCountry;
+    }
+    return countries[0];
+  };
+
+  const [selectedCountry, setSelectedCountry] = useState<Country>(getDefaultCountry());
   const [phoneNumber, setPhoneNumber] = useState('');
 
   // Parse existing phone number to extract country code and number

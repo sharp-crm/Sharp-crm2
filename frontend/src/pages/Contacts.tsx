@@ -4,10 +4,11 @@ import { Dialog } from '@headlessui/react';
 import PageHeader from '../components/Common/PageHeader';
 import DataTable from '../components/Common/DataTable';
 import StatusBadge from '../components/Common/StatusBadge';
-import { contactsApi, Contact } from '../api/services';
+import { contactsApi, leadsApi, Contact } from '../api/services';
 import AddNewModal from '../components/Common/AddNewModal';
 import ViewContactModal from '../components/ViewContactModal';
 import EditContactModal from '../components/EditContactModal';
+import ConvertToLeadModal from '../components/ConvertToLeadModal';
 
 const Contacts: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -24,6 +25,8 @@ const Contacts: React.FC = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
+  const [convertedContacts, setConvertedContacts] = useState<Set<string>>(new Set());
 
   const [filters, setFilters] = useState({
     status: false,
@@ -38,6 +41,18 @@ const Contacts: React.FC = () => {
     createdDate: ''
   });
 
+  // Sorting state
+  const [sortBy, setSortBy] = useState<string>('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  
+  // Phone search state
+  const [phoneSearch, setPhoneSearch] = useState<string>('');
+  const [showPhoneSearch, setShowPhoneSearch] = useState(false);
+  
+  // Company suggestions state
+  const [companySuggestions, setCompanySuggestions] = useState<string[]>([]);
+  const [showCompanySuggestions, setShowCompanySuggestions] = useState(false);
+
   // Filtered contacts
   const [filteredContacts, setFilteredContacts] = useState<Contact[]>([]);
 
@@ -49,6 +64,35 @@ const Contacts: React.FC = () => {
         setError(null);
         const data = await contactsApi.getAll();
         setContacts(data);
+        
+        // Check for converted contacts by fetching leads
+        try {
+          const leads = await leadsApi.getAll();
+          const convertedContactIds = new Set<string>();
+          
+          // Check if any leads have matching contact information (email or phone)
+          leads.forEach(lead => {
+            const matchingContact = data.find(contact => {
+              // Check for email match (case-insensitive)
+              const emailMatch = contact.email && lead.email && 
+                contact.email.toLowerCase() === lead.email.toLowerCase();
+              
+              // Check for phone match (digit-only comparison)
+              const phoneMatch = contact.phone && lead.phone && 
+                contact.phone.replace(/\D/g, '') === lead.phone.replace(/\D/g, '');
+              
+              return emailMatch || phoneMatch;
+            });
+            
+            if (matchingContact) {
+              convertedContactIds.add(matchingContact.id);
+            }
+          });
+          
+          setConvertedContacts(convertedContactIds);
+        } catch (leadError) {
+          console.error('Error checking converted contacts:', leadError);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch contacts');
         console.error('Error fetching contacts:', err);
@@ -60,7 +104,7 @@ const Contacts: React.FC = () => {
     fetchContacts();
   }, []);
 
-  // Apply filters whenever contacts or filter values change
+  // Apply filters and sorting whenever contacts, filter values, or sort settings change
   useEffect(() => {
     let filtered = [...contacts];
 
@@ -85,8 +129,41 @@ const Contacts: React.FC = () => {
       });
     }
 
+    // Apply phone search filter (minimum 2 digits)
+    if (phoneSearch && phoneSearch.length >= 2) {
+      filtered = filtered.filter(contact => {
+        const phone = contact.phone || '';
+        // Remove any non-digit characters and search within the phone number
+        const cleanPhone = phone.replace(/\D/g, '');
+        const searchDigits = phoneSearch.replace(/\D/g, '');
+        return cleanPhone.includes(searchDigits);
+      });
+    }
+
+    // Apply sorting
+    if (sortBy) {
+      filtered.sort((a, b) => {
+        let aValue = a[sortBy as keyof Contact];
+        let bValue = b[sortBy as keyof Contact];
+        
+        // Handle undefined values
+        if (aValue === undefined) aValue = '';
+        if (bValue === undefined) bValue = '';
+        
+        // Handle string values
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          aValue = aValue.toLowerCase();
+          bValue = bValue.toLowerCase();
+        }
+        
+        if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
     setFilteredContacts(filtered);
-  }, [contacts, filters, filterValues]);
+  }, [contacts, filters, filterValues, sortBy, sortOrder, phoneSearch]);
 
   // Clear success message after 5 seconds
   useEffect(() => {
@@ -104,6 +181,25 @@ const Contacts: React.FC = () => {
 
   const handleFilterValueChange = (key: keyof typeof filterValues, value: string) => {
     setFilterValues(prev => ({ ...prev, [key]: value }));
+    
+    // Handle company suggestions
+    if (key === 'company') {
+      if (value.length >= 2) {
+        // Get unique company names from contacts
+        const uniqueCompanies = [...new Set(contacts.map(contact => contact.companyName).filter(Boolean))];
+        
+        // Filter companies that contain the search term (case-insensitive)
+        const suggestions = uniqueCompanies.filter(company => 
+          company.toLowerCase().includes(value.toLowerCase())
+        );
+        
+        setCompanySuggestions(suggestions);
+        setShowCompanySuggestions(suggestions.length > 0);
+      } else {
+        setCompanySuggestions([]);
+        setShowCompanySuggestions(false);
+      }
+    }
   };
 
   const handleApplyFilters = () => {
@@ -122,6 +218,12 @@ const Contacts: React.FC = () => {
       company: '',
       createdDate: ''
     });
+    setSortBy('');
+    setSortOrder('asc');
+    setPhoneSearch('');
+    setShowPhoneSearch(false);
+    setCompanySuggestions([]);
+    setShowCompanySuggestions(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -156,6 +258,11 @@ const Contacts: React.FC = () => {
   const handleEdit = (contact: Contact) => {
     setSelectedContact(contact);
     setIsEditModalOpen(true);
+  };
+
+  const handleConvertToLead = (contact: Contact) => {
+    setSelectedContact(contact);
+    setIsConvertModalOpen(true);
   };
 
   const handleEditSuccess = async () => {
@@ -235,6 +342,22 @@ const Contacts: React.FC = () => {
       >
         <Icons.Edit2 className="w-4 h-4" />
       </button>
+      {convertedContacts.has(row.id) ? (
+        <div 
+          className="p-1 text-green-600"
+          title="Already converted to lead"
+        >
+          <Icons.CheckCircle className="w-4 h-4" />
+        </div>
+      ) : (
+        <button 
+          className="p-1 text-gray-400 hover:text-purple-600 transition-colors"
+          onClick={() => handleConvertToLead(row)}
+          title="Convert to lead"
+        >
+          <Icons.UserPlus className="w-4 h-4" />
+        </button>
+      )}
       <button 
         className="p-1 text-gray-400 hover:text-red-600 transition-colors"
         onClick={() => handleDelete(row.id)}
@@ -309,7 +432,7 @@ const Contacts: React.FC = () => {
         {/* Filter Section */}
         {showFilters && (
           <div className="w-full max-w-md bg-white p-4 border border-gray-200 rounded-lg shadow-sm">
-            <p className="font-medium text-gray-700 mb-3">Filter Contacts by</p>
+            <p className="font-medium text-gray-700 mb-3">Filter & Sort Contacts</p>
             <div className="text-sm text-gray-600 space-y-3">
             {/* Status Filter */}
             <div>
@@ -350,14 +473,39 @@ const Contacts: React.FC = () => {
                 Company
               </label>
               {filters.company && (
-                <div className="mt-2 pl-4">
+                <div className="mt-2 pl-4 relative">
                   <input
                     type="text"
-                    placeholder="Company name"
+                    placeholder="Company name (min 3 characters for suggestions)"
                     className="w-full border border-gray-300 rounded p-1 text-sm focus:ring-2 focus:ring-blue-500"
                     value={filterValues.company}
                     onChange={(e) => handleFilterValueChange('company', e.target.value)}
+                    onFocus={() => {
+                      if (filterValues.company.length >= 3) {
+                        setShowCompanySuggestions(companySuggestions.length > 0);
+                      }
+                    }}
+                    onBlur={() => {
+                      // Delay hiding suggestions to allow clicking on them
+                      setTimeout(() => setShowCompanySuggestions(false), 200);
+                    }}
                   />
+                  {showCompanySuggestions && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                      {companySuggestions.map((suggestion, index) => (
+                        <div
+                          key={index}
+                          className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                          onClick={() => {
+                            handleFilterValueChange('company', suggestion);
+                            setShowCompanySuggestions(false);
+                          }}
+                        >
+                          {suggestion}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -381,6 +529,33 @@ const Contacts: React.FC = () => {
                     value={filterValues.createdDate}
                     onChange={(e) => handleFilterValueChange('createdDate', e.target.value)}
                   />
+                </div>
+              )}
+            </div>
+
+            {/* Search by Phone */}
+            <div>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="mr-2"
+                  checked={showPhoneSearch}
+                  onChange={() => setShowPhoneSearch(!showPhoneSearch)}
+                />
+                Search by Phone
+              </label>
+              {showPhoneSearch && (
+                <div className="mt-2 pl-4">
+                  <input
+                    type="text"
+                    placeholder="Enter phone number (min 2 digits)"
+                    className="w-full border border-gray-300 rounded p-1 text-sm focus:ring-2 focus:ring-blue-500"
+                    value={phoneSearch}
+                    onChange={(e) => setPhoneSearch(e.target.value)}
+                  />
+                  {phoneSearch.length > 0 && phoneSearch.length < 2 && (
+                    <p className="text-xs text-gray-500 mt-1">Enter at least 2 digits to search</p>
+                  )}
                 </div>
               )}
             </div>
@@ -466,7 +641,7 @@ const Contacts: React.FC = () => {
           </div>
 
           {/* Data Table */}
-          {(filteredContacts.length === 0 && (Object.values(filters).some(f => f))) ? (
+          {(filteredContacts.length === 0 && (Object.values(filters).some(f => f) || phoneSearch.length >= 2)) ? (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
               <Icons.Search className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No contacts match your filters</h3>
@@ -497,7 +672,7 @@ const Contacts: React.FC = () => {
           ) : (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 w-full">
               <DataTable
-                data={Object.values(filters).some(f => f) ? filteredContacts : contacts}
+                data={Object.values(filters).some(f => f) || phoneSearch.length >= 2 ? filteredContacts : contacts}
                 columns={columns}
                 actions={actions}
               />
@@ -537,6 +712,22 @@ const Contacts: React.FC = () => {
         }}
         contact={selectedContact}
         onSuccess={handleEditSuccess}
+      />
+
+      {/* Convert to Lead Modal */}
+      <ConvertToLeadModal
+        isOpen={isConvertModalOpen}
+        onClose={() => {
+          setIsConvertModalOpen(false);
+          setSelectedContact(null);
+        }}
+        contact={selectedContact}
+        onSuccess={() => {
+          if (selectedContact) {
+            setConvertedContacts(prev => new Set([...prev, selectedContact.id]));
+          }
+          setSuccessMessage('Contact has been successfully converted to lead.');
+        }}
       />
 
       {/* Delete Confirmation Dialog */}
