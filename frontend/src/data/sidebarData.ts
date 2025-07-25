@@ -1,5 +1,18 @@
 import { SidebarItem } from '../types';
 import { useAuthStore } from '../store/useAuthStore';
+import { isSuperAdmin as checkIsSuperAdmin } from '../utils/roleAccess';
+
+// Type assertion to handle the role as string (as it's actually used in the codebase)
+type UserWithStringRole = {
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  tenantId?: string;
+  createdBy?: string;
+  phoneNumber?: string;
+};
 
 // Base items that all users can see
 const baseItems: SidebarItem[] = [
@@ -16,9 +29,25 @@ const adminItems: SidebarItem[] = [
   { name: 'Dealers', path: '/dealers', icon: 'Users' },
 ];
 
+// SuperAdmin-specific items (standalone, not in dropdowns)
+const superAdminItems: SidebarItem[] = [
+  { name: 'Home', path: '/home', icon: 'Home' },
+  { name: 'Organisational Tree', path: '/settings/org-tree', icon: 'Network' },
+  { name: 'Access Control', path: '/settings/access-control', icon: 'Users' },
+  { name: 'Personal', path: '/settings/personal', icon: 'User' },
+  { name: 'Email Integration', path: '/integrations/email', icon: 'Mail' },
+  { name: 'Team Chat', path: '/team-chat', icon: 'MessageSquare' },
+];
+
 export const getSidebarItems = (): SidebarItem[] => {
   const user = useAuthStore.getState().user;
-  const role = user?.role?.toUpperCase();
+  // Type assertion to handle role as string (as it's actually used in the codebase)
+  const role = (user?.role as any)?.toUpperCase();
+
+  // SuperAdmin gets their own specific items
+  if (role === 'SUPER_ADMIN') {
+    return superAdminItems;
+  }
 
   // If user is a sales rep, only show base items
   if (role === 'SALES_REP') {
@@ -83,6 +112,16 @@ export const settingsItems: SidebarItem[] = [
     ]
   }
 ];
+
+// Helper function to check if user is SuperAdmin
+export const isSuperAdmin = (): boolean => {
+  return checkIsSuperAdmin();
+};
+
+// Helper function to get SuperAdmin-specific sidebar items
+export const getSuperAdminSidebarItems = (): SidebarItem[] => {
+  return superAdminItems;
+};
 
 
 

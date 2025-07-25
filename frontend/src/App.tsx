@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Logout from './pages/Logout';
 import Home from './pages/Home';
+import SuperAdminHome from './pages/SuperAdminHome';
 import Leads from './pages/Leads';
 import Contacts from './pages/Contacts';
 import Deals from './pages/Deals';
@@ -32,6 +33,19 @@ import Toast from './components/Common/Toast';
 import AllUsers from './pages/AllUsersByDomain';
 import NotFound from './pages/NotFound';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
+import { isSuperAdmin } from './utils/roleAccess';
+
+// Component to handle SuperAdmin route access control
+const SuperAdminRouteGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const isSuperAdminUser = isSuperAdmin();
+  
+  // If user is SuperAdmin, redirect to 404 for unauthorized pages
+  if (isSuperAdminUser) {
+    return <NotFound />;
+  }
+  
+  return <>{children}</>;
+};
 
 const App: React.FC = () => {
   return (
@@ -53,27 +67,40 @@ const App: React.FC = () => {
             }
           >
             <Route index element={<Home />} />
+            <Route path="home" element={<SuperAdminHome />} />
             <Route path="settings/all-users" element={<AllUsers />} />
-            <Route path="leads" element={<Leads />} />
-            <Route path="contacts" element={<Contacts />} />
-            <Route path="deals" element={<Deals />} />
-            <Route path="tasks" element={<Tasks />} />
-            <Route path="subsidiaries" element={<Subsidiaries />} />
-            <Route path="dealers" element={<Dealers />} />
+            
+            {/* Routes that SuperAdmin cannot access - redirect to 404 */}
+            <Route path="leads" element={<SuperAdminRouteGuard><Leads /></SuperAdminRouteGuard>} />
+            <Route path="contacts" element={<SuperAdminRouteGuard><Contacts /></SuperAdminRouteGuard>} />
+            <Route path="deals" element={<SuperAdminRouteGuard><Deals /></SuperAdminRouteGuard>} />
+            <Route path="tasks" element={<SuperAdminRouteGuard><Tasks /></SuperAdminRouteGuard>} />
+            <Route path="subsidiaries" element={<SuperAdminRouteGuard><Subsidiaries /></SuperAdminRouteGuard>} />
+            <Route path="dealers" element={<SuperAdminRouteGuard><Dealers /></SuperAdminRouteGuard>} />
+            
+            {/* Common routes - SuperAdmin can access */}
             <Route path="notifications" element={<Notifications />} />
+            <Route path="profile" element={<Profile />} />
+            
+            {/* Settings routes - SuperAdmin can access specific ones */}
             <Route path="settings/personal" element={<Personal />} />
             <Route path="settings/access-control" element={<AccessControl />} />
             <Route path="settings/org-tree" element={<OrgTree />} />
+            
+            {/* Integration and Chat routes - SuperAdmin can access */}
             <Route path="integrations/email" element={<EmailIntegration />} />
             <Route path="team-chat" element={<TeamChat />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="reports/all" element={<AllReports />} />
-            <Route path="reports/favourites" element={<Favourites />} />
-            <Route path="reports/scheduled" element={<ScheduledReports />} />
-            <Route path="analytics/overview" element={<Overview />} />
-            <Route path="analytics/leads" element={<LeadAnalytics />} />
-            <Route path="analytics/deals" element={<DealInsights />} />
-            <Route path="analytics/activity" element={<ActivityStats />} />
+            
+            {/* Reports routes - SuperAdmin cannot access */}
+            <Route path="reports/all" element={<SuperAdminRouteGuard><AllReports /></SuperAdminRouteGuard>} />
+            <Route path="reports/favourites" element={<SuperAdminRouteGuard><Favourites /></SuperAdminRouteGuard>} />
+            <Route path="reports/scheduled" element={<SuperAdminRouteGuard><ScheduledReports /></SuperAdminRouteGuard>} />
+            
+            {/* Analytics routes - SuperAdmin cannot access */}
+            <Route path="analytics/overview" element={<SuperAdminRouteGuard><Overview /></SuperAdminRouteGuard>} />
+            <Route path="analytics/leads" element={<SuperAdminRouteGuard><LeadAnalytics /></SuperAdminRouteGuard>} />
+            <Route path="analytics/deals" element={<SuperAdminRouteGuard><DealInsights /></SuperAdminRouteGuard>} />
+            <Route path="analytics/activity" element={<SuperAdminRouteGuard><ActivityStats /></SuperAdminRouteGuard>} />
           </Route>
           
           {/* 404 Catch-all Route - MUST be last */}

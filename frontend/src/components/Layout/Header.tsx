@@ -247,7 +247,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                 />
                 <div className="text-left">
                   <div className="text-sm font-medium text-gray-900">{`${user?.firstName || ''} ${user?.lastName || ''}`.trim()}</div>
-                  <div className="text-xs text-gray-500">{user?.role}</div>
+                  <div className="text-xs text-gray-500">{(user?.role as any)?.name || (user?.role as any)}</div>
                 </div>
               </Link>
 

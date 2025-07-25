@@ -9,6 +9,7 @@ import {
   chatItems,
   getSidebarItems
 } from '../../data/sidebarData';
+import { isSuperAdmin } from '../../utils/roleAccess';
 import { SidebarItem } from '../../types';
 import { useAuthStore } from '../../store/useAuthStore';
 
@@ -22,6 +23,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const user = useAuthStore((s) => s.user);
   const [sidebarItems, setSidebarItems] = useState<SidebarItem[]>([]);
+  const isSuperAdminUser = isSuperAdmin();
 
   // Update sidebar items when user role changes
   useEffect(() => {
@@ -109,43 +111,53 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
 
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {/* Modules Section */}
-        <div className="space-y-1">
-          {renderSidebarItem({
-            ...modulesItem,
-            children: sidebarItems
-          })}
-        </div>
-
-        {/* Reports */}
-        <div className="border-t border-gray-200 pt-4">
-          {reportsItems.map(item => renderSidebarItem(item))}
-        </div>
-
-        {/* Analytics */}
-        <div className="border-t border-gray-200 pt-4">
-          {analyticsItems.map(item => renderSidebarItem(item))}
-        </div>
-
-        {/* Settings */}
-        <div className="border-t border-gray-200 pt-4">
-          {settingsItems.map(item => renderSidebarItem(item))}
-        </div>
-
-        {/* Utilities */}
-        <div className="border-t border-gray-200 pt-4 space-y-1">
-          <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            {!isCollapsed && 'Utilities'}
+        {isSuperAdminUser ? (
+          // SuperAdmin-specific navigation - standalone items
+          <div className="space-y-1">
+            {sidebarItems.map(item => renderSidebarItem(item))}
           </div>
-          <Link to="/integrations/email" className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-100">
-            <Icons.Mail className="w-5 h-5" />
-            {!isCollapsed && <span className="ml-3"><b>Email Integration</b></span>}
-          </Link>
-          {/* Chat */}
-          <div className="border-t border-gray-200 pt-4">
-            {chatItems.map(item => renderSidebarItem(item))}
-          </div>
-        </div>
+        ) : (
+          // Regular navigation for other users
+          <>
+            {/* Modules Section */}
+            <div className="space-y-1">
+              {renderSidebarItem({
+                ...modulesItem,
+                children: sidebarItems
+              })}
+            </div>
+
+            {/* Reports */}
+            <div className="border-t border-gray-200 pt-4">
+              {reportsItems.map(item => renderSidebarItem(item))}
+            </div>
+
+            {/* Analytics */}
+            <div className="border-t border-gray-200 pt-4">
+              {analyticsItems.map(item => renderSidebarItem(item))}
+            </div>
+
+            {/* Settings */}
+            <div className="border-t border-gray-200 pt-4">
+              {settingsItems.map(item => renderSidebarItem(item))}
+            </div>
+
+            {/* Utilities */}
+            <div className="border-t border-gray-200 pt-4 space-y-1">
+              <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                {!isCollapsed && 'Utilities'}
+              </div>
+              <Link to="/integrations/email" className="flex items-center px-3 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-100">
+                <Icons.Mail className="w-5 h-5" />
+                {!isCollapsed && <span className="ml-3"><b>Email Integration</b></span>}
+              </Link>
+              {/* Chat */}
+              <div className="border-t border-gray-200 pt-4">
+                {chatItems.map(item => renderSidebarItem(item))}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

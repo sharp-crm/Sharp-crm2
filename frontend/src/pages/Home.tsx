@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from "../store/useAuthStore";
 import { leadsApi, dealsApi, tasksApi, analyticsApi } from "../api/services";
 import { useNotificationStore } from '../store/useNotificationStore';
+import { isSuperAdmin } from '../utils/roleAccess';
 
 
 const StatCard = ({ label, value, icon: Icon }: { label: string; value: string | number; icon: React.ElementType }) => (
@@ -41,6 +42,13 @@ const Home: React.FC = () => {
   const user = useAuthStore((s) => s.user);
   const { addNotification } = useNotificationStore();
   
+  // Check if user is SuperAdmin and redirect to SuperAdmin home
+  useEffect(() => {
+    if (isSuperAdmin()) {
+      navigate('/home', { replace: true });
+    }
+  }, [navigate]);
+  
   // State for real data
   const [stats, setStats] = useState({
     openDeals: 0,
@@ -54,7 +62,10 @@ const Home: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchDashboardData();
+    // Only fetch data if user is not SuperAdmin
+    if (!isSuperAdmin()) {
+      fetchDashboardData();
+    }
   }, []);
 
   const fetchDashboardData = async () => {
