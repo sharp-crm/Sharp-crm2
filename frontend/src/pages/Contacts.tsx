@@ -26,7 +26,6 @@ const Contacts: React.FC = () => {
   const [contactToDelete, setContactToDelete] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
-  const [convertedContacts, setConvertedContacts] = useState<Set<string>>(new Set());
 
   const [filters, setFilters] = useState({
     status: false,
@@ -65,34 +64,8 @@ const Contacts: React.FC = () => {
         const data = await contactsApi.getAll();
         setContacts(data);
         
-        // Check for converted contacts by fetching leads
-        try {
-          const leads = await leadsApi.getAll();
-          const convertedContactIds = new Set<string>();
-          
-          // Check if any leads have matching contact information (email or phone)
-          leads.forEach(lead => {
-            const matchingContact = data.find(contact => {
-              // Check for email match (case-insensitive)
-              const emailMatch = contact.email && lead.email && 
-                contact.email.toLowerCase() === lead.email.toLowerCase();
-              
-              // Check for phone match (digit-only comparison)
-              const phoneMatch = contact.phone && lead.phone && 
-                contact.phone.replace(/\D/g, '') === lead.phone.replace(/\D/g, '');
-              
-              return emailMatch || phoneMatch;
-            });
-            
-            if (matchingContact) {
-              convertedContactIds.add(matchingContact.id);
-            }
-          });
-          
-          setConvertedContacts(convertedContactIds);
-        } catch (leadError) {
-          console.error('Error checking converted contacts:', leadError);
-        }
+        // Note: Removed conversion detection since contacts can have multiple leads
+        // with the same contact information
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch contacts');
         console.error('Error fetching contacts:', err);
@@ -342,22 +315,13 @@ const Contacts: React.FC = () => {
       >
         <Icons.Edit2 className="w-4 h-4" />
       </button>
-      {convertedContacts.has(row.id) ? (
-        <div 
-          className="p-1 text-green-600"
-          title="Already converted to lead"
-        >
-          <Icons.CheckCircle className="w-4 h-4" />
-        </div>
-      ) : (
-        <button 
-          className="p-1 text-gray-400 hover:text-purple-600 transition-colors"
-          onClick={() => handleConvertToLead(row)}
-          title="Convert to lead"
-        >
-          <Icons.UserPlus className="w-4 h-4" />
-        </button>
-      )}
+      <button 
+        className="p-1 text-gray-400 hover:text-purple-600 transition-colors"
+        onClick={() => handleConvertToLead(row)}
+        title="Convert to lead"
+      >
+        <Icons.ArrowRightCircle className="w-4 h-4" />
+      </button>
       <button 
         className="p-1 text-gray-400 hover:text-red-600 transition-colors"
         onClick={() => handleDelete(row.id)}
@@ -723,9 +687,6 @@ const Contacts: React.FC = () => {
         }}
         contact={selectedContact}
         onSuccess={() => {
-          if (selectedContact) {
-            setConvertedContacts(prev => new Set([...prev, selectedContact.id]));
-          }
           setSuccessMessage('Contact has been successfully converted to lead.');
         }}
       />

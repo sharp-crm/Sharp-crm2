@@ -66,7 +66,7 @@ export default defineConfig({
   ],
   server: {
     host: true,
-    port: 5173,
+    port: 5174,
     // Custom middleware handles routing - no historyApiFallback needed
   },
   build: {

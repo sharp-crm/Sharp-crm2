@@ -12,9 +12,11 @@ export interface Deal {
   leadSource: string;
   stage: string;
   amount: number;
+  phone: string; // Required for contacting the deal contact
   
   // Optional fields from AddNewModal  
   description?: string;
+  email?: string; // Optional email for the deal contact
   
   // Additional fields for deal functionality
   value?: number; // same as amount for backward compatibility
@@ -42,7 +44,9 @@ export interface CreateDealInput {
   leadSource: string;
   stage: string;
   amount: number;
+  phone: string; // Required for contacting the deal contact
   description?: string;
+  email?: string; // Optional email for the deal contact
   probability?: number;
   closeDate?: string;
   visibleTo?: string[];
@@ -54,7 +58,9 @@ export interface UpdateDealInput {
   leadSource?: string;
   stage?: string;
   amount?: number;
+  phone?: string; // Required for contacting the deal contact
   description?: string;
+  email?: string; // Optional email for the deal contact
   probability?: number;
   closeDate?: string;
   visibleTo?: string[];
@@ -97,6 +103,8 @@ export class DealsService {
       amount: amount,
       value: amount,
       probability: probability,
+      phone: input.phone || '', // Handle required phone field
+      email: input.email || '', // Handle optional email field
       description: input.description || '',
       closeDate: input.closeDate || this.getDefaultCloseDate(),
       visibleTo: visibleTo,

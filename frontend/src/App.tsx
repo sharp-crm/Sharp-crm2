@@ -7,9 +7,14 @@ import Logout from './pages/Logout';
 import Home from './pages/Home';
 import SuperAdminHome from './pages/SuperAdminHome';
 import Leads from './pages/Leads';
+import LeadDetailsPage from './pages/LeadDetailsPage';
 import Contacts from './pages/Contacts';
 import Deals from './pages/Deals';
 import Tasks from './pages/Tasks';
+import Products from './pages/Products';
+import ProductDetailsPage from './pages/ProductDetailsPage';
+import Quotes from './pages/Quotes';
+import QuoteDetailsPage from './pages/QuoteDetailsPage';
 import Subsidiaries from './pages/Subsidiries';
 import Dealers from './pages/Dealers';
 import Notifications from './pages/Notifications';
@@ -72,9 +77,14 @@ const App: React.FC = () => {
             
             {/* Routes that SuperAdmin cannot access - redirect to 404 */}
             <Route path="leads" element={<SuperAdminRouteGuard><Leads /></SuperAdminRouteGuard>} />
+            <Route path="leads/:id" element={<SuperAdminRouteGuard><LeadDetailsPage /></SuperAdminRouteGuard>} />
             <Route path="contacts" element={<SuperAdminRouteGuard><Contacts /></SuperAdminRouteGuard>} />
             <Route path="deals" element={<SuperAdminRouteGuard><Deals /></SuperAdminRouteGuard>} />
             <Route path="tasks" element={<SuperAdminRouteGuard><Tasks /></SuperAdminRouteGuard>} />
+            <Route path="products" element={<SuperAdminRouteGuard><Products /></SuperAdminRouteGuard>} />
+            <Route path="products/:id" element={<SuperAdminRouteGuard><ProductDetailsPage /></SuperAdminRouteGuard>} />
+            <Route path="quotes" element={<SuperAdminRouteGuard><Quotes /></SuperAdminRouteGuard>} />
+            <Route path="quotes/:id" element={<SuperAdminRouteGuard><QuoteDetailsPage /></SuperAdminRouteGuard>} />
             <Route path="subsidiaries" element={<SuperAdminRouteGuard><Subsidiaries /></SuperAdminRouteGuard>} />
             <Route path="dealers" element={<SuperAdminRouteGuard><Dealers /></SuperAdminRouteGuard>} />
             

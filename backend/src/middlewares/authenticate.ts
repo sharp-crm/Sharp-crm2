@@ -28,9 +28,13 @@ export interface AuthenticatedRequest extends Request {
 }
 
 export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
+  console.log(`🔍 [authenticate] Starting authentication for path: ${req.path}`);
+  console.log(`🔍 [authenticate] Request headers:`, req.headers);
+  
   const token = req.headers.authorization?.split(" ")[1];
   
   if (!token) {
+    console.log(`❌ [authenticate] No token provided`);
     res.status(401).json({ error: "No token provided" });
     return;
   }
@@ -68,7 +72,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         }
 
         // Update user context with latest data
-        (req as AuthenticatedRequest).user = {
+        const userData = {
           userId: userResult.Item.userId,
           email: userResult.Item.email,
           firstName: userResult.Item.firstName || '',
@@ -77,6 +81,10 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
           tenantId: userResult.Item.tenantId || 'DEFAULT_TENANT',
           isDeleted: userResult.Item.isDeleted || false
         };
+        
+        (req as AuthenticatedRequest).user = userData;
+        
+        console.log(`✅ [authenticate] User authenticated successfully:`, userData);
         
         // Also attach token expiry info
         (req as AuthenticatedRequest).tokenInfo = {

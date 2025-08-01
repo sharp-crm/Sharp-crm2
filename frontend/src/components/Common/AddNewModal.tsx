@@ -4,8 +4,9 @@ import * as Icons from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNotificationStore } from '../../store/useNotificationStore';
 import { useToastStore } from '../../store/useToastStore';
-import { contactsApi, leadsApi, dealsApi, dealersApi, subsidiariesApi, tasksApi } from '../../api/services';
+import { contactsApi, leadsApi, dealsApi, dealersApi, subsidiariesApi, tasksApi, productsApi, quotesApi } from '../../api/services';
 import PhoneNumberInput from './PhoneNumberInput';
+import LineItemsInput from './LineItemsInput';
 import API from '../../api/client';
 import { DEAL_STAGES, TASK_STATUSES } from '../../types';
 
@@ -33,7 +34,7 @@ interface FormFieldOption {
 interface FormField {
   name: string;
   label: string;
-  type: 'text' | 'tel' | 'email' | 'select' | 'multiselect' | 'textarea' | 'date' | 'number';
+  type: 'text' | 'tel' | 'email' | 'select' | 'multiselect' | 'textarea' | 'date' | 'number' | 'lineItems';
   required?: boolean;
   group?: string;
   options?: FormFieldOption[];
@@ -59,6 +60,8 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
       { id: 'contact', name: 'Contact', icon: 'User', description: 'A person you do business with' },
       { id: 'deal', name: 'Deal', icon: 'Target', description: 'A sales opportunity' },
       { id: 'task', name: 'Task', icon: 'CheckSquare', description: 'A to-do item' },
+      { id: 'product', name: 'Product', icon: 'Package', description: 'A product in your catalog' },
+      { id: 'quote', name: 'Quote', icon: 'FileText', description: 'A sales quote for customers' },
     ];
 
     // Only admins can create subsidiaries and dealers
@@ -75,7 +78,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
 
   // Fetch tenant users when modal opens
   useEffect(() => {
-    if (isOpen && (selectedType === 'lead' || selectedType === 'contact' || selectedType === 'task' || selectedType === 'deal' || selectedType === 'dealer' || selectedType === 'subsidiary')) {
+    if (isOpen && (selectedType === 'lead' || selectedType === 'contact' || selectedType === 'task' || selectedType === 'deal' || selectedType === 'dealer' || selectedType === 'subsidiary' || selectedType === 'product' || selectedType === 'quote')) {
       const fetchTenantUsers = async () => {
         try {
           const response = await API.get('/users/tenant-users');
@@ -290,15 +293,22 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
         ];
       case 'deal':
         return [
-          { name: 'dealOwner', label: 'Deal Owner', type: 'text', required: true },
-          { name: 'dealName', label: 'Deal Name', type: 'text', required: true },
-          { name: 'amount', label: 'Amount', type: 'number', required: true },
-          { name: 'leadSource', label: 'Lead Source', type: 'select', options: leadSourceOptions, required: true },
-          { name: 'stage', label: 'Stage', type: 'select', options: dealStageOptions, required: true },
-          { name: 'closeDate', label: 'Expected Close Date', type: 'date', required: true },
-          { name: 'probability', label: 'Probability (%)', type: 'number', required: false },
-          { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers), required: false },
-          { name: 'description', label: 'Description', type: 'textarea', required: false }
+          // Deal Information Section
+          { name: 'dealOwner', label: 'Deal Owner', type: 'text', required: true, group: 'deal' },
+          { name: 'dealName', label: 'Deal Name', type: 'text', required: true, group: 'deal' },
+          { name: 'amount', label: 'Amount', type: 'number', required: true, group: 'deal' },
+          { name: 'leadSource', label: 'Lead Source', type: 'select', options: leadSourceOptions, required: true, group: 'deal' },
+          { name: 'stage', label: 'Stage', type: 'select', options: dealStageOptions, required: true, group: 'deal' },
+          { name: 'closeDate', label: 'Expected Close Date', type: 'date', required: true, group: 'deal' },
+          { name: 'probability', label: 'Probability (%)', type: 'number', required: false, group: 'deal' },
+          
+          // Contact Information Section
+          { name: 'phone', label: 'Contact Phone', type: 'tel', required: true, group: 'contact' },
+          { name: 'email', label: 'Contact Email', type: 'email', required: false, group: 'contact' },
+          
+          // Additional Information Section
+          { name: 'description', label: 'Description', type: 'textarea', required: false, group: 'additional' },
+          { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers), required: false, group: 'additional' }
         ];
       case 'dealer':
         return [
@@ -322,6 +332,71 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           { name: 'address', label: 'Address', type: 'textarea', required: true },
           { name: 'totalEmployees', label: 'Total Employees', type: 'number', required: true },
           { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers) }
+        ];
+      case 'product':
+        return [
+          // Product Information Section
+          { name: 'productOwner', label: 'Product Owner', type: 'select', options: getUserOptions(tenantUsers), required: true, group: 'product' },
+          { name: 'productCode', label: 'Product Code', type: 'text', required: true, group: 'product' },
+          { name: 'name', label: 'Product Name', type: 'text', required: true, group: 'product' },
+          { name: 'activeStatus', label: 'Active Status', type: 'select', options: [
+            { value: 'true', label: 'Active' },
+            { value: 'false', label: 'Inactive' }
+          ], required: false, group: 'product' },
+          
+          // Price Information Section
+          { name: 'unitPrice', label: 'Unit Price', type: 'number', required: true, group: 'price' },
+          { name: 'taxPercentage', label: 'Tax %', type: 'number', required: true, group: 'price' },
+          { name: 'commissionRate', label: 'Commission Rate', type: 'number', required: false, group: 'price' },
+          
+          // Stock Information Section
+          { name: 'usageUnit', label: 'Usage Unit', type: 'select', options: [
+            { value: 'Pieces', label: 'Pieces' },
+            { value: 'Kilograms', label: 'Kilograms' },
+            { value: 'Meters', label: 'Meters' },
+            { value: 'Liters', label: 'Liters' },
+            { value: 'Units', label: 'Units' },
+            { value: 'Boxes', label: 'Boxes' },
+            { value: 'Cartons', label: 'Cartons' },
+            { value: 'Bottles', label: 'Bottles' },
+            { value: 'Bags', label: 'Bags' },
+            { value: 'Rolls', label: 'Rolls' }
+          ], required: true, group: 'stock' },
+          { name: 'quantityInStock', label: 'Quantity in Stock', type: 'number', required: false, group: 'stock' },
+          { name: 'quantityInDemand', label: 'Quantity in Demand', type: 'number', required: false, group: 'stock' },
+          { name: 'reorderLevel', label: 'Reorder Level', type: 'number', required: false, group: 'stock' },
+          { name: 'quantityOrdered', label: 'Quantity Ordered', type: 'number', required: false, group: 'stock' },
+          
+          // Description Information Section
+          { name: 'description', label: 'Description', type: 'textarea', required: false, group: 'description' },
+          { name: 'notes', label: 'Notes', type: 'textarea', required: false, group: 'description' },
+          
+          // Visibility Section
+          { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers), required: false, group: 'visibility' }
+        ];
+      case 'quote':
+        return [
+          // Quote Information Section
+          { name: 'quoteOwner', label: 'Quote Owner', type: 'select', options: getUserOptions(tenantUsers), required: true, group: 'quote' },
+          { name: 'quoteName', label: 'Quote Name', type: 'text', required: true, group: 'quote' },
+          { name: 'status', label: 'Status', type: 'select', options: [
+            { value: 'Draft', label: 'Draft' },
+            { value: 'Sent', label: 'Sent' },
+            { value: 'Accepted', label: 'Accepted' },
+            { value: 'Rejected', label: 'Rejected' },
+            { value: 'Expired', label: 'Expired' }
+          ], required: true, group: 'quote' },
+          { name: 'validUntil', label: 'Valid Until', type: 'date', required: true, group: 'quote' },
+          
+          // Line Items Section
+          { name: 'lineItems', label: 'Quote Items', type: 'lineItems', required: true, group: 'lineItems' },
+          
+          // Quote Details Section
+          { name: 'description', label: 'Description', type: 'textarea', required: false, group: 'details' },
+          { name: 'terms', label: 'Terms and Conditions', type: 'textarea', required: false, group: 'details' },
+          
+          // Visibility Section
+          { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers), required: false, group: 'visibility' }
         ];
       default:
         return [];
@@ -377,10 +452,10 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             firstName: formData.firstName,
             lastName: formData.lastName,
             company: formData.company,
-            email: formData.email,
+            email: formData.email || undefined, // Make email optional
             leadSource: formData.leadSource,
             leadStatus: formData.leadStatus,
-            phone: formData.phone,
+            phone: formData.phone || '', // Ensure phone is provided
             title: formData.title,
             street: formData.street,
             area: formData.area,
@@ -415,7 +490,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             companyName: formData.companyName,
             email: formData.email || '',
             leadSource: formData.leadSource,
-            phone: formData.phone,
+            phone: formData.phone || '', // Ensure phone is provided
             title: formData.title,
             department: formData.department,
             street: formData.street,
@@ -445,6 +520,8 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           await dealsApi.create({
             dealOwner: formData.dealOwner,
             dealName: formData.dealName,
+            phone: formData.phone || '', // Required phone field
+            email: formData.email || undefined, // Optional email field
             leadSource: formData.leadSource,
             stage: formData.stage,
             amount: parseFloat(formData.amount) || 0,
@@ -537,6 +614,107 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             message: `Successfully created new dealer: ${formData.name}`
         });
         break;
+      case 'product':
+        await productsApi.create({
+          // Product Information
+          productOwner: formData.productOwner || '',
+          productCode: formData.productCode || '',
+          name: formData.name || '',
+          activeStatus: formData.activeStatus === 'true' || formData.activeStatus === true,
+          
+          // Price Information
+          unitPrice: parseFloat(formData.unitPrice) || 0,
+          taxPercentage: parseFloat(formData.taxPercentage) || 0,
+          commissionRate: formData.commissionRate ? parseFloat(formData.commissionRate) : undefined,
+          
+          // Stock Information
+          usageUnit: formData.usageUnit || 'Pieces',
+          quantityInStock: formData.quantityInStock ? parseFloat(formData.quantityInStock) : 0,
+          quantityInDemand: formData.quantityInDemand ? parseFloat(formData.quantityInDemand) : 0,
+          reorderLevel: formData.reorderLevel ? parseFloat(formData.reorderLevel) : undefined,
+          quantityOrdered: formData.quantityOrdered ? parseFloat(formData.quantityOrdered) : 0,
+          
+          // Description Information
+          description: formData.description || '',
+          
+          // Backward compatibility
+          price: parseFloat(formData.unitPrice) || 0,
+          cost: 0,
+          
+          visibleTo: formData.visibleTo || [],
+          tenantId: '',
+          createdBy: user?.userId || '',
+          userId: user?.userId || ''
+        });
+        addNotification({
+          type: 'success',
+          title: 'Product Created',
+          message: `Successfully created new product: ${formData.name}`,
+          timestamp: new Date().toISOString(),
+          read: false
+        });
+        addToast({
+          type: 'success',
+          title: 'Product Created',
+          message: `Successfully created new product: ${formData.name}`
+        });
+        break;
+      case 'quote':
+        // Calculate totals from line items
+        const lineItems = formData.lineItems || [];
+        const subtotal = lineItems.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
+        const totalDiscount = lineItems.reduce((sum: number, item: any) => {
+          // Calculate discount amount from percentage
+          const discountAmount = ((item.amount || 0) * (item.discount || 0)) / 100;
+          return sum + discountAmount;
+        }, 0);
+        const totalTax = lineItems.reduce((sum: number, item: any) => sum + (item.tax || 0), 0);
+        const grandTotal = subtotal - totalDiscount + totalTax;
+
+        await quotesApi.create({
+          // Basic Quote Info
+          quoteNumber: `QT-${Date.now()}`, // Auto-generated
+          quoteName: formData.quoteName || '',
+          quoteOwner: formData.quoteOwner || '',
+          status: formData.status || 'Draft',
+          validUntil: formData.validUntil || '',
+          activeStatus: true,
+          
+          // Customer Info (default values)
+          customerName: 'Customer Name',
+          customerEmail: 'customer@example.com',
+          customerPhone: '+1234567890',
+          
+          // Line Items
+          lineItems: lineItems,
+          
+          // Pricing Info (auto-calculated)
+          subtotal: subtotal,
+          discountAmount: totalDiscount,
+          taxAmount: totalTax,
+          adjustment: 0,
+          totalAmount: grandTotal,
+          
+          // Quote Details
+          description: formData.description || '',
+          terms: formData.terms || '',
+          notes: '',
+          
+          visibleTo: formData.visibleTo || []
+        });
+        addNotification({
+          type: 'success',
+          title: 'Quote Created',
+          message: `Successfully created new quote: ${formData.quoteName}`,
+          timestamp: new Date().toISOString(),
+          read: false
+        });
+        addToast({
+          type: 'success',
+          title: 'Quote Created',
+          message: `Successfully created new quote: ${formData.quoteName}`
+        });
+        break;
       }
 
       // Call onSuccess callback to refresh the UI
@@ -576,14 +754,14 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
     switch (field.type) {
       case 'multiselect':
         return (
-          <div key={field.name} className={field.group ? 'col-span-2' : ''}>
+          <div key={field.name} className={`${field.group ? 'col-span-2' : ''} col-span-full`}>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               {field.label} {field.required && <span className="text-red-500">*</span>}
             </label>
-            <div className="border border-gray-300 rounded-lg p-4 max-h-60 overflow-y-auto">
+            <div className="border border-gray-300 rounded-lg p-4 max-h-60 overflow-y-auto bg-white">
               <div className="space-y-2">
                 {field.options?.map(option => (
-                  <label key={option.value} className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                  <label key={option.value} className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded cursor-pointer transition-colors">
                     <input
                       type="checkbox"
                       checked={(formData[field.name] || []).includes(option.value)}
@@ -601,7 +779,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 ))}
               </div>
             </div>
-            <p className="mt-1 text-sm text-gray-500">Select users who can view this lead</p>
+            <p className="mt-1 text-sm text-gray-500">Select users who can view this {selectedType}</p>
           </div>
         );
       case 'select':
@@ -613,7 +791,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             <select
               value={formData[field.name] || ''}
               onChange={(e) => handleInputChange(field.name, e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
               required={field.required}
             >
               <option value="">Select {field.label}</option>
@@ -623,10 +801,23 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             </select>
           </div>
         );
+      case 'lineItems':
+        return (
+          <div key={field.name} className="col-span-full">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              {field.label} {field.required && <span className="text-red-500">*</span>}
+            </label>
+            <LineItemsInput
+              value={formData[field.name] || []}
+              onChange={(items) => handleInputChange(field.name, items)}
+              className="w-full"
+            />
+          </div>
+        );
       default:
         return (
-          <div key={field.name} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          <div key={field.name} className={field.type === 'textarea' ? 'col-span-full' : ''}>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               {field.label}
               {field.required && <span className="text-red-500 ml-1">*</span>}
             </label>
@@ -636,7 +827,16 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 onChange={(phoneNumber) => handleInputChange(field.name, phoneNumber)}
                 placeholder={`Enter ${field.label.toLowerCase()}...`}
                 className="w-full"
-                defaultCountryCode={selectedType === 'contact' || selectedType === 'lead' ? '+91' : undefined}
+                defaultCountryCode="+91"
+              />
+            ) : field.type === 'textarea' ? (
+              <textarea
+                value={formData[field.name] || ''}
+                onChange={(e) => handleInputChange(field.name, e.target.value)}
+                required={field.required}
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                placeholder={`Enter ${field.label.toLowerCase()}...`}
               />
             ) : (
               <input
@@ -644,7 +844,13 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 value={formData[field.name] || ''}
                 onChange={(e) => handleInputChange(field.name, field.type === 'number' ? Number(e.target.value) : e.target.value)}
                 required={field.required}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  field.group === 'stock' && field.name === 'quantityInStock' ? 'border-green-300 focus:border-green-500 focus:ring-green-500' :
+                  field.group === 'stock' && field.name === 'quantityInDemand' ? 'border-orange-300 focus:border-orange-500 focus:ring-orange-500' :
+                  field.group === 'stock' && field.name === 'reorderLevel' ? 'border-red-300 focus:border-red-500 focus:ring-red-500' :
+                  field.group === 'stock' && field.name === 'quantityOrdered' ? 'border-blue-300 focus:border-blue-500 focus:ring-blue-500' :
+                  ''
+                }`}
                 placeholder={`Enter ${field.label.toLowerCase()}...`}
                 {...(field.type === 'date' && {
                   min: new Date(new Date().getFullYear() - 25, 0, 1).toISOString().split('T')[0],
@@ -652,6 +858,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 })}
               />
             )}
+            
           </div>
         );
     }
@@ -662,7 +869,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
       <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
       
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <Dialog.Panel className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <Dialog.Title className="text-xl font-semibold text-gray-900">
               {selectedType ? `Create New ${selectedType.charAt(0).toUpperCase() + selectedType.slice(1)}` : 'Create New Record'}
@@ -713,12 +920,12 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                     Back to selection
                   </button>
                   <h2 className="text-xl font-semibold text-gray-900 ml-4">
-                    Create New {selectedType.charAt(0).toUpperCase() + selectedType.slice(1)}
+                    Create New {selectedType?.charAt(0).toUpperCase() + selectedType?.slice(1)}
                   </h2>
                 </div>
 
                 <p className="text-sm text-gray-600 mb-6">
-                  Fill in the details below to create a new {selectedType.toLowerCase()}.
+                  Fill in the details below to create a new {selectedType?.toLowerCase()}.
                 </p>
 
                 {/* Error Display */}
@@ -738,11 +945,43 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 {Object.entries(groupedFields).map(([group, fields]) => (
                   <div key={group} className="mb-8">
                     {group !== 'default' && (
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                        {group.charAt(0).toUpperCase() + group.slice(1)} Information
-                      </h3>
+                      <div className="mb-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                          {group === 'product' && <Icons.Package className="w-5 h-5 mr-2 text-blue-600" />}
+                          {group === 'price' && <Icons.DollarSign className="w-5 h-5 mr-2 text-green-600" />}
+                          {group === 'stock' && <Icons.Box className="w-5 h-5 mr-2 text-orange-600" />}
+                          {group === 'description' && <Icons.FileText className="w-5 h-5 mr-2 text-purple-600" />}
+                          {group === 'visibility' && <Icons.Users className="w-5 h-5 mr-2 text-indigo-600" />}
+                          {group === 'deal' && <Icons.Target className="w-5 h-5 mr-2 text-blue-600" />}
+                          {group === 'contact' && <Icons.Phone className="w-5 h-5 mr-2 text-green-600" />}
+                          {group === 'additional' && <Icons.FileText className="w-5 h-5 mr-2 text-purple-600" />}
+                          {group === 'address' && <Icons.MapPin className="w-5 h-5 mr-2 text-orange-600" />}
+                          {group === 'quote' && <Icons.FileText className="w-5 h-5 mr-2 text-blue-600" />}
+                          {group === 'customer' && <Icons.User className="w-5 h-5 mr-2 text-green-600" />}
+                          {group === 'pricing' && <Icons.DollarSign className="w-5 h-5 mr-2 text-green-600" />}
+                          {group === 'details' && <Icons.FileText className="w-5 h-5 mr-2 text-purple-600" />}
+                          {group === 'lineItems' && <Icons.List className="w-5 h-5 mr-2 text-indigo-600" />}
+                          {group.charAt(0).toUpperCase() + group.slice(1)} Information
+                        </h3>
+                        <div className="border-b border-gray-200 mb-4"></div>
+                      </div>
                     )}
-                    <div className={`grid ${group === 'address' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'} gap-4`}>
+                    <div className={`grid ${
+                      group === 'address' ? 'grid-cols-1 md:grid-cols-2' : 
+                      group === 'deal' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
+                      group === 'contact' ? 'grid-cols-1 md:grid-cols-2' :
+                      group === 'product' ? 'grid-cols-1 md:grid-cols-2' :
+                      group === 'price' ? 'grid-cols-1 md:grid-cols-3' :
+                      group === 'stock' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
+                      group === 'description' ? 'grid-cols-1' :
+                      group === 'visibility' ? 'grid-cols-1' :
+                      group === 'quote' ? 'grid-cols-1 md:grid-cols-2' :
+                      group === 'customer' ? 'grid-cols-1 md:grid-cols-2' :
+                      group === 'pricing' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
+                      group === 'details' ? 'grid-cols-1' :
+                      group === 'lineItems' ? 'grid-cols-1' :
+                      'grid-cols-1'
+                    } gap-6`}>
                       {fields.map((field) => renderField(field))}
                     </div>
                   </div>
@@ -768,7 +1007,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                       Creating...
                     </>
                   ) : (
-                    `Create ${selectedType.charAt(0).toUpperCase() + selectedType.slice(1)}`
+                    `Create ${selectedType?.charAt(0).toUpperCase() + selectedType?.slice(1)}`
                   )}
                 </button>
               </div>

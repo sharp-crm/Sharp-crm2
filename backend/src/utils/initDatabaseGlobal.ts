@@ -276,6 +276,38 @@ const tables = [
     BillingMode: "PAY_PER_REQUEST"
   },
   {
+    TableName: getTableName("Products"),
+    KeySchema: [
+      { AttributeName: "id", KeyType: "HASH" }
+    ],
+    AttributeDefinitions: [
+      { AttributeName: "id", AttributeType: "S" },
+      { AttributeName: "tenantId", AttributeType: "S" },
+      { AttributeName: "productCode", AttributeType: "S" }
+    ],
+    GlobalSecondaryIndexes: [
+      {
+        IndexName: "TenantIndex",
+        KeySchema: [
+          { AttributeName: "tenantId", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "ProductCodeIndex",
+        KeySchema: [
+          { AttributeName: "productCode", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      }
+    ],
+    BillingMode: "PAY_PER_REQUEST"
+  },
+  {
     TableName: getTableName("Reports"),
     KeySchema: [
       { AttributeName: "id", KeyType: "HASH" }
@@ -290,6 +322,68 @@ const tables = [
         IndexName: "TenantIndex",
         KeySchema: [
           { AttributeName: "tenantId", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "CreatedByIndex",
+        KeySchema: [
+          { AttributeName: "createdBy", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      }
+    ],
+    BillingMode: "PAY_PER_REQUEST"
+  },
+  {
+    TableName: getTableName("Quotes"),
+    KeySchema: [
+      { AttributeName: "id", KeyType: "HASH" }
+    ],
+    AttributeDefinitions: [
+      { AttributeName: "id", AttributeType: "S" },
+      { AttributeName: "tenantId", AttributeType: "S" },
+      { AttributeName: "quoteOwner", AttributeType: "S" },
+      { AttributeName: "status", AttributeType: "S" },
+      { AttributeName: "customerName", AttributeType: "S" },
+      { AttributeName: "createdBy", AttributeType: "S" }
+    ],
+    GlobalSecondaryIndexes: [
+      {
+        IndexName: "TenantIndex",
+        KeySchema: [
+          { AttributeName: "tenantId", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "QuoteOwnerIndex",
+        KeySchema: [
+          { AttributeName: "quoteOwner", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "StatusIndex",
+        KeySchema: [
+          { AttributeName: "status", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "CustomerIndex",
+        KeySchema: [
+          { AttributeName: "customerName", KeyType: "HASH" }
         ],
         Projection: {
           ProjectionType: "ALL"

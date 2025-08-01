@@ -170,8 +170,8 @@ const createDeal: RequestHandler = async (req: any, res) => {
       return;
     }
 
-    // Validate required fields
-    const requiredFields = ['dealOwner', 'dealName', 'leadSource', 'stage', 'amount'];
+    // Validate required fields (phone is now required)
+    const requiredFields = ['dealOwner', 'dealName', 'leadSource', 'stage', 'amount', 'phone'];
     const missingFields = validateRequiredFields(req.body, requiredFields);
     
     if (missingFields) {
@@ -198,6 +198,18 @@ const createDeal: RequestHandler = async (req: any, res) => {
       }
     }
 
+    // Validate phone number is not empty or just whitespace
+    if (!req.body.phone || req.body.phone.trim() === '') {
+      res.status(400).json({ error: "Phone number is required" });
+      return;
+    }
+
+    // Validate email format if provided
+    if (req.body.email && !validateEmail(req.body.email)) {
+      res.status(400).json({ error: "Invalid email format" });
+      return;
+    }
+
     // Validate visibleTo array if provided
     if (req.body.visibleTo && !Array.isArray(req.body.visibleTo)) {
       res.status(400).json({ error: "visibleTo must be an array of user IDs" });
@@ -212,6 +224,8 @@ const createDeal: RequestHandler = async (req: any, res) => {
       leadSource: req.body.leadSource,
       stage: req.body.stage,
       amount: amount,
+      phone: req.body.phone,
+      email: req.body.email || undefined, // Make email optional
       description: req.body.description,
       probability: req.body.probability ? parseFloat(req.body.probability) : undefined,
       closeDate: req.body.closeDate,
@@ -268,6 +282,18 @@ const updateDeal: RequestHandler = async (req: any, res) => {
       req.body.probability = probability;
     }
 
+    // Validate phone number if provided
+    if (req.body.phone && req.body.phone.trim() === '') {
+      res.status(400).json({ error: "Phone number cannot be empty" });
+      return;
+    }
+
+    // Validate email format if provided
+    if (req.body.email && !validateEmail(req.body.email)) {
+      res.status(400).json({ error: "Invalid email format" });
+      return;
+    }
+
     // Validate visibleTo if provided
     if (req.body.visibleTo !== undefined && !Array.isArray(req.body.visibleTo)) {
       res.status(400).json({ error: "visibleTo must be an array of user IDs" });
@@ -279,7 +305,7 @@ const updateDeal: RequestHandler = async (req: any, res) => {
     // Only include fields that are provided in the request
     const updateableFields = [
       'dealOwner', 'dealName', 'leadSource', 'stage', 'amount', 
-      'description', 'probability', 'closeDate', 'visibleTo'
+      'phone', 'email', 'description', 'probability', 'closeDate', 'visibleTo'
     ];
 
     updateableFields.forEach(field => {

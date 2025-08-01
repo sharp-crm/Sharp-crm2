@@ -61,6 +61,16 @@ const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
   const [selectedCountry, setSelectedCountry] = useState<Country>(getDefaultCountry());
   const [phoneNumber, setPhoneNumber] = useState('');
 
+  // Update selected country when defaultCountryCode changes
+  useEffect(() => {
+    if (defaultCountryCode) {
+      const defaultCountry = countries.find(c => c.dialCode === defaultCountryCode);
+      if (defaultCountry) {
+        setSelectedCountry(defaultCountry);
+      }
+    }
+  }, [defaultCountryCode]);
+
   // Parse existing phone number to extract country code and number
   useEffect(() => {
     if (value && value.length > 0) {
@@ -73,13 +83,24 @@ const PhoneNumberInput: React.FC<PhoneNumberInputProps> = ({
         setSelectedCountry(matchingCountry);
         setPhoneNumber(value.substring(matchingCountry.dialCode.length));
       } else {
-        // If no country code found, assume it's just the number
-        setPhoneNumber(value);
+        // If no country code found, use default country code if provided
+        if (defaultCountryCode) {
+          const defaultCountry = countries.find(c => c.dialCode === defaultCountryCode);
+          if (defaultCountry) {
+            setSelectedCountry(defaultCountry);
+            setPhoneNumber(value);
+          } else {
+            setPhoneNumber(value);
+          }
+        } else {
+          // If no country code found and no default, assume it's just the number
+          setPhoneNumber(value);
+        }
       }
     } else {
       setPhoneNumber('');
     }
-  }, [value]);
+  }, [value, defaultCountryCode]);
 
   const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const country = countries.find(c => c.code === e.target.value);

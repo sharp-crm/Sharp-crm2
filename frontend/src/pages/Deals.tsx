@@ -35,6 +35,8 @@ const Deals: React.FC = () => {
   const [selectedAmountTo, setSelectedAmountTo] = useState<string>('');
   const [selectedOwner, setSelectedOwner] = useState<string>('');
   const [selectedDealName, setSelectedDealName] = useState<string>('');
+  const [phoneSearch, setPhoneSearch] = useState<string>('');
+  const [showPhoneSearch, setShowPhoneSearch] = useState(false);
 
   // Fetch users data on component mount
   useEffect(() => {
@@ -295,6 +297,17 @@ const Deals: React.FC = () => {
       if (dealOwner !== selectedOwnerName) return false;
     }
 
+    // Phone search filter (minimum 2 digits)
+    if (phoneSearch && phoneSearch.length >= 2) {
+      const phone = deal.phone || '';
+      // Remove any non-digit characters and search within the phone number
+      const cleanPhone = phone.replace(/\D/g, '');
+      const searchDigits = phoneSearch.replace(/\D/g, '');
+      if (!cleanPhone.includes(searchDigits)) {
+        return false;
+      }
+    }
+
     return true;
   });
 
@@ -354,7 +367,7 @@ const Deals: React.FC = () => {
       {showFilters && (
         <div className="mb-8 mt-6">
           <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 w-full">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Deal Name
@@ -425,6 +438,21 @@ const Deals: React.FC = () => {
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Contact Phone
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter phone number (min 2 digits)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  value={phoneSearch}
+                  onChange={(e) => setPhoneSearch(e.target.value)}
+                />
+                {phoneSearch.length > 0 && phoneSearch.length < 2 && (
+                  <p className="text-xs text-gray-500 mt-1">Enter at least 2 digits to search</p>
+                )}
+              </div>
             </div>
             <div className="mt-4 flex justify-end">
               <button
@@ -434,6 +462,7 @@ const Deals: React.FC = () => {
                   setSelectedAmountFrom('');
                   setSelectedAmountTo('');
                   setSelectedOwner('');
+                  setPhoneSearch('');
                 }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 transition-colors"
               >

@@ -120,27 +120,6 @@ const ConvertToLeadModal: React.FC<ConvertToLeadModalProps> = ({
     setError(null);
 
     try {
-      // Check for existing leads with same email or phone
-      const existingLeads = await leadsApi.getAll();
-      const emailExists = formData.email && existingLeads.some(lead => 
-        lead.email && lead.email.toLowerCase() === formData.email.toLowerCase()
-      );
-      const phoneExists = formData.phone && existingLeads.some(lead => 
-        lead.phone && lead.phone.replace(/\D/g, '') === formData.phone.replace(/\D/g, '')
-      );
-
-      if (emailExists) {
-        setError('A lead with this email address already exists. Please check the existing lead or use a different email.');
-        setLoading(false);
-        return;
-      }
-
-      if (phoneExists) {
-        setError('A lead with this phone number already exists. Please check the existing lead or use a different phone number.');
-        setLoading(false);
-        return;
-      }
-
       // Create new lead with contact data
       await leadsApi.create({
         firstName: formData.firstName,

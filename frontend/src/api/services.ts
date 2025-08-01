@@ -84,9 +84,11 @@ export interface Deal extends Omit<DealType, 'stage'> {
   dealName: string;
   leadSource: string;
   amount: number;
+  phone?: string; // Optional for contacting the deal contact
   
   // Optional fields from AddNewModal  
   description?: string;
+  email?: string; // Optional email for the deal contact
   
   // Additional fields for deal functionality
   value?: number; // same as amount for backward compatibility
@@ -126,6 +128,107 @@ export interface Task {
   tenantId: string;
   createdAt: string;
   visibleTo?: string[];
+}
+
+export interface Product {
+  id: string;
+  // Product Information
+  productOwner: string;
+  productCode: string;
+  name: string;
+  activeStatus?: boolean;
+  
+  // Price Information
+  unitPrice: number;
+  taxPercentage: number;
+  commissionRate?: number;
+  
+  // Stock Information
+  usageUnit: string;
+  quantityInStock?: number;
+  quantityInDemand?: number;
+  reorderLevel?: number;
+  quantityOrdered?: number;
+  
+  // Description Information
+  description: string;
+  notes?: string;
+  
+  // Legacy fields for backward compatibility
+  category?: string;
+  price?: number;
+  cost?: number;
+  inStock?: boolean;
+  sku?: string;
+  manufacturer?: string;
+  weight?: number;
+  dimensions?: string;
+  
+  // Auditing fields
+  createdBy: string;
+  createdAt: string;
+  updatedBy?: string;
+  updatedAt?: string;
+  isDeleted?: boolean;
+  userId: string;
+  tenantId: string;
+  visibleTo?: string[];
+}
+
+export interface Quote {
+  id: string;
+  
+  // Basic Quote Info
+  quoteNumber: string;
+  quoteName: string;
+  quoteOwner: string;
+  status: 'Draft' | 'Sent' | 'Accepted' | 'Rejected' | 'Expired';
+  validUntil: string;
+  activeStatus: boolean;
+  
+  // Customer Info
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  
+  // Line Items
+  lineItems: LineItem[];
+  
+  // Pricing Info
+  subtotal: number;
+  discountAmount: number;
+  taxAmount: number;
+  adjustment: number;
+  totalAmount: number;
+  
+  // Quote Details
+  description: string;
+  terms: string;
+  notes: string;
+  
+  // Audit fields
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+  deletedBy?: string;
+  isDeleted: boolean;
+  deletedAt?: string;
+  userId: string;
+  tenantId: string;
+  visibleTo?: string[];
+}
+
+export interface LineItem {
+  id: string;
+  productName: string;
+  productId: string; // Add productId for database relationship
+  description: string;
+  quantity: number;
+  listPrice: number;
+  amount: number;
+  discount: number;
+  tax: number;
 }
 
 export interface ApiResponse<T> {
@@ -282,7 +385,9 @@ export const dealsApi = {
     leadSource: string;
     stage: string;
     amount: number;
+    phone: string; // Required for contacting the deal contact
     description?: string;
+    email?: string; // Optional email for the deal contact
     probability?: number;
     closeDate?: string;
     visibleTo: string[];
@@ -431,6 +536,110 @@ export const tasksApi = {
   delete: async (id: string): Promise<void> => {
     try {
       await API.delete(`/tasks/${id}`);
+    } catch (error) {
+      handleApiError(error);
+      throw error;
+    }
+  }
+};
+
+// Products API
+export const productsApi = {
+  getAll: async (): Promise<Product[]> => {
+    try {
+      const response = await API.get<ApiResponse<Product[]>>('/products');
+      return response.data.data || [];
+    } catch (error) {
+      handleApiError(error);
+      return [];
+    }
+  },
+
+  getById: async (id: string): Promise<Product | null> => {
+    try {
+      const response = await API.get<ApiResponse<Product>>(`/products/${id}`);
+      return response.data.data;
+    } catch (error) {
+      handleApiError(error);
+      return null;
+    }
+  },
+
+  create: async (product: Omit<Product, 'id' | 'createdAt'>): Promise<Product> => {
+    try {
+      const response = await API.post<ApiResponse<Product>>('/products', product);
+      return response.data.data;
+    } catch (error) {
+      handleApiError(error);
+      throw error;
+    }
+  },
+
+  update: async (id: string, updates: Partial<Product>): Promise<Product> => {
+    try {
+      const response = await API.put<ApiResponse<Product>>(`/products/${id}`, updates);
+      return response.data.data;
+    } catch (error) {
+      handleApiError(error);
+      throw error;
+    }
+  },
+
+  delete: async (id: string): Promise<void> => {
+    try {
+      await API.delete(`/products/${id}`);
+    } catch (error) {
+      handleApiError(error);
+      throw error;
+    }
+  }
+};
+
+// Quotes API
+export const quotesApi = {
+  getAll: async (): Promise<Quote[]> => {
+    try {
+      const response = await API.get<ApiResponse<Quote[]>>('/quotes');
+      return response.data.data || [];
+    } catch (error) {
+      handleApiError(error);
+      return [];
+    }
+  },
+
+  getById: async (id: string): Promise<Quote | null> => {
+    try {
+      const response = await API.get<ApiResponse<Quote>>(`/quotes/${id}`);
+      return response.data.data;
+    } catch (error) {
+      handleApiError(error);
+      return null;
+    }
+  },
+
+  create: async (quote: Omit<Quote, 'id' | 'createdBy' | 'createdAt' | 'updatedBy' | 'updatedAt' | 'deletedBy' | 'isDeleted' | 'deletedAt' | 'userId' | 'tenantId'>): Promise<Quote> => {
+    try {
+      const response = await API.post<ApiResponse<Quote>>('/quotes', quote);
+      return response.data.data;
+    } catch (error) {
+      handleApiError(error);
+      throw error;
+    }
+  },
+
+  update: async (id: string, updates: Partial<Quote>): Promise<Quote> => {
+    try {
+      const response = await API.put<ApiResponse<Quote>>(`/quotes/${id}`, updates);
+      return response.data.data;
+    } catch (error) {
+      handleApiError(error);
+      throw error;
+    }
+  },
+
+  delete: async (id: string): Promise<void> => {
+    try {
+      await API.delete(`/quotes/${id}`);
     } catch (error) {
       handleApiError(error);
       throw error;

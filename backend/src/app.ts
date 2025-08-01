@@ -16,6 +16,8 @@ import analyticsRoutes from './routes/analytics';
 import notificationsRoutes from './routes/notifications';
 import reportsRoutes from './routes/reports';
 import chatRoutes from './routes/chat';
+import productsRoutes from './routes/products';
+import quotesRoutes from './routes/quotes';
 import { authenticate } from "./middlewares/authenticate";
 import { errorHandler } from "./middlewares/errorHandler";
 import { requestLogger } from "./middlewares/requestLogger";
@@ -148,6 +150,8 @@ app.use("/api/notifications", authenticate as express.RequestHandler, tokenRefre
 app.use("/api/analytics", authenticate as express.RequestHandler, tokenRefreshHeaders, analyticsRoutes);
 app.use("/api/reports", authenticate as express.RequestHandler, tokenRefreshHeaders, reportsRoutes);
 app.use("/api/chat", authenticate as express.RequestHandler, tokenRefreshHeaders, chatRoutes);
+app.use("/api/products", authenticate as express.RequestHandler, tokenRefreshHeaders, productsRoutes);
+app.use("/api/quotes", authenticate as express.RequestHandler, tokenRefreshHeaders, quotesRoutes);
 
 // 404 handler
 app.use((req, res) => {

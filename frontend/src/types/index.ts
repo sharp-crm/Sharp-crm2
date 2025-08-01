@@ -105,6 +105,8 @@ export interface Deal {
   closeDate?: string;
   leadSource: string;
   description?: string;
+  phone?: string;
+  email?: string;
   visibleTo: string[];
   createdBy: string;
   createdAt: string;
@@ -238,3 +240,59 @@ export type Report = {
   isFavorite?: boolean;
   schedule?: string;
 };
+
+export interface Quote {
+  id: string;
+  
+  // Basic Quote Info
+  quoteNumber: string;
+  quoteName: string;
+  quoteOwner: string;
+  status: 'Draft' | 'Sent' | 'Accepted' | 'Rejected' | 'Expired';
+  validUntil: string;
+  activeStatus: boolean;
+  
+  // Customer Info
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  
+  // Line Items
+  lineItems: LineItem[];
+  
+  // Pricing Info
+  subtotal: number;
+  discountAmount: number;
+  taxAmount: number;
+  adjustment: number;
+  totalAmount: number;
+  
+  // Quote Details
+  description: string;
+  terms: string;
+  notes: string;
+  
+  // Audit fields
+  createdBy: string;
+  createdAt: string;
+  updatedBy: string;
+  updatedAt: string;
+  deletedBy?: string;
+  isDeleted: boolean;
+  deletedAt?: string;
+  userId: string;
+  tenantId: string;
+  visibleTo?: string[];
+}
+
+export interface LineItem {
+  id: string;
+  productName: string;
+  productId: string; // Add productId for database relationship
+  description: string;
+  quantity: number;
+  listPrice: number;
+  amount: number;
+  discount: number;
+  tax: number;
+}

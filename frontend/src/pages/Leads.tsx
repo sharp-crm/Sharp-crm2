@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import PageHeader from '../components/Common/PageHeader';
 import DataTable from '../components/Common/DataTable';
 import StatusBadge from '../components/Common/StatusBadge';
-import { leadsApi, Lead } from '../api/services';
+import { leadsApi, Lead, Deal, Task } from '../api/services';
 import AddNewModal from '../components/Common/AddNewModal';
 import ViewLeadModal from '../components/ViewLeadModal';
 import EditLeadModal from '../components/EditLeadModal';
+import ConvertToDealModal from '../components/ConvertToDealModal';
 import KanbanView from '../components/Views/KanbanView';
 import { Dialog } from '@headlessui/react';
 
 const Leads: React.FC = () => {
+  const navigate = useNavigate();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,11 +21,13 @@ const Leads: React.FC = () => {
   const [defaultType, setDefaultType] = useState<string | undefined>(undefined);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [filters, setFilters] = useState({
     campaigns: false,
@@ -186,21 +191,37 @@ const Leads: React.FC = () => {
     setIsViewModalOpen(true);
   };
 
+  const handleRowClick = (item: Lead | Deal | Task) => {
+    // Only handle Lead items for navigation
+    if ('firstName' in item && 'lastName' in item) {
+      // This is a Lead
+      navigate(`/leads/${item.id}`);
+    }
+  };
+
   const handleEdit = (lead: Lead) => {
     setSelectedLead(lead);
     setIsEditModalOpen(true);
+  };
+
+  const handleConvertToDeal = (lead: Lead) => {
+    setSelectedLead(lead);
+    setIsConvertModalOpen(true);
   };
 
   const handleModalClose = () => {
     setSelectedLead(null);
     setIsViewModalOpen(false);
     setIsEditModalOpen(false);
+    setIsConvertModalOpen(false);
+    setSuccessMessage(null);
   };
 
   const handleEditSuccess = async () => {
     try {
       const data = await leadsApi.getAll();
       setLeads(data);
+      setSuccessMessage('Lead has been successfully updated.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to refresh leads');
     }
@@ -279,21 +300,40 @@ const Leads: React.FC = () => {
     <div className="flex items-center space-x-2">
       <button 
         className="p-1 text-gray-400 hover:text-blue-600"
-        onClick={() => handleView(row)}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleView(row);
+        }}
         title="View Lead"
       >
         <Icons.Eye className="w-4 h-4" />
       </button>
       <button 
         className="p-1 text-gray-400 hover:text-green-600"
-        onClick={() => handleEdit(row)}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleEdit(row);
+        }}
         title="Edit Lead"
       >
         <Icons.Edit2 className="w-4 h-4" />
       </button>
       <button 
+        className="p-1 text-gray-400 hover:text-purple-600"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleConvertToDeal(row);
+        }}
+        title="Convert to Deal"
+      >
+        <Icons.Target className="w-4 h-4" />
+      </button>
+      <button 
         className="p-1 text-gray-400 hover:text-red-600"
-        onClick={() => handleDelete(row.id)}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleDelete(row.id);
+        }}
         title="Delete Lead"
       >
         <Icons.Trash2 className="w-4 h-4" />
@@ -561,6 +601,16 @@ const Leads: React.FC = () => {
             </div>
           )}
 
+          {/* Success Message */}
+          {successMessage && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+              <div className="flex">
+                <Icons.CheckCircle className="w-5 h-5 text-green-600 mr-2" />
+                <p className="text-green-700">{successMessage}</p>
+              </div>
+            </div>
+          )}
+
           {/* Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <div className="bg-white shadow-sm rounded-xl p-5 border border-gray-200">
@@ -648,6 +698,7 @@ const Leads: React.FC = () => {
                   // For now, return the userId. You can implement user name lookup if needed
                   return userId;
                 }}
+                onItemClick={handleRowClick}
               />
             </div>
           ) : (
@@ -656,6 +707,7 @@ const Leads: React.FC = () => {
                 data={Object.values(filters).some(f => f) || phoneSearch.length >= 2 ? filteredLeads : leads}
                 columns={columns}
                 actions={actions}
+                onRowClick={handleRowClick}
               />
             </div>
           )}
@@ -672,6 +724,7 @@ const Leads: React.FC = () => {
           leadsApi.getAll().then(setLeads).catch((err) => {
             setError(err instanceof Error ? err.message : 'Failed to refresh leads');
           });
+          setSuccessMessage('Lead has been successfully created.');
         }}
       />
 
@@ -688,6 +741,16 @@ const Leads: React.FC = () => {
         onClose={handleModalClose}
         lead={selectedLead}
         onSuccess={handleEditSuccess}
+      />
+
+      {/* Convert to Deal Modal */}
+      <ConvertToDealModal
+        isOpen={isConvertModalOpen}
+        onClose={handleModalClose}
+        lead={selectedLead}
+        onSuccess={() => {
+          setSuccessMessage('Lead has been successfully converted to deal.');
+        }}
       />
 
       {/* Delete Confirmation Dialog */}

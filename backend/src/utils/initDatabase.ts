@@ -477,6 +477,68 @@ const tables = [
       }
     ],
     ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+  },
+  {
+    TableName: "Quotes",
+    KeySchema: [
+      { AttributeName: "id", KeyType: "HASH" }
+    ],
+    AttributeDefinitions: [
+      { AttributeName: "id", AttributeType: "S" },
+      { AttributeName: "tenantId", AttributeType: "S" },
+      { AttributeName: "quoteOwner", AttributeType: "S" },
+      { AttributeName: "status", AttributeType: "S" },
+      { AttributeName: "customerName", AttributeType: "S" },
+      { AttributeName: "createdBy", AttributeType: "S" }
+    ],
+    GlobalSecondaryIndexes: [
+      {
+        IndexName: "TenantIdIndex",
+        KeySchema: [
+          { AttributeName: "tenantId", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "QuoteOwnerIndex",
+        KeySchema: [
+          { AttributeName: "quoteOwner", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "StatusIndex",
+        KeySchema: [
+          { AttributeName: "status", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "CustomerIndex",
+        KeySchema: [
+          { AttributeName: "customerName", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "CreatedByIndex",
+        KeySchema: [
+          { AttributeName: "createdBy", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      }
+    ],
+    BillingMode: "PAY_PER_REQUEST"
   }
 ];
 

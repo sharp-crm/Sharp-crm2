@@ -150,7 +150,7 @@ const searchLeads: RequestHandler = async (req: any, res) => {
   }
 };
 
-// Create new lead
+// Create new lead (multiple leads can have the same email/phone)
 const createLead: RequestHandler = async (req: any, res) => {
   try {
     const { tenantId, userId } = req.user;
@@ -160,8 +160,8 @@ const createLead: RequestHandler = async (req: any, res) => {
       return;
     }
 
-    // Validate required fields
-    const requiredFields = ['leadOwner', 'firstName', 'lastName', 'company', 'email', 'leadSource', 'leadStatus'];
+    // Validate required fields (email is now optional, phone is required)
+    const requiredFields = ['leadOwner', 'firstName', 'lastName', 'company', 'phone', 'leadSource', 'leadStatus'];
     const missingFields = validateRequiredFields(req.body, requiredFields);
     
     if (missingFields) {
@@ -172,16 +172,15 @@ const createLead: RequestHandler = async (req: any, res) => {
       return;
     }
 
-    // Validate email format
-    if (!validateEmail(req.body.email)) {
+    // Validate email format if provided
+    if (req.body.email && !validateEmail(req.body.email)) {
       res.status(400).json({ error: "Invalid email format" });
       return;
     }
 
-    // Check if lead with email already exists
-    const existingLead = await leadsService.getLeadByEmail(req.body.email, tenantId);
-    if (existingLead) {
-      res.status(409).json({ error: "Lead with this email already exists" });
+    // Validate phone number is not empty or just whitespace
+    if (!req.body.phone || req.body.phone.trim() === '') {
+      res.status(400).json({ error: "Phone number is required" });
       return;
     }
 
@@ -241,13 +240,10 @@ const updateLead: RequestHandler = async (req: any, res) => {
       return;
     }
 
-    // Check if email is being changed and if new email already exists
-    if (req.body.email) {
-      const existingLead = await leadsService.getLeadByEmail(req.body.email, tenantId);
-      if (existingLead && existingLead.id !== id) {
-        res.status(409).json({ error: "Lead with this email already exists" });
-        return;
-      }
+    // Validate phone number if provided
+    if (req.body.phone && req.body.phone.trim() === '') {
+      res.status(400).json({ error: "Phone number cannot be empty" });
+      return;
     }
 
     // Validate visibleTo array if provided

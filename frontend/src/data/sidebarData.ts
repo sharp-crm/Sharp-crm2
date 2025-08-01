@@ -17,10 +17,12 @@ type UserWithStringRole = {
 // Base items that all users can see
 const baseItems: SidebarItem[] = [
   { name: 'Home', path: '/', icon: 'Home' },
-  { name: 'Contacts', path: '/contacts', icon: 'Users' },
   { name: 'Leads', path: '/leads', icon: 'UserPlus' },
+  { name: 'Contacts', path: '/contacts', icon: 'Users' },
   { name: 'Deals', path: '/deals', icon: 'Target' },
   { name: 'Tasks', path: '/tasks', icon: 'CheckSquare' },
+  { name: 'Products', path: '/products', icon: 'Package' },
+  { name: 'Quotes', path: '/quotes', icon: 'FileText' },
 ];
 
 // Admin-only items

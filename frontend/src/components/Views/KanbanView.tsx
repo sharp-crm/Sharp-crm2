@@ -27,6 +27,7 @@ interface KanbanViewProps {
   onItemMove: (itemId: string, newStage: Deal['stage'] | Task['status'] | Lead['leadStatus']) => void;
   type: 'deals' | 'tasks' | 'leads';
   getUserName?: (userId: string) => string;
+  onItemClick?: (item: Deal | Task | Lead) => void;
 }
 
 interface KanbanCardProps {
@@ -43,7 +44,13 @@ const DropPlaceholder: React.FC = () => (
   </div>
 );
 
-const KanbanCard: React.FC<KanbanCardProps> = ({ item, type, dragOverlay = false, getUserName }) => {
+const KanbanCard: React.FC<KanbanCardProps & { onItemClick?: (item: Deal | Task | Lead) => void }> = ({ 
+  item, 
+  type, 
+  dragOverlay = false, 
+  getUserName,
+  onItemClick 
+}) => {
   const {
     attributes,
     listeners,
@@ -79,15 +86,24 @@ const KanbanCard: React.FC<KanbanCardProps> = ({ item, type, dragOverlay = false
   const taskItem = item as Task;
   const leadItem = item as Lead;
 
+  const handleClick = (e: React.MouseEvent) => {
+    // Only handle click if not dragging and onItemClick is provided
+    if (!isDragging && onItemClick) {
+      e.stopPropagation();
+      onItemClick(item);
+    }
+  };
+
   return (
     <div
       ref={dragOverlay ? undefined : setNodeRef}
       style={style}
       {...(dragOverlay ? {} : attributes)}
       {...(dragOverlay ? {} : listeners)}
+      onClick={handleClick}
       className={`bg-white p-4 rounded-lg shadow-sm border border-gray-200 relative select-none ${
         dragOverlay ? 'cursor-grabbing shadow-2xl' : 'cursor-grab hover:shadow-md'
-      } transition-all duration-150 ${isDragging ? 'shadow-lg' : ''}`}
+      } transition-all duration-150 ${isDragging ? 'shadow-lg' : ''} ${onItemClick && !isDragging ? 'cursor-pointer' : ''}`}
     >
       {/* Card header */}
       <div className="flex items-start justify-between mb-2">
@@ -188,7 +204,7 @@ const DroppableColumn: React.FC<{
   );
 };
 
-const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUserName }) => {
+const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUserName, onItemClick }) => {
   const stages: string[] = type === 'deals'
     ? [...DEAL_STAGES]
     : type === 'tasks'
@@ -441,7 +457,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
                           )}
                           
                       {stageItems.map((item) => (
-                        <KanbanCard key={item.id} item={item} type={type} getUserName={getUserName} />
+                        <KanbanCard key={item.id} item={item} type={type} getUserName={getUserName} onItemClick={onItemClick} />
                       ))}
                           
                           {/* Show placeholder at bottom if column is empty and being dragged over */}
@@ -466,7 +482,7 @@ const KanbanView: React.FC<KanbanViewProps> = ({ data, onItemMove, type, getUser
 
               <DragOverlay dropAnimation={null}>
         {activeItem ? (
-          <KanbanCard item={activeItem} type={type} dragOverlay getUserName={getUserName} />
+                        <KanbanCard item={activeItem} type={type} dragOverlay getUserName={getUserName} onItemClick={onItemClick} />
         ) : null}
       </DragOverlay>
     </DndContext>

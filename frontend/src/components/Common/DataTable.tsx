@@ -149,7 +149,7 @@ const DataTable: React.FC<DataTableProps> = ({ columns, data, onRowClick, action
                 </th>
               ))}
               {actions && (
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th key="actions" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               )}

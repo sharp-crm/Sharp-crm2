@@ -18,7 +18,7 @@ const ViewDealModal: React.FC<ViewDealModalProps> = ({ isOpen, onClose, deal, ge
       <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
       
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <Dialog.Panel className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <Dialog.Title className="text-xl font-semibold text-gray-900">
               Deal Details
@@ -52,7 +52,10 @@ const ViewDealModal: React.FC<ViewDealModalProps> = ({ isOpen, onClose, deal, ge
             {/* Deal Information */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-3">Deal Information</h4>
+                <h4 className="text-sm font-medium text-gray-500 mb-3 flex items-center">
+                  <Icons.Target className="w-4 h-4 mr-2 text-blue-600" />
+                  Deal Information
+                </h4>
                 <div className="space-y-3">
                   <div>
                     <span className="text-sm text-gray-600">Deal Name:</span>
@@ -70,7 +73,10 @@ const ViewDealModal: React.FC<ViewDealModalProps> = ({ isOpen, onClose, deal, ge
               </div>
 
               <div>
-                <h4 className="text-sm font-medium text-gray-500 mb-3">Deal Progress</h4>
+                <h4 className="text-sm font-medium text-gray-500 mb-3 flex items-center">
+                  <Icons.TrendingUp className="w-4 h-4 mr-2 text-green-600" />
+                  Deal Progress
+                </h4>
                 <div className="space-y-3">
                   <div>
                     <span className="text-sm text-gray-600">Stage:</span>
@@ -98,6 +104,49 @@ const ViewDealModal: React.FC<ViewDealModalProps> = ({ isOpen, onClose, deal, ge
                       {deal.closeDate ? new Date(deal.closeDate).toLocaleDateString() : 'Not set'}
                     </p>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Contact Information */}
+            <div className="bg-green-50 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-green-900 mb-3 flex items-center">
+                <Icons.Phone className="w-4 h-4 mr-2 text-green-600" />
+                Contact Information
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <span className="text-sm text-green-700">Phone:</span>
+                  <p className="font-medium text-green-900 flex items-center">
+                    <Icons.Phone className="w-4 h-4 mr-2" />
+                    {deal.phone ? (
+                      <a 
+                        href={`tel:${deal.phone}`} 
+                        className="text-blue-600 hover:text-blue-800 underline flex items-center"
+                      >
+                        {deal.phone}
+                        <Icons.Phone className="w-3 h-3 ml-1" />
+                      </a>
+                    ) : (
+                      'Not provided'
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-sm text-green-700">Email:</span>
+                  <p className="font-medium text-green-900 flex items-center">
+                    <Icons.Mail className="w-4 h-4 mr-2" />
+                    {deal.email ? (
+                      <a 
+                        href={`mailto:${deal.email}`} 
+                        className="text-blue-600 hover:text-blue-800 underline"
+                      >
+                        {deal.email}
+                      </a>
+                    ) : (
+                      'Not provided'
+                    )}
+                  </p>
                 </div>
               </div>
             </div>

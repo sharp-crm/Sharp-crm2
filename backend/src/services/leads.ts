@@ -49,10 +49,10 @@ export interface CreateLeadInput {
   firstName: string;
   lastName: string;
   company: string;
-  email: string;
+  email?: string; // Now optional to allow multiple leads with same email
   leadSource: string;
   leadStatus: string;
-  phone?: string;
+  phone: string; // Required for contacting the lead
   title?: string;
   street?: string;
   area?: string;
@@ -100,10 +100,10 @@ export class LeadsService {
       firstName: input.firstName,
       lastName: input.lastName,
       company: input.company,
-      email: input.email,
+      email: input.email || '', // Handle optional email
       leadSource: input.leadSource,
       leadStatus: input.leadStatus,
-      phone: input.phone,
+      phone: input.phone || '', // Handle required phone field
       title: input.title,
       street: input.street,
       area: input.area,
@@ -199,7 +199,7 @@ export class LeadsService {
     return (result.Items || []) as Lead[];
   }
 
-  // Get lead by email
+  // Get lead by email (returns first match - multiple leads can have the same email)
   async getLeadByEmail(email: string, tenantId: string, userId?: string): Promise<Lead | null> {
     const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
@@ -216,6 +216,24 @@ export class LeadsService {
 
     const leads = result.Items || [];
     return leads.length > 0 ? leads[0] as Lead : null;
+  }
+
+  // Get all leads by email (useful when multiple leads can have the same email)
+  async getAllLeadsByEmail(email: string, tenantId: string, userId?: string): Promise<Lead[]> {
+    const result = await docClient.send(new ScanCommand({
+      TableName: this.tableName,
+      FilterExpression: userId 
+        ? 'email = :email AND tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)'
+        : 'email = :email AND tenantId = :tenantId AND isDeleted = :isDeleted',
+      ExpressionAttributeValues: {
+        ':email': email,
+        ':tenantId': tenantId,
+        ':isDeleted': false,
+        ...(userId ? { ':userId': userId, ':zero': 0 } : {})
+      }
+    }));
+
+    return (result.Items || []) as Lead[];
   }
 
   // Update lead
