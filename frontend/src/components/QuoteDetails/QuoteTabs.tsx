@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
-import { Quote } from '../../types';
-import { quotesApi } from '../../api/services';
+import { Quote, Task } from '../../types';
+import { quotesApi, tasksApi } from '../../api/services';
 import { useToastStore } from '../../store/useToastStore';
+import AddNewModal from '../Common/AddNewModal';
 
 // Add highlight effect styles
 const highlightStyles = `
@@ -31,6 +32,8 @@ interface QuoteTabsProps {
   quote: Quote;
   getUserDisplayName: (userId: string) => string;
   onQuoteUpdate?: (updatedQuote: Quote) => void;
+  tasks: Task[];
+  onTasksUpdate: (tasks: Task[]) => void;
 }
 
 const QuoteTabs: React.FC<QuoteTabsProps> = ({
@@ -38,8 +41,28 @@ const QuoteTabs: React.FC<QuoteTabsProps> = ({
   onTabChange,
   quote,
   getUserDisplayName,
-  onQuoteUpdate
+  onQuoteUpdate,
+  tasks,
+  onTasksUpdate
 }) => {
+  // State for tasks functionality
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
+
+  // Handle task creation success
+  const handleTaskCreated = () => {
+    // Refresh tasks by calling the parent's update function
+    // The parent will fetch updated tasks
+    onTasksUpdate([...tasks]); // This will trigger a re-fetch in the parent
+  };
+
+  // Fetch tasks when quote changes
+  useEffect(() => {
+    // This useEffect is no longer needed as tasks are passed as props
+    // Keeping it for now in case it's re-introduced or if there's a reason to refetch
+    // For now, it will just re-render with the same tasks if quote.id doesn't change
+  }, [quote?.id]);
+
   return (
     <div className="h-full flex flex-col">
       {/* Tab Navigation */}
@@ -75,11 +98,26 @@ const QuoteTabs: React.FC<QuoteTabsProps> = ({
             quote={quote} 
             getUserDisplayName={getUserDisplayName} 
             onQuoteUpdate={onQuoteUpdate}
+            tasks={tasks}
+            onAddTask={() => setIsAddTaskModalOpen(true)}
+            onTaskCreated={handleTaskCreated}
           />
         ) : (
           <TimelineTab quote={quote} getUserDisplayName={getUserDisplayName} />
         )}
       </div>
+
+      {/* Add Task Modal */}
+      <AddNewModal
+        isOpen={isAddTaskModalOpen}
+        onClose={() => setIsAddTaskModalOpen(false)}
+        defaultType="task"
+        onSuccess={handleTaskCreated}
+        prefillData={{
+          relatedRecordType: 'quote',
+          relatedRecordId: quote?.id
+        }}
+      />
     </div>
   );
 };
@@ -89,10 +127,16 @@ const OverviewTab: React.FC<{
   quote: Quote; 
   getUserDisplayName: (userId: string) => string;
   onQuoteUpdate?: (updatedQuote: Quote) => void;
+  tasks: Task[];
+  onAddTask: () => void;
+  onTaskCreated: () => void;
 }> = ({
   quote,
   getUserDisplayName,
-  onQuoteUpdate
+  onQuoteUpdate,
+  tasks,
+  onAddTask,
+  onTaskCreated
 }) => {
   const navigate = useNavigate();
   const { addToast } = useToastStore();
@@ -108,6 +152,10 @@ const OverviewTab: React.FC<{
   const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
   const [editingNoteContent, setEditingNoteContent] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Filter tasks by status
+  const openTasks = tasks.filter(task => task.status !== 'Completed');
+  const closedTasks = tasks.filter(task => task.status === 'Completed');
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString();
@@ -606,14 +654,37 @@ const OverviewTab: React.FC<{
         <div id="section-open-activities" className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Open Activities</h3>
-            <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+            <button 
+              onClick={onAddTask}
+              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+            >
               Add Activity
             </button>
           </div>
-          <div className="text-center py-8">
-            <Icons.Activity className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-sm text-gray-500">No open activities yet</p>
-          </div>
+          {openTasks.length === 0 ? (
+            <div className="text-center py-8">
+              <Icons.Activity className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">No open activities yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {openTasks.map((task) => (
+                <div key={task.id} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium text-gray-900">
+                      {task.title}
+                    </h4>
+                    <div className="flex items-center space-x-2 text-xs text-gray-500">
+                      <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
+                      <span className="text-gray-300">•</span>
+                      <span>Assigned to: {getUserDisplayName(task.assignedTo)}</span>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600">{task.description}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Closed Activities Section */}
@@ -624,10 +695,30 @@ const OverviewTab: React.FC<{
               View All
             </button>
           </div>
-          <div className="text-center py-8">
-            <Icons.CheckCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-sm text-gray-500">No closed activities yet</p>
-          </div>
+          {closedTasks.length === 0 ? (
+            <div className="text-center py-8">
+              <Icons.CheckCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">No closed activities yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {closedTasks.map((task) => (
+                <div key={task.id} className="p-4 bg-green-50 rounded-lg border border-green-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium text-gray-900">
+                      {task.title}
+                    </h4>
+                    <div className="flex items-center space-x-2 text-xs text-gray-500">
+                      <span>Completed: {new Date(task.dueDate).toLocaleDateString()}</span>
+                      <span className="text-gray-300">•</span>
+                      <span>Assigned to: {getUserDisplayName(task.assignedTo)}</span>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600">{task.description}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Emails Section */}

@@ -128,6 +128,11 @@ export interface Task {
   tenantId: string;
   createdAt: string;
   visibleTo?: string[];
+  // New fields for related records
+  contactLeadId?: string;
+  contactLeadType?: 'contact' | 'lead';
+  relatedRecordId?: string;
+  relatedRecordType?: 'deal' | 'product' | 'quote';
 }
 
 export interface Product {
@@ -500,6 +505,32 @@ export const tasksApi = {
     } catch (error) {
       handleApiError(error);
       return [];
+    }
+  },
+
+  getByRelatedRecord: async (recordType: string, recordId: string): Promise<Task[]> => {
+    try {
+      console.log('Calling getByRelatedRecord with:', { recordType, recordId });
+      const response = await API.get<ApiResponse<Task[]>>(`/tasks?recordType=${recordType}&recordId=${recordId}`);
+      console.log('getByRelatedRecord response:', response.data);
+      return response.data.data || [];
+    } catch (error) {
+      console.error('getByRelatedRecord error:', error);
+      handleApiError(error);
+      return [];
+    }
+  },
+
+  // Test function to debug filtering
+  testFilter: async (recordType: string, recordId: string): Promise<any> => {
+    try {
+      console.log('Testing filter with:', { recordType, recordId });
+      const response = await API.get(`/tasks/test-filter?recordType=${recordType}&recordId=${recordId}`);
+      console.log('Test filter response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Test filter error:', error);
+      return null;
     }
   },
 

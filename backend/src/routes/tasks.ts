@@ -15,18 +15,117 @@ interface Task {
   type: string;
   tenantId: string;
   createdAt: string;
+  // New fields for related records
+  contactLeadId?: string;
+  contactLeadType?: string; // 'contact' or 'lead'
+  relatedRecordId?: string;
+  relatedRecordType?: string; // 'deal', 'product', or 'quote'
+  visibleTo?: string[];
 }
 
 const router = express.Router();
+
+// Test route to verify tasks router is working
+router.get("/test", (req: AuthenticatedRequest, res: Response) => {
+  res.json({ message: "Tasks router is working", timestamp: new Date().toISOString() });
+});
+
+// Test route to check filtering
+router.get("/test-filter", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    const { recordType, recordId } = req.query;
+    
+    console.log('Test filter called with:', { recordType, recordId, tenantId });
+    
+    if (!tenantId) {
+      return res.status(400).json({ error: "Tenant ID required" });
+    }
+
+    // Get all tasks for this tenant to see what's in the database
+    const allTasks = await docClient.send(
+      new ScanCommand({
+        TableName: TABLES.TASKS,
+        FilterExpression: "tenantId = :tenantId",
+        ExpressionAttributeValues: {
+          ":tenantId": tenantId
+        }
+      })
+    );
+
+    console.log('All tasks for tenant:', allTasks.Items);
+
+    // If recordType and recordId are provided, also test the filter
+    if (recordType && recordId) {
+      const filteredTasks = await docClient.send(
+        new ScanCommand({
+          TableName: TABLES.TASKS,
+          FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId",
+          ExpressionAttributeValues: {
+            ":tenantId": tenantId,
+            ":recordType": recordType,
+            ":recordId": recordId
+          }
+        })
+      );
+
+      console.log('Filtered tasks:', filteredTasks.Items);
+
+      return res.json({ 
+        message: "Filter test completed",
+        allTasks: allTasks.Items,
+        filteredTasks: filteredTasks.Items,
+        filterParams: { recordType, recordId, tenantId }
+      });
+    }
+
+    res.json({ 
+      message: "All tasks retrieved",
+      allTasks: allTasks.Items,
+      tenantId
+    });
+  } catch (error) {
+    console.error('Test filter error:', error);
+    next(error);
+  }
+}) as express.RequestHandler);
 
 // Get all tasks for tenant
 router.get("/", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const tenantId = req.user?.tenantId;
+    const { recordType, recordId } = req.query;
+    
     if (!tenantId) {
       return res.status(400).json({ error: "Tenant ID required" });
     }
 
+    // If recordType and recordId are provided, filter by related record
+    if (recordType && recordId) {
+      console.log('Filtering tasks by related record:', { recordType, recordId, tenantId });
+      
+      const result = await docClient.send(
+        new ScanCommand({
+          TableName: TABLES.TASKS,
+          FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId",
+          ExpressionAttributeValues: {
+            ":tenantId": tenantId,
+            ":recordType": recordType,
+            ":recordId": recordId
+          }
+        })
+      );
+
+      console.log('DynamoDB result for related record filter:', { 
+        count: result.Count, 
+        scannedCount: result.ScannedCount,
+        items: result.Items?.length || 0 
+      });
+
+      return res.json({ data: (result.Items as Task[]) || [] });
+    }
+
+    // Otherwise, get all tasks for tenant
     const result = await docClient.send(
       new ScanCommand({
         TableName: TABLES.TASKS,
@@ -43,7 +142,60 @@ router.get("/", (async (req: AuthenticatedRequest, res: Response, next: NextFunc
   }
 }) as express.RequestHandler);
 
-// Get task by ID (tenant-aware)
+// Get tasks by related record - MUST BE BEFORE /:id route
+router.get("/by-related-record", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const tenantId = req.user?.tenantId;
+    const { recordType, recordId } = req.query;
+    
+    console.log('GET /by-related-record called with:', { recordType, recordId, tenantId });
+    
+    if (!tenantId) {
+      console.log('Error: Tenant ID required');
+      return res.status(400).json({ error: "Tenant ID required" });
+    }
+
+    if (!recordType || !recordId) {
+      console.log('Error: Record type and record ID are required');
+      return res.status(400).json({ error: "Record type and record ID are required" });
+    }
+
+    console.log('Querying DynamoDB with:', {
+      TableName: TABLES.TASKS,
+      FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId",
+      ExpressionAttributeValues: {
+        ":tenantId": tenantId,
+        ":recordType": recordType,
+        ":recordId": recordId
+      }
+    });
+
+    const result = await docClient.send(
+      new ScanCommand({
+        TableName: TABLES.TASKS,
+        FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId",
+        ExpressionAttributeValues: {
+          ":tenantId": tenantId,
+          ":recordType": recordType,
+          ":recordId": recordId
+        }
+      })
+    );
+
+    console.log('DynamoDB result:', { 
+      count: result.Count, 
+      scannedCount: result.ScannedCount,
+      items: result.Items?.length || 0 
+    });
+
+    res.json({ data: (result.Items as Task[]) || [] });
+  } catch (error) {
+    console.error('Error in /by-related-record:', error);
+    next(error);
+  }
+}) as express.RequestHandler);
+
+// Get task by ID (tenant-aware) - MUST BE AFTER specific routes
 router.get("/:id", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
@@ -85,7 +237,12 @@ router.post("/", (async (req: AuthenticatedRequest, res: Response, next: NextFun
       status = "Open", 
       dueDate, 
       assignee,
-      type = "Follow-up"
+      type = "Follow-up",
+      contactLeadId,
+      contactLeadType,
+      relatedRecordId,
+      relatedRecordType,
+      visibleTo = []
     } = req.body;
     const tenantId = req.user?.tenantId;
     
@@ -106,7 +263,13 @@ router.post("/", (async (req: AuthenticatedRequest, res: Response, next: NextFun
       assignee,
       type,
       tenantId,
-      createdAt
+      createdAt,
+      // Add new fields if provided
+      ...(contactLeadId && { contactLeadId }),
+      ...(contactLeadType && { contactLeadType }),
+      ...(relatedRecordId && { relatedRecordId }),
+      ...(relatedRecordType && { relatedRecordType }),
+      ...(visibleTo && visibleTo.length > 0 && { visibleTo })
     };
 
     await docClient.send(
