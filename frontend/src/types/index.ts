@@ -139,6 +139,12 @@ export interface Task {
   
   // Visibility field
   visibleTo?: string[];
+  
+  // New fields for related records
+  contactLeadId?: string;
+  contactLeadType?: 'contact' | 'lead';
+  relatedRecordId?: string;
+  relatedRecordType?: 'deal' | 'product' | 'quote';
 }
 
 export interface Product {

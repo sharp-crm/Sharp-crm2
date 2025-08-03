@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
-import { Product } from '../../api/services';
+import { Product, Task, tasksApi } from '../../api/services';
 import { productsApi } from '../../api/services';
 import { useToastStore } from '../../store/useToastStore';
+import AddNewModal from '../Common/AddNewModal';
 
 // Add highlight effect styles
 const highlightStyles = `
@@ -31,6 +32,7 @@ interface ProductTabsProps {
   product: Product;
   getUserDisplayName: (userId: string) => string;
   onProductUpdate?: (updatedProduct: Product) => void;
+  onTasksUpdate?: (tasks: Task[]) => void;
 }
 
 const ProductTabs: React.FC<ProductTabsProps> = ({
@@ -38,8 +40,54 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
   onTabChange,
   product,
   getUserDisplayName,
-  onProductUpdate
+  onProductUpdate,
+  onTasksUpdate
 }) => {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
+
+  // Fetch tasks related to this product
+  useEffect(() => {
+    const fetchProductTasks = async () => {
+      if (!product?.id) return;
+      
+      setLoadingTasks(true);
+      try {
+        // Test the filter first
+        console.log('Testing filter for product:', product.id);
+        const testResult = await tasksApi.testFilter('product', product.id);
+        console.log('Test result:', testResult);
+        
+        const productTasks = await tasksApi.getByRelatedRecord('product', product.id);
+        console.log('Product tasks fetched:', productTasks);
+        setTasks(productTasks);
+        // Notify parent about tasks update
+        if (onTasksUpdate) {
+          onTasksUpdate(productTasks);
+        }
+      } catch (error) {
+        console.error('Error fetching product tasks:', error);
+      } finally {
+        setLoadingTasks(false);
+      }
+    };
+
+    fetchProductTasks();
+  }, [product?.id, onTasksUpdate]);
+
+  const handleTaskCreated = async () => {
+    // Refresh tasks after creating a new one
+    if (product?.id) {
+      const productTasks = await tasksApi.getByRelatedRecord('product', product.id);
+      setTasks(productTasks);
+      // Notify parent about tasks update
+      if (onTasksUpdate) {
+        onTasksUpdate(productTasks);
+      }
+    }
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Tab Navigation */}
@@ -75,11 +123,27 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
             product={product} 
             getUserDisplayName={getUserDisplayName} 
             onProductUpdate={onProductUpdate}
+            tasks={tasks}
+            loadingTasks={loadingTasks}
+            onAddTask={() => setIsAddTaskModalOpen(true)}
+            onTaskCreated={handleTaskCreated}
           />
         ) : (
           <TimelineTab product={product} getUserDisplayName={getUserDisplayName} />
         )}
       </div>
+
+      {/* Add Task Modal */}
+      <AddNewModal
+        isOpen={isAddTaskModalOpen}
+        onClose={() => setIsAddTaskModalOpen(false)}
+        defaultType="task"
+        onSuccess={handleTaskCreated}
+        prefillData={{
+          relatedRecordType: 'product',
+          relatedRecordId: product?.id
+        }}
+      />
     </div>
   );
 };
@@ -89,10 +153,18 @@ const OverviewTab: React.FC<{
   product: Product; 
   getUserDisplayName: (userId: string) => string;
   onProductUpdate?: (updatedProduct: Product) => void;
+  tasks: Task[];
+  loadingTasks: boolean;
+  onAddTask: () => void;
+  onTaskCreated: () => void;
 }> = ({
   product,
   getUserDisplayName,
-  onProductUpdate
+  onProductUpdate,
+  tasks,
+  loadingTasks,
+  onAddTask,
+  onTaskCreated
 }) => {
   const navigate = useNavigate();
   const { addToast } = useToastStore();
@@ -492,14 +564,72 @@ const OverviewTab: React.FC<{
         <div id="section-open-activities" className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Open Activities</h3>
-            <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+            <button 
+              onClick={onAddTask}
+              className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
+            >
+              <Icons.Plus className="w-4 h-4 mr-1" />
               Add Activity
             </button>
           </div>
-          <div className="text-center py-8">
-            <Icons.Activity className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-sm text-gray-500">No open activities yet</p>
-          </div>
+          
+          {loadingTasks ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+              <p className="text-sm text-gray-500">Loading activities...</p>
+            </div>
+          ) : tasks.length > 0 ? (
+            <div className="space-y-3">
+              {tasks.filter(task => task.status !== 'Completed').map((task) => (
+                <div key={task.id} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Icons.CheckSquare className="w-4 h-4 text-blue-600" />
+                        <h4 className="text-sm font-medium text-gray-900">{task.title}</h4>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          task.priority === 'High' ? 'bg-red-100 text-red-800' :
+                          task.priority === 'Normal' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {task.priority}
+                        </span>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          task.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                          task.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {task.status}
+                        </span>
+                      </div>
+                      {task.description && (
+                        <p className="text-sm text-gray-600 mb-2">{task.description}</p>
+                      )}
+                      <div className="flex items-center space-x-4 text-xs text-gray-500">
+                        <div className="flex items-center space-x-1">
+                          <Icons.User className="w-3 h-3" />
+                          <span>{getUserDisplayName(task.assignee)}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Icons.Calendar className="w-3 h-3" />
+                          <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Icons.Clock className="w-3 h-3" />
+                          <span>{new Date(task.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Icons.Activity className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">No open activities yet</p>
+            </div>
+          )}
         </div>
 
         {/* Closed Activities Section */}
@@ -510,10 +640,53 @@ const OverviewTab: React.FC<{
               View All
             </button>
           </div>
-          <div className="text-center py-8">
-            <Icons.CheckCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-sm text-gray-500">No closed activities yet</p>
-          </div>
+          
+          {loadingTasks ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+              <p className="text-sm text-gray-500">Loading activities...</p>
+            </div>
+          ) : tasks.filter(task => task.status === 'Completed').length > 0 ? (
+            <div className="space-y-3">
+              {tasks.filter(task => task.status === 'Completed').map((task) => (
+                <div key={task.id} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Icons.CheckSquare className="w-4 h-4 text-green-600" />
+                        <h4 className="text-sm font-medium text-gray-900">{task.title}</h4>
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          Completed
+                        </span>
+                      </div>
+                      {task.description && (
+                        <p className="text-sm text-gray-600 mb-2">{task.description}</p>
+                      )}
+                      <div className="flex items-center space-x-4 text-xs text-gray-500">
+                        <div className="flex items-center space-x-1">
+                          <Icons.User className="w-3 h-3" />
+                          <span>{getUserDisplayName(task.assignee)}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Icons.Calendar className="w-3 h-3" />
+                          <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Icons.Clock className="w-3 h-3" />
+                          <span>{new Date(task.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Icons.CheckCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">No closed activities yet</p>
+            </div>
+          )}
         </div>
 
         {/* Contacts Section */}

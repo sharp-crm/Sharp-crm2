@@ -1,12 +1,13 @@
 import React from 'react';
 import * as Icons from 'lucide-react';
-import { Product } from '../../api/services';
+import { Product, Task } from '../../api/services';
 
 interface ProductSidebarProps {
   product?: Product;
+  tasks?: Task[];
 }
 
-const ProductSidebar: React.FC<ProductSidebarProps> = ({ product }) => {
+const ProductSidebar: React.FC<ProductSidebarProps> = ({ product, tasks = [] }) => {
   // Calculate counts based on product data
   const getSpecificationsCount = () => {
     if (!product) return 0;
@@ -31,6 +32,14 @@ const ProductSidebar: React.FC<ProductSidebarProps> = ({ product }) => {
     return count;
   };
 
+  const getOpenActivitiesCount = () => {
+    return tasks.filter(task => task.status !== 'Completed').length;
+  };
+
+  const getClosedActivitiesCount = () => {
+    return tasks.filter(task => task.status === 'Completed').length;
+  };
+
   const sidebarItems = [
     { 
       id: 'product-information', 
@@ -48,13 +57,13 @@ const ProductSidebar: React.FC<ProductSidebarProps> = ({ product }) => {
       id: 'open-activities', 
       label: 'Open Activities', 
       icon: Icons.Activity, 
-      count: 0 
+      count: getOpenActivitiesCount()
     },
     { 
       id: 'closed-activities', 
       label: 'Closed Activities', 
       icon: Icons.CheckCircle, 
-      count: 0 
+      count: getClosedActivitiesCount()
     },
     { 
       id: 'contacts', 

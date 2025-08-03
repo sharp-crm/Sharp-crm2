@@ -44,6 +44,7 @@ const Tasks: React.FC = () => {
   const [selectedAssignee, setSelectedAssignee] = useState<string>('');
   const [selectedDueDate, setSelectedDueDate] = useState<string>('all');
   const [searchTaskName, setSearchTaskName] = useState<string>('');
+  const [selectedRelatedRecordType, setSelectedRelatedRecordType] = useState<string>('');
 
     const fetchTasks = async () => {
       try {
@@ -269,6 +270,11 @@ const Tasks: React.FC = () => {
       return false;
     }
     
+    // Related record type filter
+    if (selectedRelatedRecordType && task.relatedRecordType !== selectedRelatedRecordType) {
+      return false;
+    }
+    
     // Due date filter
     if (selectedDueDate !== 'all') {
       const dueDate = new Date(task.dueDate);
@@ -308,6 +314,7 @@ const Tasks: React.FC = () => {
     setSelectedAssignee('');
     setSelectedDueDate('all');
     setSearchTaskName('');
+    setSelectedRelatedRecordType('');
   };
   
   const renderContent = () => {
@@ -437,6 +444,26 @@ const Tasks: React.FC = () => {
                 <option value="overdue">Overdue</option>
                 <option value="today">Due Today</option>
                 <option value="week">Due This Week</option>
+              </select>
+            </div>
+          </div>
+          
+          {/* Second row for additional filters */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+            {/* Related Record Type Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Related Record Type</label>
+              <select 
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={selectedRelatedRecordType}
+                onChange={(e) => setSelectedRelatedRecordType(e.target.value)}
+              >
+                <option value="">All Types</option>
+                <option value="product">Product</option>
+                <option value="deal">Deal</option>
+                <option value="quote">Quote</option>
+                <option value="contact">Contact</option>
+                <option value="lead">Lead</option>
               </select>
             </div>
           </div>

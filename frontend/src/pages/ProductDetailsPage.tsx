@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
-import { productsApi, Product, usersApi, User } from '../api/services';
+import { productsApi, Product, usersApi, User, Task } from '../api/services';
 import ProductHeader from '../components/ProductDetails/ProductHeader';
 import ProductSidebar from '../components/ProductDetails/ProductSidebar';
 import ProductTabs from '../components/ProductDetails/ProductTabs';
@@ -12,6 +12,7 @@ const ProductDetailsPage: React.FC = () => {
   const navigate = useNavigate();
   const [product, setProduct] = useState<Product | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline'>('overview');
@@ -75,6 +76,10 @@ const ProductDetailsPage: React.FC = () => {
     setProduct(updatedProduct);
   };
 
+  const handleTasksUpdate = (updatedTasks: Task[]) => {
+    setTasks(updatedTasks);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -108,7 +113,7 @@ const ProductDetailsPage: React.FC = () => {
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
         <div className="w-56 bg-white border-r border-gray-200">
-          <ProductSidebar product={product} />
+          <ProductSidebar product={product} tasks={tasks} />
         </div>
 
         {/* Main Content Area */}
@@ -119,6 +124,7 @@ const ProductDetailsPage: React.FC = () => {
             product={product}
             getUserDisplayName={getUserDisplayName}
             onProductUpdate={handleProductUpdate}
+            onTasksUpdate={handleTasksUpdate}
           />
         </div>
       </div>

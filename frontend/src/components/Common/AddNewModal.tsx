@@ -15,6 +15,7 @@ interface AddNewModalProps {
   onClose: () => void;
   defaultType?: string;
   onSuccess?: () => void;
+  prefillData?: Record<string, any>;
 }
 
 interface TenantUser {
@@ -40,15 +41,28 @@ interface FormField {
   options?: FormFieldOption[];
 }
 
-const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType, onSuccess }): JSX.Element => {
+const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType, onSuccess, prefillData }): JSX.Element => {
   const [selectedType, setSelectedType] = useState<string>();
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [tenantUsers, setTenantUsers] = useState<TenantUser[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
+  const [deals, setDeals] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [quotes, setQuotes] = useState<any[]>([]);
+  const [selectedContactLeadType, setSelectedContactLeadType] = useState<string>('');
+  const [selectedRelatedRecordType, setSelectedRelatedRecordType] = useState<string>('');
   const { user } = useAuthStore();
   const { addNotification } = useNotificationStore();
   const { addToast } = useToastStore();
+
+  // Define task options at component level
+  const taskStatusOptions: FormFieldOption[] = TASK_STATUSES.map(status => ({ value: status, label: status }));
+  const taskPriorityOptions: FormFieldOption[] = [
+    'High', 'Normal', 'Low'
+  ].map(priority => ({ value: priority, label: priority }));
 
   // Get filtered record types based on user role
   const getFilteredRecordTypes = () => {
@@ -98,6 +112,33 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
     }
   }, [isOpen, selectedType, user]);
 
+  // Fetch related data for task form
+  useEffect(() => {
+    if (isOpen && selectedType === 'task') {
+      const fetchTaskRelatedData = async () => {
+        try {
+          // Fetch contacts, leads, deals, products, and quotes for dropdowns
+          const [contactsRes, leadsRes, dealsRes, productsRes, quotesRes] = await Promise.all([
+            contactsApi.getAll(),
+            leadsApi.getAll(),
+            dealsApi.getAll(),
+            productsApi.getAll(),
+            quotesApi.getAll()
+          ]);
+          
+          setContacts(contactsRes);
+          setLeads(leadsRes);
+          setDeals(dealsRes);
+          setProducts(productsRes);
+          setQuotes(quotesRes);
+        } catch (error) {
+          console.error('Failed to fetch task related data:', error);
+        }
+      };
+      fetchTaskRelatedData();
+    }
+  }, [isOpen, selectedType]);
+
   // Get current user's full name for default owner value
   const getCurrentUserName = () => {
     if (user?.firstName && user?.lastName) {
@@ -132,8 +173,21 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           setFormData({ [ownerField]: currentUserName });
         }
       }
+
+      // Handle prefillData if provided
+      if (prefillData) {
+        setFormData(prev => ({ ...prev, ...prefillData }));
+        
+        // Set the selected types for dropdowns if provided
+        if (prefillData.relatedRecordType) {
+          setSelectedRelatedRecordType(prefillData.relatedRecordType);
+        }
+        if (prefillData.contactLeadType) {
+          setSelectedContactLeadType(prefillData.contactLeadType);
+        }
+      }
     }
-  }, [isOpen, defaultType, user?.role]);
+  }, [isOpen, defaultType, user?.role, prefillData]);
 
   const handleTypeSelection = (typeId: string) => {
     // Check if user has permission to access this type
@@ -184,6 +238,13 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
     setFormData({});
     setError(null);
     setLoading(false);
+    setContacts([]);
+    setLeads([]);
+    setDeals([]);
+    setProducts([]);
+    setQuotes([]);
+    setSelectedContactLeadType('');
+    setSelectedRelatedRecordType('');
     onClose();
   };
 
@@ -196,6 +257,43 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
     label: `${u.firstName} ${u.lastName}${getUserId(u) === user?.userId ? ' (You)' : ''}`
   })).filter((opt): opt is FormFieldOption => Boolean(opt.value));
 
+  // Get dynamic options for contact/lead dropdown
+  const getContactLeadOptions = (type: string): FormFieldOption[] => {
+    if (type === 'contact') {
+      return contacts.map(c => ({
+        value: c.id,
+        label: `${c.firstName} ${c.lastName}`
+      }));
+    } else if (type === 'lead') {
+      return leads.map(l => ({
+        value: l.id,
+        label: `${l.firstName} ${l.lastName}`
+      }));
+    }
+    return [];
+  };
+
+  // Get dynamic options for related record dropdown
+  const getRelatedRecordOptions = (type: string): FormFieldOption[] => {
+    if (type === 'deal') {
+      return deals.map(d => ({
+        value: d.id,
+        label: d.dealName
+      }));
+    } else if (type === 'product') {
+      return products.map(p => ({
+        value: p.id,
+        label: p.name
+      }));
+    } else if (type === 'quote') {
+      return quotes.map(q => ({
+        value: q.id,
+        label: q.quoteName
+      }));
+    }
+    return [];
+  };
+
   const getFormFields = (): FormField[] => {
     const leadSourceOptions: FormFieldOption[] = [
       'Advertisement', 'Cold Call', 'Employee Referral', 'External Referral', 'Online Store',
@@ -207,12 +305,6 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
       'New', 'Attempted to Contact', 'Contact in Future', 'Contacted', 'Junk Lead',
       'Lost Lead', 'Not Contacted', 'Pre-Qualified', 'Not Qualified'
     ].map(status => ({ value: status, label: status }));
-
-    const taskStatusOptions: FormFieldOption[] = TASK_STATUSES.map(status => ({ value: status, label: status }));
-
-    const taskPriorityOptions: FormFieldOption[] = [
-      'High', 'Normal', 'Low'
-    ].map(priority => ({ value: priority, label: priority }));
 
     const dealStageOptions: FormFieldOption[] = DEAL_STAGES.map(stage => ({ value: stage, label: stage }));
 
@@ -276,20 +368,26 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
         ];
       case 'task':
         return [
-          { name: 'subject', label: 'Subject', type: 'text', required: true },
-          { name: 'dueDate', label: 'Due Date', type: 'date', required: true },
-          { name: 'status', label: 'Status', type: 'select', options: taskStatusOptions, required: true },
-          { name: 'priority', label: 'Priority', type: 'select', options: taskPriorityOptions, required: true },
-          { name: 'type', label: 'Type', type: 'select', options: [
-            { value: 'Call', label: 'Call' },
-            { value: 'Email', label: 'Email' },
-            { value: 'Meeting', label: 'Meeting' },
-            { value: 'Follow-up', label: 'Follow-up' },
-            { value: 'Demo', label: 'Demo' }
-          ], required: true },
-          { name: 'assignedTo', label: 'Assigned To', type: 'select', options: getUserOptions(tenantUsers), required: true },
-          { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers), required: false },
-          { name: 'description', label: 'Description', type: 'textarea', required: false }
+          // Task Information Section
+          { name: 'taskOwner', label: 'Task Owner', type: 'select', options: getUserOptions(tenantUsers), required: true, group: 'task' },
+          { name: 'subject', label: 'Subject', type: 'text', required: true, group: 'task' },
+          { name: 'dueDate', label: 'Due Date', type: 'date', required: true, group: 'task' },
+          { name: 'contactLeadType', label: 'Contact/Lead Type', type: 'select', options: [
+            { value: 'contact', label: 'Contact' },
+            { value: 'lead', label: 'Lead' }
+          ], required: false, group: 'task' },
+          { name: 'contactLeadId', label: 'Contact/Lead', type: 'select', options: getContactLeadOptions(formData.contactLeadType || selectedContactLeadType), required: false, group: 'task' },
+          { name: 'relatedRecordType', label: 'Related Record Type', type: 'select', options: [
+            { value: 'deal', label: 'Deal' },
+            { value: 'product', label: 'Product' },
+            { value: 'quote', label: 'Quote' }
+          ], required: false, group: 'task' },
+          { name: 'relatedRecordId', label: 'Related Record', type: 'select', options: getRelatedRecordOptions(formData.relatedRecordType || selectedRelatedRecordType), required: false, group: 'task' },
+          { name: 'status', label: 'Status', type: 'select', options: taskStatusOptions, required: true, group: 'task' },
+          { name: 'priority', label: 'Priority', type: 'select', options: taskPriorityOptions, required: true, group: 'task' },
+          
+          // Description Information Section
+          { name: 'description', label: 'Description', type: 'textarea', required: false, group: 'description' }
         ];
       case 'deal':
         return [
@@ -411,8 +509,24 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
         return; // Don't update if invalid
       }
       setFormData(prev => ({ ...prev, [name]: numValue }));
+    } else if (name === 'contactLeadType') {
+      // Reset contact/lead ID when type changes
+      setSelectedContactLeadType(value);
+      setFormData(prev => ({ 
+        ...prev, 
+        [name]: value,
+        contactLeadId: '' // Reset the ID when type changes
+      }));
+    } else if (name === 'relatedRecordType') {
+      // Reset related record ID when type changes
+      setSelectedRelatedRecordType(value);
+      setFormData(prev => ({ 
+        ...prev, 
+        [name]: value,
+        relatedRecordId: '' // Reset the ID when type changes
+      }));
     } else {
-    setFormData(prev => ({ ...prev, [name]: value }));
+      setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
 
@@ -544,15 +658,36 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
         });
         break;
       case 'task':
+          console.log('Creating task with data:', {
+            title: formData.subject,
+            description: formData.description || '',
+            priority: formData.priority || 'Normal',
+            status: formData.status || 'Open',
+            dueDate: formData.dueDate,
+            assignee: formData.taskOwner || user?.userId || '',
+            type: 'Follow-up',
+            tenantId: '',
+            contactLeadId: formData.contactLeadId || undefined,
+            contactLeadType: formData.contactLeadType || undefined,
+            relatedRecordId: formData.relatedRecordId || undefined,
+            relatedRecordType: formData.relatedRecordType || undefined,
+            visibleTo: formData.visibleTo || []
+          });
+          
           await tasksApi.create({
           title: formData.subject,
           description: formData.description || '',
             priority: formData.priority || 'Normal',
             status: formData.status || 'Open',
           dueDate: formData.dueDate,
-            assignee: formData.assignedTo || user?.userId || '',
+            assignee: formData.taskOwner || user?.userId || '',
             type: 'Follow-up',
             tenantId: '',
+            // Add new fields for related records
+            contactLeadId: formData.contactLeadId || undefined,
+            contactLeadType: formData.contactLeadType || undefined,
+            relatedRecordId: formData.relatedRecordId || undefined,
+            relatedRecordType: formData.relatedRecordType || undefined,
             visibleTo: formData.visibleTo || []
           });
           addNotification({
@@ -725,6 +860,13 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
       setFormData({});
       setSelectedType('');
       setError(null);
+      setContacts([]);
+      setLeads([]);
+      setDeals([]);
+      setProducts([]);
+      setQuotes([]);
+      setSelectedContactLeadType('');
+      setSelectedRelatedRecordType('');
       handleMainModalClose();
     } catch (error) {
       console.error('Error creating record:', error);
@@ -785,20 +927,33 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
       case 'select':
         return (
           <div key={field.name} className={field.group ? 'col-span-2' : ''}>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {field.label} {field.required && <span className="text-red-500">*</span>}
-            </label>
-            <select
-              value={formData[field.name] || ''}
-              onChange={(e) => handleInputChange(field.name, e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-              required={field.required}
-            >
-              <option value="">Select {field.label}</option>
-              {field.options?.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
+            {/* Hide dependent dropdowns when no type is selected */}
+            {(field.name === 'contactLeadId' && !formData.contactLeadType) ? null : 
+             (field.name === 'relatedRecordId' && !formData.relatedRecordType) ? null : (
+              <>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {field.label} {field.required && <span className="text-red-500">*</span>}
+                </label>
+                <select
+                  value={formData[field.name] || ''}
+                  onChange={(e) => handleInputChange(field.name, e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  required={field.required}
+                >
+                  <option value="">Select {field.label}</option>
+                  {field.options?.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                {/* Show helper text for dependent dropdowns */}
+                {(field.name === 'contactLeadType' && !formData.contactLeadType) && (
+                  <p className="mt-1 text-sm text-gray-500">Select a type to see available options</p>
+                )}
+                {(field.name === 'relatedRecordType' && !formData.relatedRecordType) && (
+                  <p className="mt-1 text-sm text-gray-500">Select a type to see available options</p>
+                )}
+              </>
+            )}
           </div>
         );
       case 'lineItems':
@@ -869,11 +1024,16 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
       <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
       
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <Dialog.Panel className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <Dialog.Title className="text-xl font-semibold text-gray-900">
-              {selectedType ? `Create New ${selectedType.charAt(0).toUpperCase() + selectedType.slice(1)}` : 'Create New Record'}
-            </Dialog.Title>
+            <div className="flex items-center space-x-4">
+              <Dialog.Title className="text-xl font-semibold text-gray-900">
+                {selectedType ? `Create ${selectedType.charAt(0).toUpperCase() + selectedType.slice(1)}` : 'Create New Record'}
+              </Dialog.Title>
+              <button className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                Edit Page Layout
+              </button>
+            </div>
             <button
               onClick={handleMainModalClose}
               className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
@@ -919,14 +1079,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                     <Icons.ArrowLeft className="w-4 h-4 mr-1" />
                     Back to selection
                   </button>
-                  <h2 className="text-xl font-semibold text-gray-900 ml-4">
-                    Create New {selectedType?.charAt(0).toUpperCase() + selectedType?.slice(1)}
-                  </h2>
                 </div>
-
-                <p className="text-sm text-gray-600 mb-6">
-                  Fill in the details below to create a new {selectedType?.toLowerCase()}.
-                </p>
 
                 {/* Error Display */}
                 {error && (
@@ -941,76 +1094,266 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                   </div>
                 )}
 
-                {/* Form Fields */}
-                {Object.entries(groupedFields).map(([group, fields]) => (
-                  <div key={group} className="mb-8">
-                    {group !== 'default' && (
-                      <div className="mb-6">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                          {group === 'product' && <Icons.Package className="w-5 h-5 mr-2 text-blue-600" />}
-                          {group === 'price' && <Icons.DollarSign className="w-5 h-5 mr-2 text-green-600" />}
-                          {group === 'stock' && <Icons.Box className="w-5 h-5 mr-2 text-orange-600" />}
-                          {group === 'description' && <Icons.FileText className="w-5 h-5 mr-2 text-purple-600" />}
-                          {group === 'visibility' && <Icons.Users className="w-5 h-5 mr-2 text-indigo-600" />}
-                          {group === 'deal' && <Icons.Target className="w-5 h-5 mr-2 text-blue-600" />}
-                          {group === 'contact' && <Icons.Phone className="w-5 h-5 mr-2 text-green-600" />}
-                          {group === 'additional' && <Icons.FileText className="w-5 h-5 mr-2 text-purple-600" />}
-                          {group === 'address' && <Icons.MapPin className="w-5 h-5 mr-2 text-orange-600" />}
-                          {group === 'quote' && <Icons.FileText className="w-5 h-5 mr-2 text-blue-600" />}
-                          {group === 'customer' && <Icons.User className="w-5 h-5 mr-2 text-green-600" />}
-                          {group === 'pricing' && <Icons.DollarSign className="w-5 h-5 mr-2 text-green-600" />}
-                          {group === 'details' && <Icons.FileText className="w-5 h-5 mr-2 text-purple-600" />}
-                          {group === 'lineItems' && <Icons.List className="w-5 h-5 mr-2 text-indigo-600" />}
-                          {group.charAt(0).toUpperCase() + group.slice(1)} Information
-                        </h3>
-                        <div className="border-b border-gray-200 mb-4"></div>
+                {/* Form Fields - Clean Layout */}
+                <div className="space-y-6">
+                  {/* Task Information Section */}
+                  {selectedType === 'task' && (
+                    <>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Task Information</h3>
+                        <div className="space-y-4">
+                          {/* Task Owner */}
+                          <div className="border-b border-gray-200 pb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Task Owner
+                            </label>
+                            <div className="flex items-center">
+                              <select
+                                value={formData.taskOwner || ''}
+                                onChange={(e) => handleInputChange('taskOwner', e.target.value)}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                required
+                              >
+                                <option value="">Select Task Owner</option>
+                                {getUserOptions(tenantUsers).map(option => (
+                                  <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                              </select>
+                              <Icons.ChevronDown className="w-4 h-4 text-gray-400 ml-2" />
+                              <Icons.User className="w-4 h-4 text-gray-400 ml-2" />
+                            </div>
+                          </div>
+
+                          {/* Subject */}
+                          <div className="border-b border-gray-200 pb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Subject
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.subject || ''}
+                              onChange={(e) => handleInputChange('subject', e.target.value)}
+                              required
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="Enter subject"
+                            />
+                          </div>
+
+                          {/* Due Date */}
+                          <div className="border-b border-gray-200 pb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Due Date
+                            </label>
+                            <input
+                              type="date"
+                              value={formData.dueDate || ''}
+                              onChange={(e) => handleInputChange('dueDate', e.target.value)}
+                              required
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              placeholder="DD/MM/YYYY"
+                            />
+                          </div>
+
+                          {/* Contact/Lead Type */}
+                          <div className="border-b border-gray-200 pb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Contact/Lead Type
+                            </label>
+                            <div className="flex items-center">
+                              <select
+                                value={formData.contactLeadType || ''}
+                                onChange={(e) => handleInputChange('contactLeadType', e.target.value)}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                              >
+                                <option value="">Select Type</option>
+                                <option value="contact">Contact</option>
+                                <option value="lead">Lead</option>
+                              </select>
+                              <Icons.ChevronDown className="w-4 h-4 text-gray-400 ml-2" />
+                              <Icons.Search className="w-4 h-4 text-gray-400 ml-2" />
+                            </div>
+                          </div>
+
+                          {/* Contact/Lead Selection */}
+                          {formData.contactLeadType && (
+                            <div className="border-b border-gray-200 pb-4">
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Contact/Lead
+                              </label>
+                              <div className="flex items-center">
+                                <select
+                                  value={formData.contactLeadId || ''}
+                                  onChange={(e) => handleInputChange('contactLeadId', e.target.value)}
+                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                >
+                                  <option value="">Select {formData.contactLeadType}</option>
+                                  {getContactLeadOptions(formData.contactLeadType).map(option => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                  ))}
+                                </select>
+                                <Icons.ChevronDown className="w-4 h-4 text-gray-400 ml-2" />
+                                <Icons.Search className="w-4 h-4 text-gray-400 ml-2" />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Related Record Type */}
+                          <div className="border-b border-gray-200 pb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Related Record Type
+                            </label>
+                            <div className="flex items-center">
+                              <select
+                                value={formData.relatedRecordType || ''}
+                                onChange={(e) => handleInputChange('relatedRecordType', e.target.value)}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                              >
+                                <option value="">Select Type</option>
+                                <option value="deal">Deal</option>
+                                <option value="product">Product</option>
+                                <option value="quote">Quote</option>
+                              </select>
+                              <Icons.ChevronDown className="w-4 h-4 text-gray-400 ml-2" />
+                              <Icons.Search className="w-4 h-4 text-gray-400 ml-2" />
+                            </div>
+                          </div>
+
+                          {/* Related Record Selection */}
+                          {formData.relatedRecordType && (
+                            <div className="border-b border-gray-200 pb-4">
+                              <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Related Record
+                              </label>
+                              <div className="flex items-center">
+                                <select
+                                  value={formData.relatedRecordId || ''}
+                                  onChange={(e) => handleInputChange('relatedRecordId', e.target.value)}
+                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                                >
+                                  <option value="">Select {formData.relatedRecordType}</option>
+                                  {getRelatedRecordOptions(formData.relatedRecordType).map(option => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                  ))}
+                                </select>
+                                <Icons.ChevronDown className="w-4 h-4 text-gray-400 ml-2" />
+                                <Icons.Search className="w-4 h-4 text-gray-400 ml-2" />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Status */}
+                          <div className="border-b border-gray-200 pb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Status
+                            </label>
+                            <div className="flex items-center">
+                              <select
+                                value={formData.status || ''}
+                                onChange={(e) => handleInputChange('status', e.target.value)}
+                                required
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                              >
+                                <option value="">Select Status</option>
+                                {taskStatusOptions.map(option => (
+                                  <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                              </select>
+                              <Icons.ChevronDown className="w-4 h-4 text-gray-400 ml-2" />
+                            </div>
+                          </div>
+
+                          {/* Priority */}
+                          <div className="border-b border-gray-200 pb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Priority
+                            </label>
+                            <div className="flex items-center">
+                              <select
+                                value={formData.priority || ''}
+                                onChange={(e) => handleInputChange('priority', e.target.value)}
+                                required
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                              >
+                                <option value="">Select Priority</option>
+                                {taskPriorityOptions.map(option => (
+                                  <option key={option.value} value={option.value}>{option.label}</option>
+                                ))}
+                              </select>
+                              <Icons.ChevronDown className="w-4 h-4 text-gray-400 ml-2" />
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                    <div className={`grid ${
-                      group === 'address' ? 'grid-cols-1 md:grid-cols-2' : 
-                      group === 'deal' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
-                      group === 'contact' ? 'grid-cols-1 md:grid-cols-2' :
-                      group === 'product' ? 'grid-cols-1 md:grid-cols-2' :
-                      group === 'price' ? 'grid-cols-1 md:grid-cols-3' :
-                      group === 'stock' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
-                      group === 'description' ? 'grid-cols-1' :
-                      group === 'visibility' ? 'grid-cols-1' :
-                      group === 'quote' ? 'grid-cols-1 md:grid-cols-2' :
-                      group === 'customer' ? 'grid-cols-1 md:grid-cols-2' :
-                      group === 'pricing' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
-                      group === 'details' ? 'grid-cols-1' :
-                      group === 'lineItems' ? 'grid-cols-1' :
-                      'grid-cols-1'
-                    } gap-6`}>
-                      {fields.map((field) => renderField(field))}
+
+                      {/* Description Information Section */}
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Description Information</h3>
+                        <div className="border-b border-gray-200 pb-4">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Description
+                          </label>
+                          <textarea
+                            value={formData.description || ''}
+                            onChange={(e) => handleInputChange('description', e.target.value)}
+                            rows={4}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                            placeholder="Enter description"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Other record types - keep existing structure for now */}
+                  {selectedType !== 'task' && (
+                    <div className="space-y-6">
+                      {Object.entries(groupedFields).map(([group, fields]) => (
+                        <div key={group}>
+                          {group !== 'default' && (
+                            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                              {group.charAt(0).toUpperCase() + group.slice(1)} Information
+                            </h3>
+                          )}
+                          <div className="space-y-4">
+                            {fields.map((field) => (
+                              <div key={field.name} className="border-b border-gray-200 pb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  {field.label} {field.required && <span className="text-red-500">*</span>}
+                                </label>
+                                {renderField(field)}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                ))}
+                  )}
+                </div>
 
                 {/* Form Actions */}
-                <div className="flex justify-end space-x-3 mt-8">
-                <button
-                  type="button"
-                  onClick={handleMainModalClose}
+                <div className="flex justify-end space-x-3 mt-8 pt-6 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={handleMainModalClose}
                     className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                >
-                  {loading ? (
-                    <>
-                      <Icons.Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    `Create ${selectedType?.charAt(0).toUpperCase() + selectedType?.slice(1)}`
-                  )}
-                </button>
-              </div>
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  >
+                    {loading ? (
+                      <>
+                        <Icons.Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      `Create ${selectedType?.charAt(0).toUpperCase() + selectedType?.slice(1)}`
+                    )}
+                  </button>
+                </div>
               </form>
             )}
           </div>

@@ -1,23 +1,24 @@
 import React from 'react';
 import * as Icons from 'lucide-react';
-import { Quote } from '../../types';
+import { Quote, Task } from '../../types';
 
 interface QuoteSidebarProps {
   quote: Quote;
+  tasks?: Task[];
 }
 
-const QuoteSidebar: React.FC<QuoteSidebarProps> = ({ quote }) => {
+const QuoteSidebar: React.FC<QuoteSidebarProps> = ({ quote, tasks = [] }) => {
   // Calculate counts based on quote data
   const getNotesCount = () => {
     return quote.notes ? 1 : 0;
   };
 
   const getOpenActivitiesCount = () => {
-    return 0; // No open activities data available
+    return tasks.filter(task => task.status !== 'Completed').length;
   };
 
   const getClosedActivitiesCount = () => {
-    return 0; // No closed activities data available
+    return tasks.filter(task => task.status === 'Completed').length;
   };
 
   const getEmailsCount = () => {

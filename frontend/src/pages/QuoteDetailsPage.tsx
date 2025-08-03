@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
-import { quotesApi, Quote, usersApi, User } from '../api/services';
+import { quotesApi, Quote, usersApi, User, tasksApi, Task } from '../api/services';
 import QuoteHeader from '../components/QuoteDetails/QuoteHeader';
 import QuoteSidebar from '../components/QuoteDetails/QuoteSidebar';
 import QuoteTabs from '../components/QuoteDetails/QuoteTabs';
@@ -12,10 +12,28 @@ const QuoteDetailsPage: React.FC = () => {
   const navigate = useNavigate();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline'>('overview');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // Fetch tasks related to this quote
+  const fetchQuoteTasks = async () => {
+    if (!quote?.id) return;
+    
+    try {
+      const quoteTasks = await tasksApi.getByRelatedRecord('quote', quote.id);
+      setTasks(quoteTasks);
+    } catch (error) {
+      console.error('Failed to fetch quote tasks:', error);
+    }
+  };
+
+  // Handle tasks update
+  const handleTasksUpdate = (updatedTasks: Task[]) => {
+    setTasks(updatedTasks);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -44,6 +62,13 @@ const QuoteDetailsPage: React.FC = () => {
 
     fetchData();
   }, [id]);
+
+  // Fetch tasks when quote changes
+  useEffect(() => {
+    if (quote?.id) {
+      fetchQuoteTasks();
+    }
+  }, [quote?.id]);
 
   const getUserDisplayName = (userId: string): string => {
     const user = users.find(u => u.id === userId);
@@ -108,7 +133,7 @@ const QuoteDetailsPage: React.FC = () => {
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
         <div className="w-56 bg-white border-r border-gray-200">
-          <QuoteSidebar quote={quote} />
+          <QuoteSidebar quote={quote} tasks={tasks} />
         </div>
 
         {/* Main Content Area */}
@@ -119,6 +144,8 @@ const QuoteDetailsPage: React.FC = () => {
             quote={quote}
             getUserDisplayName={getUserDisplayName}
             onQuoteUpdate={handleQuoteUpdate}
+            tasks={tasks}
+            onTasksUpdate={handleTasksUpdate}
           />
         </div>
       </div>

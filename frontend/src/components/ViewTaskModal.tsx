@@ -70,6 +70,26 @@ const ViewTaskModal: React.FC<ViewTaskModalProps> = ({ isOpen, onClose, task, us
                     <h4 className="font-semibold">Due Date</h4>
                     <p>{new Date(task.dueDate).toLocaleDateString()}</p>
                   </div>
+                  
+                  {/* Related Records Information */}
+                  {(task.contactLeadId || task.relatedRecordId) && (
+                    <div className="mb-4">
+                      <h4 className="font-semibold">Related Records</h4>
+                      <div className="space-y-2">
+                        {task.contactLeadId && (
+                          <div className="text-sm">
+                            <span className="font-medium">Contact/Lead:</span> {task.contactLeadType} (ID: {task.contactLeadId})
+                          </div>
+                        )}
+                        {task.relatedRecordId && (
+                          <div className="text-sm">
+                            <span className="font-medium">Related Record:</span> {task.relatedRecordType} (ID: {task.relatedRecordId})
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className="mb-4">
                     <h4 className="font-semibold">Visible To</h4>
                     <p>
