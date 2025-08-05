@@ -8,7 +8,7 @@ import { leadsApi, Lead, Deal, Task } from '../api/services';
 import AddNewModal from '../components/Common/AddNewModal';
 import ViewLeadModal from '../components/ViewLeadModal';
 import EditLeadModal from '../components/EditLeadModal';
-import ConvertToDealModal from '../components/ConvertToDealModal';
+import ConvertLeadModal from '../components/ConvertLeadModal';
 import KanbanView from '../components/Views/KanbanView';
 import { Dialog } from '@headlessui/react';
 
@@ -204,7 +204,7 @@ const Leads: React.FC = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleConvertToDeal = (lead: Lead) => {
+  const handleConvertLead = (lead: Lead) => {
     setSelectedLead(lead);
     setIsConvertModalOpen(true);
   };
@@ -322,9 +322,9 @@ const Leads: React.FC = () => {
         className="p-1 text-gray-400 hover:text-purple-600"
         onClick={(e) => {
           e.stopPropagation();
-          handleConvertToDeal(row);
+          handleConvertLead(row);
         }}
-        title="Convert to Deal"
+        title="Convert Lead"
       >
         <Icons.Target className="w-4 h-4" />
       </button>
@@ -743,13 +743,13 @@ const Leads: React.FC = () => {
         onSuccess={handleEditSuccess}
       />
 
-      {/* Convert to Deal Modal */}
-      <ConvertToDealModal
+      {/* Convert Lead Modal */}
+      <ConvertLeadModal
         isOpen={isConvertModalOpen}
         onClose={handleModalClose}
         lead={selectedLead}
         onSuccess={() => {
-          setSuccessMessage('Lead has been successfully converted to deal.');
+          setSuccessMessage('Lead has been successfully converted and removed from leads.');
         }}
       />
 

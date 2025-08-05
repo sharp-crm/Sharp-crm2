@@ -70,11 +70,11 @@ const ViewContactModal: React.FC<ViewContactModalProps> = ({ isOpen, onClose, co
             <div className="flex items-center mb-6">
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mr-4">
                 <span className="text-xl font-semibold text-blue-700">
-                  {contact.firstName.charAt(0).toUpperCase()}
+                  {`${(contact.firstName || '')[0] || ''}${(contact.lastName || '')[0] || ''}`.toUpperCase()}
                 </span>
               </div>
               <div>
-                <h2 className="text-xl font-bold text-gray-900">{contact.firstName}</h2>
+                <h2 className="text-xl font-bold text-gray-900">{`${contact.firstName || ''} ${contact.lastName || ''}`.trim()}</h2>
                 <p className="text-gray-600">{contact.title} at {contact.companyName}</p>
                 <div className="flex items-center mt-1">
                   <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${

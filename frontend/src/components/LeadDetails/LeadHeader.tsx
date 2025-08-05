@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { Lead, User } from '../../api/services';
+import ConvertLeadModal from '../ConvertLeadModal';
 
 interface LeadHeaderProps {
   lead: Lead;
@@ -17,6 +19,8 @@ const LeadHeader: React.FC<LeadHeaderProps> = ({
   onSendEmail,
   getUserDisplayName
 }) => {
+  const navigate = useNavigate();
+  const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Qualified':
@@ -102,7 +106,7 @@ const LeadHeader: React.FC<LeadHeaderProps> = ({
           </button>
           
           <button
-            onClick={onConvert}
+            onClick={() => setIsConvertModalOpen(true)}
             className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
           >
             <Icons.Target className="w-4 h-4 mr-2" />
@@ -145,6 +149,18 @@ const LeadHeader: React.FC<LeadHeaderProps> = ({
           </div>
         )}
       </div>
+
+      {/* Convert Lead Modal */}
+      <ConvertLeadModal
+        isOpen={isConvertModalOpen}
+        onClose={() => setIsConvertModalOpen(false)}
+        lead={lead}
+        onSuccess={() => {
+          setIsConvertModalOpen(false);
+          // Navigate to leads page after successful conversion
+          navigate('/leads');
+        }}
+      />
     </div>
   );
 };

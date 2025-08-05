@@ -30,6 +30,8 @@ export interface Lead {
   // Additional fields
   description?: string;
   value?: number;
+  notes?: string;
+  relatedProductIds?: string[]; // Array of product IDs related to this lead
   visibleTo?: string[]; // Array of user IDs who can view this lead
   
   // Auditing fields
@@ -49,7 +51,7 @@ export interface CreateLeadInput {
   firstName: string;
   lastName: string;
   company: string;
-  email?: string; // Now optional to allow multiple leads with same email
+  email: string; // Required field
   leadSource: string;
   leadStatus: string;
   phone: string; // Required for contacting the lead
@@ -62,6 +64,8 @@ export interface CreateLeadInput {
   zipCode?: string;
   description?: string;
   value?: number;
+  notes?: string;
+  relatedProductIds?: string[]; // Array of product IDs related to this lead
   visibleTo?: string[]; // Array of user IDs who can view this lead
 }
 
@@ -83,6 +87,8 @@ export interface UpdateLeadInput {
   zipCode?: string;
   description?: string;
   value?: number;
+  notes?: string;
+  relatedProductIds?: string[]; // Array of product IDs related to this lead
   visibleTo?: string[]; // Array of user IDs who can view this lead
 }
 
@@ -94,13 +100,18 @@ export class LeadsService {
     const timestamp = new Date().toISOString();
     const leadId = uuidv4();
 
+    console.log('🔍 [LeadsService.createLead] Input received:', input);
+    console.log('🔍 [LeadsService.createLead] relatedProductIds from input:', input.relatedProductIds);
+    console.log('🔍 [LeadsService.createLead] relatedProductIds type:', typeof input.relatedProductIds);
+    console.log('🔍 [LeadsService.createLead] relatedProductIds length:', input.relatedProductIds?.length);
+
     const lead: Lead = {
       id: leadId,
       leadOwner: input.leadOwner,
       firstName: input.firstName,
       lastName: input.lastName,
       company: input.company,
-      email: input.email || '', // Handle optional email
+      email: input.email, // Required field - no fallback needed
       leadSource: input.leadSource,
       leadStatus: input.leadStatus,
       phone: input.phone || '', // Handle required phone field
@@ -113,6 +124,8 @@ export class LeadsService {
       zipCode: input.zipCode,
       description: input.description,
       value: input.value || 0,
+      notes: input.notes || '',
+      relatedProductIds: input.relatedProductIds || [], // Initialize related products array
       visibleTo: input.visibleTo || [], // Initialize visibility array
       createdBy: userEmail,
       createdAt: timestamp,
@@ -123,11 +136,17 @@ export class LeadsService {
       tenantId
     };
 
+    console.log('🔍 [LeadsService.createLead] Lead object being saved:', lead);
+    console.log('🔍 [LeadsService.createLead] relatedProductIds in lead object:', lead.relatedProductIds);
+
     await docClient.send(new PutCommand({
       TableName: this.tableName,
       Item: lead,
       ConditionExpression: 'attribute_not_exists(id)'
     }));
+
+    console.log('✅ [LeadsService.createLead] Lead saved to database successfully');
+    console.log('✅ [LeadsService.createLead] Final lead object:', lead);
 
     return lead;
   }
@@ -238,11 +257,17 @@ export class LeadsService {
 
   // Update lead
   async updateLead(id: string, input: UpdateLeadInput, userId: string, userEmail: string, tenantId: string): Promise<Lead | null> {
+    console.log(`🔍 [updateLead] Starting update for lead ${id}`);
+    console.log(`🔍 [updateLead] Input:`, input);
+    
     // First check if lead exists and belongs to tenant
     const existingLead = await this.getLeadById(id, tenantId, userId);
     if (!existingLead) {
+      console.log(`❌ [updateLead] Lead not found or access denied`);
       return null;
     }
+
+    console.log(`🔍 [updateLead] Existing lead:`, existingLead);
 
     const timestamp = new Date().toISOString();
     
@@ -260,6 +285,7 @@ export class LeadsService {
         updateExpressions.push(`#${key} = :${key}`);
         expressionAttributeNames[`#${key}`] = key;
         expressionAttributeValues[`:${key}`] = value;
+        console.log(`🔍 [updateLead] Adding field ${key} = ${value}`);
       }
     });
 
@@ -267,6 +293,9 @@ export class LeadsService {
     updateExpressions.push('updatedBy = :updatedBy', 'updatedAt = :updatedAt');
 
     const updateExpression = `SET ${updateExpressions.join(', ')}`;
+    console.log(`🔍 [updateLead] Update expression:`, updateExpression);
+    console.log(`🔍 [updateLead] Expression attribute names:`, expressionAttributeNames);
+    console.log(`🔍 [updateLead] Expression attribute values:`, expressionAttributeValues);
 
     const result = await docClient.send(new UpdateCommand({
       TableName: this.tableName,
@@ -282,6 +311,7 @@ export class LeadsService {
       ReturnValues: 'ALL_NEW'
     }));
 
+    console.log(`🔍 [updateLead] DynamoDB result:`, result.Attributes);
     return result.Attributes as Lead;
   }
 

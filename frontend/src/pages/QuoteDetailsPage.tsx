@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { quotesApi, Quote, usersApi, User, tasksApi, Task } from '../api/services';
@@ -18,22 +18,15 @@ const QuoteDetailsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline'>('overview');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  // Fetch tasks related to this quote
-  const fetchQuoteTasks = async () => {
-    if (!quote?.id) return;
-    
-    try {
-      const quoteTasks = await tasksApi.getByRelatedRecord('quote', quote.id);
-      setTasks(quoteTasks);
-    } catch (error) {
-      console.error('Failed to fetch quote tasks:', error);
-    }
-  };
+  // Handle quote update with memoization
+  const handleQuoteUpdate = useCallback((updatedQuote: Quote) => {
+    setQuote(updatedQuote);
+  }, []);
 
-  // Handle tasks update
-  const handleTasksUpdate = (updatedTasks: Task[]) => {
+  // Handle tasks update with memoization
+  const handleTasksUpdate = useCallback((updatedTasks: Task[]) => {
     setTasks(updatedTasks);
-  };
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -63,13 +56,6 @@ const QuoteDetailsPage: React.FC = () => {
     fetchData();
   }, [id]);
 
-  // Fetch tasks when quote changes
-  useEffect(() => {
-    if (quote?.id) {
-      fetchQuoteTasks();
-    }
-  }, [quote?.id]);
-
   const getUserDisplayName = (userId: string): string => {
     const user = users.find(u => u.id === userId);
     if (!user) return userId;
@@ -94,10 +80,6 @@ const QuoteDetailsPage: React.FC = () => {
       setError(err instanceof Error ? err.message : 'Failed to refresh quote');
     }
     setIsEditModalOpen(false);
-  };
-
-  const handleQuoteUpdate = (updatedQuote: Quote) => {
-    setQuote(updatedQuote);
   };
 
   if (loading) {
@@ -144,7 +126,6 @@ const QuoteDetailsPage: React.FC = () => {
             quote={quote}
             getUserDisplayName={getUserDisplayName}
             onQuoteUpdate={handleQuoteUpdate}
-            tasks={tasks}
             onTasksUpdate={handleTasksUpdate}
           />
         </div>

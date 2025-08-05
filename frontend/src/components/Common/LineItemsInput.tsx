@@ -58,17 +58,37 @@ const LineItemsInput: React.FC<LineItemsInputProps> = ({ value, onChange, classN
   // Update local state when value prop changes
   useEffect(() => {
     console.log('LineItemsInput: value prop changed:', value);
-    setLineItems(value.length > 0 ? value : [{
-      id: '1',
-      productName: '',
-      productId: '',
-      description: '',
-      quantity: 1,
-      listPrice: 0,
-      amount: 0,
-      discount: 0,
-      tax: 0
-    }]);
+    console.log('LineItemsInput: value length:', value.length);
+    console.log('LineItemsInput: value items:', value);
+    
+    if (value && value.length > 0) {
+      // Ensure all items have required fields
+      const formattedValue = value.map((item, index) => ({
+        id: item.id || `item-${index + 1}`,
+        productName: item.productName || '',
+        productId: item.productId || '',
+        description: item.description || '',
+        quantity: item.quantity || 1,
+        listPrice: item.listPrice || item.unitPrice || 0,
+        amount: item.amount || 0,
+        discount: item.discount || 0,
+        tax: item.tax || 0
+      }));
+      console.log('LineItemsInput: formatted value:', formattedValue);
+      setLineItems(formattedValue);
+    } else {
+      setLineItems([{
+        id: '1',
+        productName: '',
+        productId: '',
+        description: '',
+        quantity: 1,
+        listPrice: 0,
+        amount: 0,
+        discount: 0,
+        tax: 0
+      }]);
+    }
   }, [value]);
 
   const addLineItem = () => {

@@ -15,6 +15,8 @@ export interface Lead {
   leadStatus: string;
   value?: number;
   description?: string;
+  notes?: string;
+  relatedProductIds?: string[];
   source: string;
   status: string;
   // Address fields
@@ -133,6 +135,8 @@ export interface Task {
   contactLeadType?: 'contact' | 'lead';
   relatedRecordId?: string;
   relatedRecordType?: 'deal' | 'product' | 'quote';
+  // Soft delete field
+  isDeleted?: boolean;
 }
 
 export interface Product {
@@ -158,6 +162,9 @@ export interface Product {
   // Description Information
   description: string;
   notes?: string;
+  
+  // Related records
+  relatedLeadIds?: string[];
   
   // Legacy fields for backward compatibility
   category?: string;
@@ -292,9 +299,13 @@ export const leadsApi = {
 
   update: async (id: string, updates: Partial<Lead>): Promise<Lead> => {
     try {
+      console.log('🔍 [leadsApi.update] Sending update for lead:', id);
+      console.log('🔍 [leadsApi.update] Updates:', updates);
       const response = await API.put<ApiResponse<Lead>>(`/leads/${id}`, updates);
+      console.log('🔍 [leadsApi.update] Response:', response.data);
       return response.data.data;
     } catch (error) {
+      console.error('🔍 [leadsApi.update] Error:', error);
       handleApiError(error);
       throw error;
     }

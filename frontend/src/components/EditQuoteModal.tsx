@@ -27,6 +27,19 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ isOpen, onClose, quote,
       console.log('Quote lineItems type:', typeof quote.lineItems);
       console.log('Quote lineItems length:', quote.lineItems?.length);
       
+      // Ensure lineItems are properly formatted with all required fields
+      const formattedLineItems = (quote.lineItems || []).map((item, index) => ({
+        id: item.id || `item-${index + 1}`,
+        productName: item.productName || '',
+        productId: item.productId || '',
+        description: item.description || '',
+        quantity: item.quantity || 1,
+        listPrice: item.listPrice || item.unitPrice || 0,
+        amount: item.amount || 0,
+        discount: item.discount || 0,
+        tax: item.tax || 0
+      }));
+      
       setFormData({
         quoteNumber: quote.quoteNumber,
         quoteName: quote.quoteName,
@@ -46,14 +59,14 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ isOpen, onClose, quote,
         terms: quote.terms,
         notes: quote.notes,
         visibleTo: quote.visibleTo,
-        lineItems: quote.lineItems || []
+        lineItems: formattedLineItems
       });
       console.log('Form data initialized:', {
         quoteNumber: quote.quoteNumber,
         quoteName: quote.quoteName,
         quoteOwner: quote.quoteOwner,
         status: quote.status,
-        lineItems: quote.lineItems
+        lineItems: formattedLineItems
       });
     }
   }, [isOpen, quote]);
@@ -241,7 +254,7 @@ const EditQuoteModal: React.FC<EditQuoteModalProps> = ({ isOpen, onClose, quote,
                   Quote Items
                 </h3>
                 <LineItemsInput
-                  key={quote.id} // Force re-render when quote changes
+                  key={`${quote.id}-${formData.lineItems?.length || 0}`} // Force re-render when quote or lineItems change
                   value={formData.lineItems || []}
                   onChange={(items) => {
                     console.log('LineItemsInput onChange called with:', items);

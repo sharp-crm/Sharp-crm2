@@ -40,6 +40,16 @@ const ProductSidebar: React.FC<ProductSidebarProps> = ({ product, tasks = [] }) 
     return tasks.filter(task => task.status === 'Completed').length;
   };
 
+  const getNotesCount = () => {
+    if (!product?.notes) return 0;
+    return product.notes.split('\n\n').length;
+  };
+
+  const getLeadsCount = () => {
+    if (!product?.relatedLeadIds) return 0;
+    return product.relatedLeadIds.length;
+  };
+
   const sidebarItems = [
     { 
       id: 'product-information', 
@@ -51,7 +61,7 @@ const ProductSidebar: React.FC<ProductSidebarProps> = ({ product, tasks = [] }) 
       id: 'notes', 
       label: 'Notes', 
       icon: Icons.FileText, 
-      count: 0 
+      count: getNotesCount()
     },
     { 
       id: 'open-activities', 
@@ -75,7 +85,7 @@ const ProductSidebar: React.FC<ProductSidebarProps> = ({ product, tasks = [] }) 
       id: 'leads', 
       label: 'Leads', 
       icon: Icons.UserPlus, 
-      count: 0 
+      count: getLeadsCount()
     }
   ];
 

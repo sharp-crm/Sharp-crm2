@@ -14,11 +14,11 @@ const QuoteSidebar: React.FC<QuoteSidebarProps> = ({ quote, tasks = [] }) => {
   };
 
   const getOpenActivitiesCount = () => {
-    return tasks.filter(task => task.status !== 'Completed').length;
+    return tasks.filter(task => task.status !== 'Completed' && !task.isDeleted).length;
   };
 
   const getClosedActivitiesCount = () => {
-    return tasks.filter(task => task.status === 'Completed').length;
+    return tasks.filter(task => task.status === 'Completed' && !task.isDeleted).length;
   };
 
   const getEmailsCount = () => {

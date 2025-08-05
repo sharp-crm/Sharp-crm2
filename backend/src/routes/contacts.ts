@@ -140,7 +140,7 @@ const createContact: RequestHandler = async (req: any, res) => {
     }
 
     // Validate required fields
-    const requiredFields = ['contactOwner', 'firstName', 'companyName', 'email', 'leadSource'];
+    const requiredFields = ['contactOwner', 'firstName', 'lastName', 'companyName', 'email', 'leadSource'];
     const missingFields = validateRequiredFields(req.body, requiredFields);
     
     if (missingFields) {
@@ -167,6 +167,7 @@ const createContact: RequestHandler = async (req: any, res) => {
     const contactInput: CreateContactInput = {
       contactOwner: req.body.contactOwner,
       firstName: req.body.firstName,
+      lastName: req.body.lastName,
       companyName: req.body.companyName,
       email: req.body.email,
       leadSource: req.body.leadSource,
@@ -235,7 +236,7 @@ const updateContact: RequestHandler = async (req: any, res) => {
     
     // Only include fields that are provided in the request
     const updateableFields = [
-      'contactOwner', 'firstName', 'companyName', 'email', 'leadSource',
+      'contactOwner', 'firstName', 'lastName', 'companyName', 'email', 'leadSource',
       'phone', 'title', 'department', 'street', 'area', 'city', 'state',
       'country', 'zipCode', 'description', 'status', 'visibleTo'
     ];

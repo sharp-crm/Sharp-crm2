@@ -220,6 +220,13 @@ const updateProduct: RequestHandler = async (req: any, res) => {
       return;
     }
 
+    // Validate relatedLeadIds array if provided
+    if (updateData.relatedLeadIds && !Array.isArray(updateData.relatedLeadIds)) {
+      console.log(`❌ [${operation}] Invalid relatedLeadIds: ${updateData.relatedLeadIds}`);
+      res.status(400).json({ error: "relatedLeadIds must be an array of lead IDs" });
+      return;
+    }
+
     console.log(`📊 [${operation}] Updating product - ProductId: ${id}`);
     const updatedProduct = await productsService.updateProduct(id, {
       ...updateData,

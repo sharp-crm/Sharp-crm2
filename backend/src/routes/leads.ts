@@ -160,8 +160,13 @@ const createLead: RequestHandler = async (req: any, res) => {
       return;
     }
 
-    // Validate required fields (email is now optional, phone is required)
-    const requiredFields = ['leadOwner', 'firstName', 'lastName', 'company', 'phone', 'leadSource', 'leadStatus'];
+    console.log('🔍 [createLead] Request body:', req.body);
+    console.log('🔍 [createLead] relatedProductIds from request:', req.body.relatedProductIds);
+    console.log('🔍 [createLead] relatedProductIds type:', typeof req.body.relatedProductIds);
+    console.log('🔍 [createLead] relatedProductIds length:', req.body.relatedProductIds?.length);
+
+    // Validate required fields (email is now required, phone is required)
+    const requiredFields = ['leadOwner', 'firstName', 'lastName', 'company', 'email', 'phone', 'leadSource', 'leadStatus'];
     const missingFields = validateRequiredFields(req.body, requiredFields);
     
     if (missingFields) {
@@ -190,6 +195,12 @@ const createLead: RequestHandler = async (req: any, res) => {
       return;
     }
 
+    // Validate relatedProductIds array if provided
+    if (req.body.relatedProductIds && !Array.isArray(req.body.relatedProductIds)) {
+      res.status(400).json({ error: "relatedProductIds must be an array of product IDs" });
+      return;
+    }
+
     const leadInput: CreateLeadInput = {
       leadOwner: req.body.leadOwner,
       firstName: req.body.firstName,
@@ -208,10 +219,17 @@ const createLead: RequestHandler = async (req: any, res) => {
       zipCode: req.body.zipCode,
       description: req.body.description,
       value: req.body.value,
+      relatedProductIds: req.body.relatedProductIds || [],
       visibleTo: req.body.visibleTo || []
     };
 
+    console.log('🔍 [createLead] Lead input being sent to service:', leadInput);
+    console.log('🔍 [createLead] relatedProductIds in leadInput:', leadInput.relatedProductIds);
+
     const lead = await leadsService.createLead(leadInput, userId, req.user.email, tenantId);
+
+    console.log('✅ [createLead] Lead created successfully:', lead.id);
+    console.log('✅ [createLead] Created lead relatedProductIds:', lead.relatedProductIds);
 
     res.status(201).json({ 
       message: "Lead created successfully", 
@@ -258,16 +276,24 @@ const updateLead: RequestHandler = async (req: any, res) => {
     const updateableFields = [
       'leadOwner', 'firstName', 'lastName', 'company', 'email', 'leadSource', 'leadStatus',
       'phone', 'title', 'street', 'area', 'city', 'state', 'country', 'zipCode', 'description', 'value',
-      'visibleTo'
+      'notes', 'relatedProductIds', 'visibleTo'
     ];
+
+    console.log('🔍 [updateLead] Request body:', req.body);
+    console.log('🔍 [updateLead] Updateable fields:', updateableFields);
 
     updateableFields.forEach(field => {
       if (req.body[field] !== undefined) {
         updateInput[field as keyof UpdateLeadInput] = req.body[field];
+        console.log(`🔍 [updateLead] Adding field ${field}:`, req.body[field]);
       }
     });
 
+    console.log('🔍 [updateLead] Final updateInput:', updateInput);
+
     const updatedLead = await leadsService.updateLead(id, updateInput, userId, req.user.email, tenantId);
+    
+    console.log('🔍 [updateLead] Service returned:', updatedLead);
     
     if (!updatedLead) {
       res.status(404).json({ error: "Lead not found" });

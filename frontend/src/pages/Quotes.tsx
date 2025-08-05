@@ -28,7 +28,6 @@ const Quotes: React.FC = () => {
 
   const [filters, setFilters] = useState({
     quoteName: false,
-    customerName: false,
     status: false,
     priceRange: false
   });
@@ -36,7 +35,6 @@ const Quotes: React.FC = () => {
   // Filter values
   const [filterValues, setFilterValues] = useState({
     quoteName: '',
-    customerName: '',
     status: '',
     minPrice: '',
     maxPrice: ''
@@ -78,12 +76,7 @@ const Quotes: React.FC = () => {
       );
     }
 
-    // Apply customer name filter
-    if (filters.customerName && filterValues.customerName) {
-      filtered = filtered.filter(quote => 
-        quote.customerName?.toLowerCase().includes(filterValues.customerName.toLowerCase())
-      );
-    }
+
 
     // Apply status filter
     if (filters.status && filterValues.status) {
@@ -126,13 +119,11 @@ const Quotes: React.FC = () => {
   const handleClearFilters = () => {
     setFilters({
       quoteName: false,
-      customerName: false,
       status: false,
       priceRange: false
     });
     setFilterValues({
       quoteName: '',
-      customerName: '',
       status: '',
       minPrice: '',
       maxPrice: ''
@@ -205,15 +196,15 @@ const Quotes: React.FC = () => {
 
   const columns = [
     {
-      key: 'quoteNumber',
-      label: 'Quote Number',
+      key: 'quoteName',
+      label: 'Quote Name',
       sortable: true,
       render: (value: any, row: Quote) => (
         <div className="flex items-center">
           <Icons.FileText className="w-5 h-5 text-gray-400 mr-3" />
           <div>
-            <div className="font-medium text-gray-900">{row.quoteNumber}</div>
-            <div className="text-sm text-gray-500">{row.quoteName}</div>
+            <div className="font-medium text-gray-900">{row.quoteName}</div>
+            <div className="text-sm text-gray-500">{row.quoteNumber}</div>
           </div>
         </div>
       )
@@ -226,14 +217,7 @@ const Quotes: React.FC = () => {
         <div className="text-gray-900">{getUserDisplayName(row.quoteOwner)}</div>
       )
     },
-    {
-      key: 'customerName',
-      label: 'Customer',
-      sortable: true,
-      render: (value: any, row: Quote) => (
-        <div className="text-gray-900">{row.customerName}</div>
-      )
-    },
+
     {
       key: 'totalAmount',
       label: 'Total Amount',
@@ -397,26 +381,7 @@ const Quotes: React.FC = () => {
                 )}
               </div>
 
-              <div>
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={filters.customerName}
-                    onChange={() => handleCheckboxChange('customerName')}
-                    className="mr-2"
-                  />
-                  Customer Name
-                </label>
-                {filters.customerName && (
-                  <input
-                    type="text"
-                    value={filterValues.customerName}
-                    onChange={(e) => handleFilterValueChange('customerName', e.target.value)}
-                    placeholder="Enter customer name"
-                    className="mt-1 w-full px-3 py-1 border border-gray-300 rounded text-sm"
-                  />
-                )}
-              </div>
+
 
               <div>
                 <label className="flex items-center">

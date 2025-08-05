@@ -165,8 +165,10 @@ const Subsidiaries: React.FC = () => {
     setIsViewModalOpen(false);
   };
 
-  const canEditOrDelete = user?.role === 'ADMIN' || user?.role === 'Admin' || user?.role === 'SUPER_ADMIN' || user?.role === 'SuperAdmin';
-  const canCreate = user?.role === 'ADMIN' || user?.role === 'Admin' || user?.role === 'SUPER_ADMIN' || user?.role === 'SuperAdmin';
+  // Permission logic based on role structure
+  const canEditOrDelete = user?.role === 'ADMIN';
+  const canCreate = user?.role === 'ADMIN';
+  const canView = user?.role === 'ADMIN' || user?.role === 'SALES_MANAGER';
 
   const headerActions = (
     <>
@@ -267,6 +269,19 @@ const Subsidiaries: React.FC = () => {
           </button>
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if user has access to subsidiaries
+  if (user?.role === 'SALES_REP') {
+    return (
+      <div className="p-6 lg:p-8">
+        <div className="flex flex-col items-center justify-center h-64 text-center">
+          <Icons.Lock className="h-12 w-12 text-red-500 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Access Denied</h3>
+          <p className="text-gray-600 mb-4">You don't have permission to access subsidiaries.</p>
         </div>
       </div>
     );

@@ -24,8 +24,7 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, deal, on
     closeDate: '',
     description: '',
     phone: '',
-    email: '',
-    visibleTo: [] as string[]
+    email: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,8 +42,7 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, deal, on
         closeDate: deal.closeDate || '',
         description: deal.description || '',
         phone: deal.phone || '',
-        email: deal.email || '',
-        visibleTo: deal.visibleTo || []
+        email: deal.email || ''
       });
       setError(null);
     }
@@ -72,8 +70,7 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, deal, on
         closeDate: formData.closeDate,
         description: formData.description,
         phone: formData.phone,
-        email: formData.email,
-        visibleTo: formData.visibleTo.length > 0 ? formData.visibleTo : [] // Ensure empty array if no users selected
+        email: formData.email
       });
 
       if (onSuccess) {
@@ -139,23 +136,26 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, deal, on
                 <Icons.Target className="w-5 h-5 mr-2 text-blue-600" />
                 Deal Information
               </h3>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="space-y-4">
                 {/* Deal Owner */}
-                <div>
+                <div className="border-b border-gray-200 pb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Deal Owner <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={formData.dealOwner}
-                    onChange={(e) => handleInputChange('dealOwner', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  />
+                  <div className="flex items-center">
+                    <input
+                      type="text"
+                      value={formData.dealOwner}
+                      onChange={(e) => handleInputChange('dealOwner', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    />
+                    <Icons.User className="w-4 h-4 text-gray-400 ml-2" />
+                  </div>
                 </div>
 
                 {/* Deal Name */}
-                <div>
+                <div className="border-b border-gray-200 pb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Deal Name <span className="text-red-500">*</span>
                   </label>
@@ -169,87 +169,102 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, deal, on
                 </div>
 
                 {/* Lead Source */}
-                <div>
+                <div className="border-b border-gray-200 pb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Lead Source <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={formData.leadSource}
-                    onChange={(e) => handleInputChange('leadSource', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  >
-                    <option value="">Select Lead Source</option>
-                    {leadSourceOptions.map(option => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
+                  <div className="flex items-center">
+                    <select
+                      value={formData.leadSource}
+                      onChange={(e) => handleInputChange('leadSource', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    >
+                      <option value="">Select Lead Source</option>
+                      {leadSourceOptions.map(option => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                    <Icons.ChevronDown className="w-4 h-4 text-gray-400 ml-2" />
+                  </div>
                 </div>
 
                 {/* Stage */}
-                <div>
+                <div className="border-b border-gray-200 pb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Stage <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={formData.stage}
-                    onChange={(e) => handleInputChange('stage', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  >
-                    <option value="">Select Stage</option>
-                    {stageOptions.map(option => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
+                  <div className="flex items-center">
+                    <select
+                      value={formData.stage}
+                      onChange={(e) => handleInputChange('stage', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    >
+                      <option value="">Select Stage</option>
+                      {stageOptions.map(option => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                    <Icons.ChevronDown className="w-4 h-4 text-gray-400 ml-2" />
+                  </div>
                 </div>
 
                 {/* Amount */}
-                <div>
+                <div className="border-b border-gray-200 pb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Amount <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="number"
-                    value={formData.amount}
-                    onChange={(e) => handleInputChange('amount', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                    min="0"
-                    step="0.01"
-                  />
+                  <div className="flex items-center">
+                    <input
+                      type="number"
+                      value={formData.amount}
+                      onChange={(e) => handleInputChange('amount', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required
+                      min="0"
+                      step="0.01"
+                    />
+                    <Icons.DollarSign className="w-4 h-4 text-gray-400 ml-2" />
+                  </div>
                 </div>
 
                 {/* Probability */}
-                <div>
+                <div className="border-b border-gray-200 pb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Probability (%)
                   </label>
-                  <input
-                    type="number"
-                    value={formData.probability}
-                    onChange={(e) => handleInputChange('probability', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    min="0"
-                    max="100"
-                    step="1"
-                  />
+                  <div className="flex items-center">
+                    <input
+                      type="number"
+                      value={formData.probability}
+                      onChange={(e) => handleInputChange('probability', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      min="0"
+                      max="100"
+                      step="1"
+                    />
+                    <Icons.Percent className="w-4 h-4 text-gray-400 ml-2" />
+                  </div>
                 </div>
 
                 {/* Close Date */}
-                <div>
+                <div className="border-b border-gray-200 pb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Close Date <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="date"
-                    value={formData.closeDate}
-                    onChange={(e) => handleInputChange('closeDate', e.target.value)}
-                    min={new Date(new Date().getFullYear() - 25, new Date().getMonth(), new Date().getDate()).toISOString().split('T')[0]}
-                    max={new Date(new Date().getFullYear() + 50, new Date().getMonth(), new Date().getDate()).toISOString().split('T')[0]}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  />
+                  <div className="flex items-center">
+                    <input
+                      type="date"
+                      value={formData.closeDate}
+                      onChange={(e) => handleInputChange('closeDate', e.target.value)}
+                      min={new Date(new Date().getFullYear() - 25, new Date().getMonth(), new Date().getDate()).toISOString().split('T')[0]}
+                      max={new Date(new Date().getFullYear() + 50, new Date().getMonth(), new Date().getDate()).toISOString().split('T')[0]}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    />
+                    <Icons.Calendar className="w-4 h-4 text-gray-400 ml-2" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -260,9 +275,9 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, deal, on
                 <Icons.Phone className="w-5 h-5 mr-2 text-green-600" />
                 Contact Information
               </h3>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
                 {/* Phone */}
-                <div>
+                <div className="border-b border-gray-200 pb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Contact Phone
                   </label>
@@ -276,17 +291,20 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, deal, on
                 </div>
 
                 {/* Email */}
-                <div>
+                <div className="border-b border-gray-200 pb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Contact Email
                   </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter email address"
-                  />
+                  <div className="flex items-center">
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleInputChange('email', e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter email address"
+                    />
+                    <Icons.Mail className="w-4 h-4 text-gray-400 ml-2" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -297,7 +315,7 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, deal, on
                 <Icons.FileText className="w-5 h-5 mr-2 text-purple-600" />
                 Additional Information
               </h3>
-              <div>
+              <div className="border-b border-gray-200 pb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Description
                 </label>
@@ -305,43 +323,9 @@ const EditDealModal: React.FC<EditDealModalProps> = ({ isOpen, onClose, deal, on
                   value={formData.description}
                   onChange={(e) => handleInputChange('description', e.target.value)}
                   rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                   placeholder="Enter deal description..."
                 />
-              </div>
-            </div>
-
-            {/* Visibility Controls */}
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
-                <Icons.Users className="w-5 h-5 mr-2 text-orange-600" />
-                Visibility Settings
-              </h3>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Visible To
-                </label>
-                <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-4 bg-gray-50">
-                  {users.map(user => (
-                    <label key={user.id} className="flex items-center space-x-3 p-2 hover:bg-white rounded-lg transition-colors">
-                      <input
-                        type="checkbox"
-                        value={user.id}
-                        checked={formData.visibleTo?.includes(user.id) || false}
-                        onChange={(e) => {
-                          const userId = e.target.value;
-                          const newVisibleTo = e.target.checked
-                            ? [...(formData.visibleTo || []), userId]
-                            : (formData.visibleTo || []).filter(id => id !== userId);
-                          handleInputChange('visibleTo', newVisibleTo);
-                        }}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-gray-700">{`${user.firstName} ${user.lastName}`}</span>
-                    </label>
-                  ))}
-                </div>
-                <p className="mt-3 text-sm text-gray-500">By default, all users are selected (deal visible to everyone). Uncheck users to restrict visibility.</p>
               </div>
             </div>
 

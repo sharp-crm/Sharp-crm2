@@ -118,6 +118,22 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
     e.preventDefault();
     if (!lead) return;
 
+    // Client-side validation for required fields
+    const requiredFields = ['leadOwner', 'firstName', 'lastName', 'company', 'email', 'phone', 'leadSource', 'leadStatus'];
+    const missingFields = requiredFields.filter(field => !formData[field as keyof typeof formData]);
+    
+    if (missingFields.length > 0) {
+      setError(`Missing required fields: ${missingFields.join(', ')}`);
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (formData.email && !emailRegex.test(formData.email)) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -194,7 +210,7 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
                   <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Lead Owner</label>
+                    <label className="block text-sm font-medium text-gray-700">Lead Owner *</label>
                     <input
                       type="text"
                       value={formData.leadOwner || ''}
@@ -204,7 +220,7 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">First Name</label>
+                    <label className="block text-sm font-medium text-gray-700">First Name *</label>
                     <input
                       type="text"
                       value={formData.firstName || ''}
@@ -214,7 +230,7 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Last Name</label>
+                    <label className="block text-sm font-medium text-gray-700">Last Name *</label>
                     <input
                       type="text"
                       value={formData.lastName || ''}
@@ -224,7 +240,7 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Company</label>
+                    <label className="block text-sm font-medium text-gray-700">Company *</label>
                     <input
                       type="text"
                       value={formData.company || ''}
@@ -249,7 +265,7 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
                   <h3 className="text-lg font-medium text-gray-900">Contact Information</h3>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Email</label>
+                    <label className="block text-sm font-medium text-gray-700">Email *</label>
                     <input
                       type="email"
                       value={formData.email || ''}
@@ -259,7 +275,7 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Phone</label>
+                    <label className="block text-sm font-medium text-gray-700">Phone *</label>
                     <PhoneNumberInput
                       value={formData.phone || ''}
                       onChange={(value) => handleInputChange('phone', value)}
@@ -268,7 +284,7 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Lead Source</label>
+                    <label className="block text-sm font-medium text-gray-700">Lead Source *</label>
                     <select
                       value={formData.leadSource || ''}
                       onChange={(e) => handleInputChange('leadSource', e.target.value)}
@@ -282,7 +298,7 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Lead Status</label>
+                    <label className="block text-sm font-medium text-gray-700">Lead Status *</label>
                     <select
                       value={formData.leadStatus || ''}
                       onChange={(e) => handleInputChange('leadStatus', e.target.value)}

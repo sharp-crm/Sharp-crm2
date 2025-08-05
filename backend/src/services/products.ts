@@ -28,6 +28,9 @@ export interface Product {
   description: string;
   notes?: string;
   
+  // Related records
+  relatedLeadIds?: string[]; // Array of lead IDs related to this product
+  
   // Legacy fields for backward compatibility
   category?: string;
   price?: number;
@@ -75,6 +78,9 @@ export interface CreateProductInput {
   description?: string;
   notes?: string;
   
+  // Related records
+  relatedLeadIds?: string[]; // Array of lead IDs related to this product
+  
   // Legacy fields for backward compatibility
   category?: string;
   price?: number;
@@ -110,6 +116,9 @@ export interface UpdateProductInput {
   // Description Information
   description?: string;
   notes?: string;
+  
+  // Related records
+  relatedLeadIds?: string[]; // Array of lead IDs related to this product
   
   // Legacy fields for backward compatibility
   category?: string;
@@ -155,6 +164,9 @@ export class ProductsService {
       // Description Information
       description: input.description || '',
       notes: input.notes || '',
+      
+      // Related records
+      relatedLeadIds: input.relatedLeadIds || [],
       
       // Legacy fields for backward compatibility
       category: input.category,

@@ -16,7 +16,8 @@ interface ToastStore {
 export const useToastStore = create<ToastStore>((set) => ({
   toasts: [],
   addToast: (toast) => {
-    const id = Date.now().toString();
+    // Generate a unique ID using timestamp + random number to avoid duplicates
+    const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     set((state) => ({
       toasts: [...state.toasts, { ...toast, id }],
     }));

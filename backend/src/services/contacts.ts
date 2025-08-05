@@ -9,6 +9,7 @@ export interface Contact {
   // Required fields from AddNewModal
   contactOwner: string;
   firstName: string;
+  lastName: string;
   companyName: string;
   email: string;
   leadSource: string;
@@ -48,6 +49,7 @@ export interface Contact {
 export interface CreateContactInput {
   contactOwner: string;
   firstName: string;
+  lastName: string;
   companyName: string;
   email: string;
   leadSource: string;
@@ -68,6 +70,7 @@ export interface CreateContactInput {
 export interface UpdateContactInput {
   contactOwner?: string;
   firstName?: string;
+  lastName?: string;
   companyName?: string;
   email?: string;
   leadSource?: string;
@@ -97,6 +100,7 @@ export class ContactsService {
       id: contactId,
       contactOwner: input.contactOwner,
       firstName: input.firstName,
+      lastName: input.lastName,
       companyName: input.companyName,
       email: input.email,
       leadSource: input.leadSource,

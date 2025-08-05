@@ -1,15 +1,26 @@
 import React from 'react';
 import * as Icons from 'lucide-react';
-import { Lead } from '../../api/services';
+import { Lead, Task } from '../../api/services';
 
-interface LeadSidebarProps {}
+interface LeadSidebarProps {
+  lead?: Lead;
+  tasks?: Task[];
+}
 
-const LeadSidebar: React.FC<LeadSidebarProps> = () => {
+const LeadSidebar: React.FC<LeadSidebarProps> = ({ lead, tasks = [] }) => {
+  const getOpenActivitiesCount = () => {
+    return tasks.filter(task => task.status !== 'Completed').length;
+  };
+
+  const getClosedActivitiesCount = () => {
+    return tasks.filter(task => task.status === 'Completed').length;
+  };
+
   const sidebarItems = [
-    { id: 'notes', label: 'Notes', icon: Icons.FileText, count: 0 },
-    { id: 'products', label: 'Products', icon: Icons.Package, count: 0 },
-    { id: 'openActivities', label: 'Open Activities', icon: Icons.Activity, count: 0 },
-    { id: 'closedActivities', label: 'Closed Activities', icon: Icons.CheckCircle, count: 0 },
+    { id: 'notes', label: 'Notes', icon: Icons.FileText, count: lead?.notes ? lead.notes.split('\n\n').length : 0 },
+    { id: 'products', label: 'Products', icon: Icons.Package, count: lead?.relatedProductIds?.length || 0 },
+    { id: 'openActivities', label: 'Open Activities', icon: Icons.Activity, count: getOpenActivitiesCount() },
+    { id: 'closedActivities', label: 'Closed Activities', icon: Icons.CheckCircle, count: getClosedActivitiesCount() },
     { id: 'emails', label: 'Emails', icon: Icons.Mail, count: 0 }
   ];
 

@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { Quote, Task } from '../../types';
-import { quotesApi, tasksApi } from '../../api/services';
+import { quotesApi, tasksApi, usersApi } from '../../api/services';
 import { useToastStore } from '../../store/useToastStore';
 import AddNewModal from '../Common/AddNewModal';
+import EditTaskModal from '../EditTaskModal';
 
 // Add highlight effect styles
 const highlightStyles = `
@@ -32,8 +33,7 @@ interface QuoteTabsProps {
   quote: Quote;
   getUserDisplayName: (userId: string) => string;
   onQuoteUpdate?: (updatedQuote: Quote) => void;
-  tasks: Task[];
-  onTasksUpdate: (tasks: Task[]) => void;
+  onTasksUpdate?: (tasks: Task[]) => void;
 }
 
 const QuoteTabs: React.FC<QuoteTabsProps> = ({
@@ -42,26 +42,209 @@ const QuoteTabs: React.FC<QuoteTabsProps> = ({
   quote,
   getUserDisplayName,
   onQuoteUpdate,
-  tasks,
   onTasksUpdate
 }) => {
   // State for tasks functionality
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [isAddTaskModalOpen, setIsAddTaskModalOpen] = useState(false);
+  const [isUpdatingTask, setIsUpdatingTask] = useState(false);
+  const [isDeletingTask, setIsDeletingTask] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [isEditTaskModalOpen, setIsEditTaskModalOpen] = useState(false);
+  const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
+  const [users, setUsers] = useState<any[]>([]);
+  const [lastFetchedQuoteId, setLastFetchedQuoteId] = useState<string | null>(null);
+  const { addToast } = useToastStore();
+
+  // Fetch users for the EditTaskModal
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const users = await usersApi.getAll();
+        setUsers(users);
+      } catch (error) {
+        console.error('Error fetching users:', error);
+        // Set empty array as fallback to prevent errors
+        setUsers([]);
+      }
+    };
+    fetchUsers();
+  }, []);
+
+  // Fetch tasks related to this quote
+  useEffect(() => {
+    const fetchQuoteTasks = async () => {
+      if (!quote?.id) return;
+      
+      // Prevent unnecessary API calls if we already have tasks for this quote
+      if (lastFetchedQuoteId === quote.id && tasks.length > 0) {
+        return;
+      }
+      
+      setLoadingTasks(true);
+      try {
+        const quoteTasks = await tasksApi.getByRelatedRecord('quote', quote.id);
+        console.log('Quote tasks fetched:', quoteTasks);
+        setTasks(quoteTasks);
+        setLastFetchedQuoteId(quote.id);
+        // Notify parent about tasks update
+        if (onTasksUpdate) {
+          onTasksUpdate(quoteTasks);
+        }
+      } catch (error) {
+        console.error('Error fetching quote tasks:', error);
+      } finally {
+        setLoadingTasks(false);
+      }
+    };
+
+    fetchQuoteTasks();
+
+    // Cleanup function to reset state when quote changes
+    return () => {
+      setTasks([]);
+      setLastFetchedQuoteId(null);
+    };
+  }, [quote?.id]); // Removed onTasksUpdate from dependencies since it's now memoized
 
   // Handle task creation success
-  const handleTaskCreated = () => {
-    // Refresh tasks by calling the parent's update function
-    // The parent will fetch updated tasks
-    onTasksUpdate([...tasks]); // This will trigger a re-fetch in the parent
+  const handleTaskCreated = async () => {
+    // Refresh tasks after creating a new one
+    if (quote?.id) {
+      setLastFetchedQuoteId(null); // Reset to force refresh
+      const quoteTasks = await tasksApi.getByRelatedRecord('quote', quote.id);
+      setTasks(quoteTasks);
+      setLastFetchedQuoteId(quote.id);
+      // Notify parent about tasks update
+      if (onTasksUpdate) {
+        onTasksUpdate(quoteTasks);
+      }
+      addToast({
+        type: 'success',
+        title: 'Task Created',
+        message: 'New task has been created successfully.'
+      });
+    }
   };
 
-  // Fetch tasks when quote changes
-  useEffect(() => {
-    // This useEffect is no longer needed as tasks are passed as props
-    // Keeping it for now in case it's re-introduced or if there's a reason to refetch
-    // For now, it will just re-render with the same tasks if quote.id doesn't change
-  }, [quote?.id]);
+  const handleCompleteTask = async (taskId: string) => {
+    setIsUpdatingTask(true);
+    try {
+      const updatedTask = await tasksApi.update(taskId, { status: 'Completed' });
+      setTasks(prev => prev.map(task => task.id === taskId ? updatedTask : task));
+      // Notify parent about tasks update
+      if (onTasksUpdate) {
+        const updatedTasks = tasks.map(task => task.id === taskId ? updatedTask : task);
+        onTasksUpdate(updatedTasks);
+      }
+      addToast({
+        type: 'success',
+        title: 'Task Completed',
+        message: 'Task has been marked as completed successfully.'
+      });
+    } catch (error) {
+      console.error('Error completing task:', error);
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to complete task. Please try again.'
+      });
+    } finally {
+      setIsUpdatingTask(false);
+    }
+  };
+
+  const handleDeleteTask = (task: Task) => {
+    setTaskToDelete(task);
+  };
+
+  const confirmDeleteTask = async () => {
+    if (!taskToDelete) return;
+    
+    setIsDeletingTask(true);
+    try {
+      // Soft delete the task
+      await tasksApi.update(taskToDelete.id, { isDeleted: true });
+      
+      // Remove from local state
+      const updatedTasks = tasks.filter(task => task.id !== taskToDelete.id);
+      setTasks(updatedTasks);
+      
+      // Notify parent about tasks update
+      if (onTasksUpdate) {
+        onTasksUpdate(updatedTasks);
+      }
+      
+      addToast({
+        type: 'success',
+        title: 'Task Deleted',
+        message: 'Task has been deleted successfully.'
+      });
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to delete task. Please try again.'
+      });
+    } finally {
+      setIsDeletingTask(false);
+      setTaskToDelete(null);
+    }
+  };
+
+  const handleEditTask = (task: Task) => {
+    setTaskToEdit(task);
+    setIsEditTaskModalOpen(true);
+  };
+
+  const handleEditTaskSuccess = async () => {
+    // Refresh tasks after editing
+    if (quote?.id) {
+      setLastFetchedQuoteId(null); // Reset to force refresh
+      const quoteTasks = await tasksApi.getByRelatedRecord('quote', quote.id);
+      setTasks(quoteTasks);
+      setLastFetchedQuoteId(quote.id);
+      // Notify parent about tasks update
+      if (onTasksUpdate) {
+        onTasksUpdate(quoteTasks);
+      }
+      addToast({
+        type: 'success',
+        title: 'Task Updated',
+        message: 'Task has been updated successfully.'
+      });
+    }
+    setIsEditTaskModalOpen(false);
+    setTaskToEdit(null);
+  };
+
+  const handleTaskUpdate = async (updates: Partial<Task>) => {
+    if (!taskToEdit) return;
+    
+    try {
+      const updatedTask = await tasksApi.update(taskToEdit.id, updates);
+      setTasks(prev => prev.map(task => task.id === taskToEdit.id ? updatedTask : task));
+      // Notify parent about tasks update
+      if (onTasksUpdate) {
+        const updatedTasks = tasks.map(task => task.id === taskToEdit.id ? updatedTask : task);
+        onTasksUpdate(updatedTasks);
+      }
+      addToast({
+        type: 'success',
+        title: 'Task Updated',
+        message: 'Task has been updated successfully.'
+      });
+    } catch (error) {
+      console.error('Error updating task:', error);
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to update task. Please try again.'
+      });
+    }
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -99,8 +282,14 @@ const QuoteTabs: React.FC<QuoteTabsProps> = ({
             getUserDisplayName={getUserDisplayName} 
             onQuoteUpdate={onQuoteUpdate}
             tasks={tasks}
+            loadingTasks={loadingTasks}
             onAddTask={() => setIsAddTaskModalOpen(true)}
             onTaskCreated={handleTaskCreated}
+            onCompleteTask={handleCompleteTask}
+            onDeleteTask={handleDeleteTask}
+            onEditTask={handleEditTask}
+            isUpdatingTask={isUpdatingTask}
+            isDeletingTask={isDeletingTask}
           />
         ) : (
           <TimelineTab quote={quote} getUserDisplayName={getUserDisplayName} />
@@ -118,6 +307,48 @@ const QuoteTabs: React.FC<QuoteTabsProps> = ({
           relatedRecordId: quote?.id
         }}
       />
+
+      {/* Edit Task Modal */}
+      {taskToEdit && (
+        <EditTaskModal
+          isOpen={isEditTaskModalOpen}
+          onClose={() => {
+            setIsEditTaskModalOpen(false);
+            setTaskToEdit(null);
+          }}
+          task={taskToEdit}
+          onSave={handleTaskUpdate}
+          userName={getUserDisplayName(taskToEdit.assignee)}
+          users={users}
+        />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {taskToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Delete Task</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete "{taskToDelete.title}"? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setTaskToDelete(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteTask}
+                disabled={isDeletingTask}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50"
+              >
+                {isDeletingTask ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -128,15 +359,27 @@ const OverviewTab: React.FC<{
   getUserDisplayName: (userId: string) => string;
   onQuoteUpdate?: (updatedQuote: Quote) => void;
   tasks: Task[];
+  loadingTasks: boolean;
   onAddTask: () => void;
   onTaskCreated: () => void;
+  onCompleteTask: (taskId: string) => void;
+  onDeleteTask: (task: Task) => void;
+  onEditTask: (task: Task) => void;
+  isUpdatingTask: boolean;
+  isDeletingTask: boolean;
 }> = ({
   quote,
   getUserDisplayName,
   onQuoteUpdate,
   tasks,
+  loadingTasks,
   onAddTask,
-  onTaskCreated
+  onTaskCreated,
+  onCompleteTask,
+  onDeleteTask,
+  onEditTask,
+  isUpdatingTask,
+  isDeletingTask
 }) => {
   const navigate = useNavigate();
   const { addToast } = useToastStore();
@@ -661,7 +904,12 @@ const OverviewTab: React.FC<{
               Add Activity
             </button>
           </div>
-          {openTasks.length === 0 ? (
+          {loadingTasks ? (
+            <div className="text-center py-8">
+              <Icons.Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto" />
+              <p className="text-sm text-gray-500 mt-2">Loading activities...</p>
+            </div>
+          ) : openTasks.length === 0 ? (
             <div className="text-center py-8">
               <Icons.Activity className="w-8 h-8 text-gray-400 mx-auto mb-2" />
               <p className="text-sm text-gray-500">No open activities yet</p>
@@ -670,17 +918,63 @@ const OverviewTab: React.FC<{
             <div className="space-y-4">
               {openTasks.map((task) => (
                 <div key={task.id} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-medium text-gray-900">
-                      {task.title}
-                    </h4>
-                    <div className="flex items-center space-x-2 text-xs text-gray-500">
-                      <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
-                      <span className="text-gray-300">•</span>
-                      <span>Assigned to: {getUserDisplayName(task.assignedTo)}</span>
+                  <div className="flex items-start justify-between">
+                    {/* Task Information - Left Side */}
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <h4 className="text-sm font-medium text-gray-900">
+                          {task.title}
+                        </h4>
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                          {task.status}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">{task.description}</p>
+                      
+                      {/* Auditing Information - Bottom */}
+                      <div className="flex items-center space-x-4 text-xs text-gray-500">
+                        <div className="flex items-center space-x-1">
+                          <Icons.User className="w-3 h-3" />
+                          <span>{getUserDisplayName(task.assignee)}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Icons.Calendar className="w-3 h-3" />
+                          <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Icons.Clock className="w-3 h-3" />
+                          <span>{new Date(task.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Action Buttons - Right Side */}
+                    <div className="flex items-center space-x-2 ml-4">
+                      <button
+                        onClick={() => onCompleteTask(task.id)}
+                        disabled={isUpdatingTask}
+                        className="flex items-center space-x-1 text-green-600 hover:text-green-800 font-medium disabled:opacity-50 text-xs"
+                      >
+                        <Icons.CheckCircle className="w-4 h-4" />
+                        {isUpdatingTask ? 'Marking...' : 'Completed'}
+                      </button>
+                      <button
+                        onClick={() => onEditTask(task)}
+                        className="flex items-center space-x-1 text-blue-600 hover:text-blue-800 text-xs font-medium"
+                      >
+                        <Icons.Edit2 className="w-4 h-4" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => onDeleteTask(task)}
+                        disabled={isDeletingTask}
+                        className="flex items-center space-x-1 text-red-600 hover:text-red-800 text-xs font-medium disabled:opacity-50"
+                      >
+                        <Icons.Trash2 className="w-4 h-4" />
+                        {isDeletingTask ? 'Deleting...' : 'Delete'}
+                      </button>
                     </div>
                   </div>
-                  <p className="text-sm text-gray-600">{task.description}</p>
                 </div>
               ))}
             </div>
@@ -691,11 +985,19 @@ const OverviewTab: React.FC<{
         <div id="section-closed-activities" className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Closed Activities</h3>
-            <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+            <button
+              onClick={() => navigate('/tasks')}
+              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+            >
               View All
             </button>
           </div>
-          {closedTasks.length === 0 ? (
+          {loadingTasks ? (
+            <div className="text-center py-8">
+              <Icons.Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto" />
+              <p className="text-sm text-gray-500 mt-2">Loading activities...</p>
+            </div>
+          ) : closedTasks.length === 0 ? (
             <div className="text-center py-8">
               <Icons.CheckCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
               <p className="text-sm text-gray-500">No closed activities yet</p>
@@ -704,17 +1006,55 @@ const OverviewTab: React.FC<{
             <div className="space-y-4">
               {closedTasks.map((task) => (
                 <div key={task.id} className="p-4 bg-green-50 rounded-lg border border-green-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-medium text-gray-900">
-                      {task.title}
-                    </h4>
-                    <div className="flex items-center space-x-2 text-xs text-gray-500">
-                      <span>Completed: {new Date(task.dueDate).toLocaleDateString()}</span>
-                      <span className="text-gray-300">•</span>
-                      <span>Assigned to: {getUserDisplayName(task.assignedTo)}</span>
+                  <div className="flex items-start justify-between">
+                    {/* Task Information - Left Side */}
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <h4 className="text-sm font-medium text-gray-900">
+                          {task.title}
+                        </h4>
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          Completed
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3">{task.description}</p>
+                      
+                      {/* Auditing Information - Bottom */}
+                      <div className="flex items-center space-x-4 text-xs text-gray-500">
+                        <div className="flex items-center space-x-1">
+                          <Icons.User className="w-3 h-3" />
+                          <span>{getUserDisplayName(task.assignee)}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Icons.Calendar className="w-3 h-3" />
+                          <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Icons.Clock className="w-3 h-3" />
+                          <span>{new Date(task.updatedAt || task.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Action Buttons - Right Side */}
+                    <div className="flex items-center space-x-2 ml-4">
+                      <button
+                        onClick={() => onEditTask(task)}
+                        className="flex items-center space-x-1 text-blue-600 hover:text-blue-800 text-xs font-medium"
+                      >
+                        <Icons.Edit2 className="w-4 h-4" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => onDeleteTask(task)}
+                        disabled={isDeletingTask}
+                        className="flex items-center space-x-1 text-red-600 hover:text-red-800 text-xs font-medium disabled:opacity-50"
+                      >
+                        <Icons.Trash2 className="w-4 h-4" />
+                        {isDeletingTask ? 'Deleting...' : 'Delete'}
+                      </button>
                     </div>
                   </div>
-                  <p className="text-sm text-gray-600">{task.description}</p>
                 </div>
               ))}
             </div>

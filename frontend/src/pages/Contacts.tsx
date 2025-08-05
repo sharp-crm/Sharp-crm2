@@ -4,11 +4,10 @@ import { Dialog } from '@headlessui/react';
 import PageHeader from '../components/Common/PageHeader';
 import DataTable from '../components/Common/DataTable';
 import StatusBadge from '../components/Common/StatusBadge';
-import { contactsApi, leadsApi, Contact } from '../api/services';
+import { contactsApi, Contact } from '../api/services';
 import AddNewModal from '../components/Common/AddNewModal';
 import ViewContactModal from '../components/ViewContactModal';
 import EditContactModal from '../components/EditContactModal';
-import ConvertToLeadModal from '../components/ConvertToLeadModal';
 
 const Contacts: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -25,7 +24,6 @@ const Contacts: React.FC = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
 
   const [filters, setFilters] = useState({
     status: false,
@@ -233,10 +231,7 @@ const Contacts: React.FC = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleConvertToLead = (contact: Contact) => {
-    setSelectedContact(contact);
-    setIsConvertModalOpen(true);
-  };
+
 
   const handleEditSuccess = async () => {
     // Refresh contacts list after successful edit
@@ -256,19 +251,23 @@ const Contacts: React.FC = () => {
       key: 'firstName',
       label: 'Name',
       sortable: true,
-      render: (value: string, row: any) => (
-        <div className="flex items-center">
-          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center mr-3">
-            <span className="text-sm font-medium text-green-700">
-              {value ? value.charAt(0).toUpperCase() : '?'}
-            </span>
+      render: (value: string, row: any) => {
+        const fullName = `${row.firstName || ''} ${row.lastName || ''}`.trim() || 'Unknown';
+        const initials = `${(row.firstName || '')[0] || ''}${(row.lastName || '')[0] || ''}`.trim() || '??';
+        return (
+          <div className="flex items-center">
+            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center mr-3">
+              <span className="text-sm font-medium text-green-700">
+                {initials}
+              </span>
+            </div>
+            <div>
+              <div className="font-medium text-gray-900">{fullName}</div>
+              <div className="text-sm text-gray-500">{row.email}</div>
+            </div>
           </div>
-          <div>
-            <div className="font-medium text-gray-900">{value}</div>
-            <div className="text-sm text-gray-500">{row.email}</div>
-          </div>
-        </div>
-      )
+        );
+      }
     },
     {
       key: 'companyName',
@@ -315,13 +314,7 @@ const Contacts: React.FC = () => {
       >
         <Icons.Edit2 className="w-4 h-4" />
       </button>
-      <button 
-        className="p-1 text-gray-400 hover:text-purple-600 transition-colors"
-        onClick={() => handleConvertToLead(row)}
-        title="Convert to lead"
-      >
-        <Icons.ArrowRightCircle className="w-4 h-4" />
-      </button>
+
       <button 
         className="p-1 text-gray-400 hover:text-red-600 transition-colors"
         onClick={() => handleDelete(row.id)}
@@ -678,18 +671,7 @@ const Contacts: React.FC = () => {
         onSuccess={handleEditSuccess}
       />
 
-      {/* Convert to Lead Modal */}
-      <ConvertToLeadModal
-        isOpen={isConvertModalOpen}
-        onClose={() => {
-          setIsConvertModalOpen(false);
-          setSelectedContact(null);
-        }}
-        contact={selectedContact}
-        onSuccess={() => {
-          setSuccessMessage('Contact has been successfully converted to lead.');
-        }}
-      />
+
 
       {/* Delete Confirmation Dialog */}
       <Dialog 

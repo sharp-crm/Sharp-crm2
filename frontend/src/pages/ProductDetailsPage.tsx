@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { productsApi, Product, usersApi, User, Task } from '../api/services';
@@ -72,13 +72,13 @@ const ProductDetailsPage: React.FC = () => {
     setIsEditModalOpen(false);
   };
 
-  const handleProductUpdate = (updatedProduct: Product) => {
+  const handleProductUpdate = useCallback((updatedProduct: Product) => {
     setProduct(updatedProduct);
-  };
+  }, []);
 
-  const handleTasksUpdate = (updatedTasks: Task[]) => {
+  const handleTasksUpdate = useCallback((updatedTasks: Task[]) => {
     setTasks(updatedTasks);
-  };
+  }, []);
 
   if (loading) {
     return (

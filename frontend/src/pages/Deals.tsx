@@ -15,6 +15,7 @@ import AddNewModal from '../components/Common/AddNewModal';
 import ViewDealModal from '../components/ViewDealModal';
 import EditDealModal from '../components/EditDealModal';
 import API from '../api/client';
+import { useAuthStore } from '../store/useAuthStore';
 
 const Deals: React.FC = () => {
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -37,6 +38,8 @@ const Deals: React.FC = () => {
   const [selectedDealName, setSelectedDealName] = useState<string>('');
   const [phoneSearch, setPhoneSearch] = useState<string>('');
   const [showPhoneSearch, setShowPhoneSearch] = useState(false);
+  
+  const { user } = useAuthStore();
 
   // Fetch users data on component mount
   useEffect(() => {
@@ -187,6 +190,11 @@ const Deals: React.FC = () => {
     }
   };
 
+  // Permission logic based on role structure
+  const canEditOrDelete = user?.role === 'ADMIN';
+  const canCreate = user?.role === 'ADMIN';
+  const canView = user?.role === 'ADMIN' || user?.role === 'SALES_MANAGER' || user?.role === 'SALES_REP';
+
   const actions = (row: any) => (
     <div className="flex items-center space-x-2">
       <button
@@ -199,26 +207,30 @@ const Deals: React.FC = () => {
       >
         <Icons.Eye className="w-4 h-4" />
       </button>
-      <button
-        className="p-1 text-gray-400 hover:text-green-600"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleEdit(row);
-        }}
-        title="Edit Deal"
-      >
-        <Icons.Edit2 className="w-4 h-4" />
-      </button>
-      <button 
-        className="p-1 text-gray-400 hover:text-red-600"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleDelete(row.id);
-        }}
-        title="Delete Deal"
-      >
-        <Icons.Trash2 className="w-4 h-4" />
-      </button>
+      {canEditOrDelete && (
+        <>
+          <button
+            className="p-1 text-gray-400 hover:text-green-600"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEdit(row);
+            }}
+            title="Edit Deal"
+          >
+            <Icons.Edit2 className="w-4 h-4" />
+          </button>
+          <button 
+            className="p-1 text-gray-400 hover:text-red-600"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete(row.id);
+            }}
+            title="Delete Deal"
+          >
+            <Icons.Trash2 className="w-4 h-4" />
+          </button>
+        </>
+      )}
     </div>
   );
 
@@ -252,16 +264,18 @@ const Deals: React.FC = () => {
         <Icons.Download className="w-4 h-4 mr-2" />
         Export
       </button>
-      <button
-        className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        onClick={() => {
-          setDefaultType('deal'); // set the type
-          setIsModalOpen(true);      // open the modal
-        }}
-      >
-        <Icons.Plus className="w-4 h-4 mr-2" />
-        New Deal
-      </button>
+      {canCreate && (
+        <button
+          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          onClick={() => {
+            setDefaultType('deal'); // set the type
+            setIsModalOpen(true);      // open the modal
+          }}
+        >
+          <Icons.Plus className="w-4 h-4 mr-2" />
+          New Deal
+        </button>
+      )}
     </>
   );
 
@@ -562,16 +576,18 @@ const Deals: React.FC = () => {
           <Icons.Target className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No deals found</h3>
           <p className="text-gray-500 mb-6">Get started by creating your first deal.</p>
-          <button
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mx-auto"
-            onClick={() => {
-              setDefaultType('deal');
-              setIsModalOpen(true);
-            }}
-          >
-            <Icons.Plus className="w-4 h-4 mr-2" />
-            New Deal
-          </button>
+          {canCreate && (
+            <button
+              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors mx-auto"
+              onClick={() => {
+                setDefaultType('deal');
+                setIsModalOpen(true);
+              }}
+            >
+              <Icons.Plus className="w-4 h-4 mr-2" />
+              New Deal
+            </button>
+          )}
         </div>
       ) : currentView === 'kanban' ? (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

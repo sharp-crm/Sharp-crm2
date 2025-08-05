@@ -26,9 +26,13 @@ interface Task {
 const router = express.Router();
 
 // Test route to verify tasks router is working
-router.get("/test", (req: AuthenticatedRequest, res: Response) => {
-  res.json({ message: "Tasks router is working", timestamp: new Date().toISOString() });
-});
+router.get("/test", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    res.json({ message: "Tasks router is working", timestamp: new Date().toISOString() });
+  } catch (error) {
+    next(error);
+  }
+}) as express.RequestHandler);
 
 // Test route to check filtering
 router.get("/test-filter", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {

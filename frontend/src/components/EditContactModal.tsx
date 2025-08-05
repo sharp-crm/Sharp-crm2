@@ -26,6 +26,7 @@ const EditContactModal: React.FC<EditContactModalProps> = ({ isOpen, onClose, co
   const [formData, setFormData] = useState<Partial<Contact>>({
     contactOwner: '',
     firstName: '',
+    lastName: '',
     companyName: '',
     email: '',
     phone: '',
@@ -58,6 +59,7 @@ const EditContactModal: React.FC<EditContactModalProps> = ({ isOpen, onClose, co
       setFormData({
         contactOwner: contact.contactOwner,
         firstName: contact.firstName,
+        lastName: contact.lastName || '',
         companyName: contact.companyName,
         email: contact.email,
         phone: contact.phone || '',
@@ -202,6 +204,16 @@ const EditContactModal: React.FC<EditContactModalProps> = ({ isOpen, onClose, co
                     type="text"
                     value={formData.firstName || ''}
                     onChange={(e) => handleInputChange('firstName', e.target.value)}
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Last Name</label>
+                  <input
+                    type="text"
+                    value={formData.lastName || ''}
+                    onChange={(e) => handleInputChange('lastName', e.target.value)}
                       className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
