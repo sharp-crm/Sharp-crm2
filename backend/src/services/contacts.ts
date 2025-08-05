@@ -27,9 +27,12 @@ export interface Contact {
   country?: string;
   zipCode?: string;
   
-  // Additional field
+  // Additional fields
   description?: string;
   status?: string;
+  notes?: string;
+  relatedProductIds?: string[]; // Array of product IDs related to this contact
+  relatedQuoteIds?: string[]; // Array of quote IDs related to this contact
   
   // Visibility field
   visibleTo?: string[];
@@ -64,6 +67,9 @@ export interface CreateContactInput {
   zipCode?: string;
   description?: string;
   status?: string;
+  notes?: string;
+  relatedProductIds?: string[]; // Array of product IDs related to this contact
+  relatedQuoteIds?: string[]; // Array of quote IDs related to this contact
   visibleTo?: string[];
 }
 
@@ -85,6 +91,9 @@ export interface UpdateContactInput {
   zipCode?: string;
   description?: string;
   status?: string;
+  notes?: string;
+  relatedProductIds?: string[]; // Array of product IDs related to this contact
+  relatedQuoteIds?: string[]; // Array of quote IDs related to this contact
   visibleTo?: string[];
 }
 
@@ -115,6 +124,9 @@ export class ContactsService {
       zipCode: input.zipCode,
       description: input.description,
       status: input.status || 'Active',
+      notes: input.notes || '',
+      relatedProductIds: input.relatedProductIds || [],
+      relatedQuoteIds: input.relatedQuoteIds || [],
       visibleTo: input.visibleTo || [],
       createdBy: userEmail,
       createdAt: timestamp,

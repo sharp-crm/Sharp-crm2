@@ -26,9 +26,6 @@ export interface Quote {
   status: 'Draft' | 'Sent' | 'Accepted' | 'Rejected' | 'Expired';
   validUntil: string;
   activeStatus: boolean;
-  customerName: string;
-  customerEmail: string;
-  customerPhone: string;
   lineItems: LineItem[];
   subtotal: number;
   discountAmount: number;
@@ -175,26 +172,6 @@ class QuotesService {
     } catch (error) {
       console.error(`❌ Error deleting quote:`, error);
       throw error;
-    }
-  }
-
-  async getQuotesByCustomer(customerId: string, userId: string, tenantId: string): Promise<Quote[]> {
-    try {
-      const command = new ScanCommand({
-        TableName: this.tableName,
-        FilterExpression: 'tenantId = :tenantId AND customerName = :customerId AND isDeleted = :isDeleted',
-        ExpressionAttributeValues: {
-          ':tenantId': tenantId,
-          ':customerId': customerId,
-          ':isDeleted': false
-        }
-      });
-
-      const response = await docClient.send(command);
-      return response.Items?.map(item => this.mapDynamoItemToQuote(item)) || [];
-    } catch (error) {
-      console.error('Error getting quotes by customer:', error);
-      throw new Error('Failed to retrieve quotes by customer');
     }
   }
 

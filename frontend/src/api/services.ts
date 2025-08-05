@@ -60,9 +60,16 @@ export interface Contact {
   country?: string;
   zipCode?: string;
   
-  // Additional field
+  // Additional fields
   description?: string;
   status?: string;
+  notes?: string;
+  ownerId?: string; // For backward compatibility with contactOwner
+  lastModifiedAt?: string; // For backward compatibility with updatedAt
+  
+  // Related records
+  relatedProductIds?: string[];
+  relatedQuoteIds?: string[];
   
   // Visibility field
   visibleTo?: string[];
@@ -165,6 +172,7 @@ export interface Product {
   
   // Related records
   relatedLeadIds?: string[];
+  relatedContactIds?: string[];
   
   // Legacy fields for backward compatibility
   category?: string;
@@ -197,11 +205,6 @@ export interface Quote {
   status: 'Draft' | 'Sent' | 'Accepted' | 'Rejected' | 'Expired';
   validUntil: string;
   activeStatus: boolean;
-  
-  // Customer Info
-  customerName: string;
-  customerEmail: string;
-  customerPhone: string;
   
   // Line Items
   lineItems: LineItem[];
@@ -641,7 +644,7 @@ export const productsApi = {
 export const quotesApi = {
   getAll: async (): Promise<Quote[]> => {
     try {
-      const response = await API.get<ApiResponse<Quote[]>>('/quotes');
+      const response = await API.get<any>('/quotes');
       return response.data.data || [];
     } catch (error) {
       handleApiError(error);
@@ -651,7 +654,7 @@ export const quotesApi = {
 
   getById: async (id: string): Promise<Quote | null> => {
     try {
-      const response = await API.get<ApiResponse<Quote>>(`/quotes/${id}`);
+      const response = await API.get<any>(`/quotes/${id}`);
       return response.data.data;
     } catch (error) {
       handleApiError(error);
@@ -661,7 +664,7 @@ export const quotesApi = {
 
   create: async (quote: Omit<Quote, 'id' | 'createdBy' | 'createdAt' | 'updatedBy' | 'updatedAt' | 'deletedBy' | 'isDeleted' | 'deletedAt' | 'userId' | 'tenantId'>): Promise<Quote> => {
     try {
-      const response = await API.post<ApiResponse<Quote>>('/quotes', quote);
+      const response = await API.post<any>('/quotes', quote);
       return response.data.data;
     } catch (error) {
       handleApiError(error);
@@ -671,7 +674,7 @@ export const quotesApi = {
 
   update: async (id: string, updates: Partial<Quote>): Promise<Quote> => {
     try {
-      const response = await API.put<ApiResponse<Quote>>(`/quotes/${id}`, updates);
+      const response = await API.put<any>(`/quotes/${id}`, updates);
       return response.data.data;
     } catch (error) {
       handleApiError(error);

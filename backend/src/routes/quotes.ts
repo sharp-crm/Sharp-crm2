@@ -164,29 +164,6 @@ const deleteQuote: RequestHandler = async (req: any, res) => {
   }
 };
 
-// Get quotes by customer
-const getQuotesByCustomer: RequestHandler = async (req: any, res) => {
-  try {
-    const { customerId } = req.params;
-    const { userId, tenantId } = req.user || {};
-    
-    if (!req.user) {
-      res.status(401).json({ success: false, message: 'User not authenticated' });
-      return;
-    }
-    
-    const quotes = await quotesService.getQuotesByCustomer(customerId, userId, tenantId);
-    
-    res.json({
-      success: true,
-      data: quotes,
-      message: 'Customer quotes retrieved successfully'
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-};
-
 // Get quotes by status
 const getQuotesByStatus: RequestHandler = async (req: any, res) => {
   try {
@@ -216,7 +193,6 @@ router.get('/:id', getQuoteById);
 router.post('/', createQuote);
 router.put('/:id', updateQuote);
 router.delete('/:id', deleteQuote);
-router.get('/customer/:customerId', getQuotesByCustomer);
 router.get('/status/:status', getQuotesByStatus);
 
 export default router; 

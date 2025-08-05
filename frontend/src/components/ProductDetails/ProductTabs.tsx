@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
-import { Product, Task, tasksApi, usersApi, Lead, leadsApi } from '../../api/services';
+import { Product, Task, tasksApi, usersApi, Lead, leadsApi, Contact, contactsApi } from '../../api/services';
 import { productsApi } from '../../api/services';
 import { useToastStore } from '../../store/useToastStore';
 import AddNewModal from '../Common/AddNewModal';
@@ -61,6 +61,9 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
   const [relatedLeads, setRelatedLeads] = useState<Lead[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [isCreateLeadModalOpen, setIsCreateLeadModalOpen] = useState(false);
+  const [relatedContacts, setRelatedContacts] = useState<Contact[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [isCreateContactModalOpen, setIsCreateContactModalOpen] = useState(false);
   
   // Note management state
   const [newNote, setNewNote] = useState('');
@@ -286,6 +289,35 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
     fetchRelatedLeads();
   }, [product.relatedLeadIds]);
 
+  // Fetch related contacts
+  useEffect(() => {
+    const fetchRelatedContacts = async () => {
+      if (!product.relatedContactIds || product.relatedContactIds.length === 0) {
+        setRelatedContacts([]);
+        return;
+      }
+
+      setLoadingContacts(true);
+      try {
+        const contacts = await Promise.all(
+          product.relatedContactIds.map(id => contactsApi.getById(id))
+        );
+        setRelatedContacts(contacts.filter(Boolean) as Contact[]);
+      } catch (error) {
+        console.error('Error fetching related contacts:', error);
+        addToast({
+          type: 'error',
+          title: 'Error',
+          message: 'Failed to fetch related contacts.'
+        });
+      } finally {
+        setLoadingContacts(false);
+      }
+    };
+
+    fetchRelatedContacts();
+  }, [product.relatedContactIds]);
+
   const handleCreateLead = async () => {
     try {
       // The AddNewModal will handle the lead creation with the prefillData
@@ -354,6 +386,83 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to remove lead';
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: errorMessage
+      });
+    }
+  };
+
+  // Contact management functions
+  const handleCreateContact = async () => {
+    try {
+      // The AddNewModal will handle the contact creation with the prefillData
+      // We just need to refresh the product data after creation
+      addToast({
+        type: 'success',
+        title: 'Contact Created',
+        message: `New contact has been created and automatically associated with ${product.name}.`
+      });
+      
+      // Refresh the product data to get updated relatedContactIds
+      if (onProductUpdate) {
+        const refreshedProduct = await productsApi.getById(product.id);
+        if (refreshedProduct) {
+          console.log('🔄 Refreshed product after contact creation:', refreshedProduct);
+          console.log('🔄 Product relatedContactIds:', refreshedProduct.relatedContactIds);
+          onProductUpdate(refreshedProduct);
+        }
+      }
+
+      // Close the modal
+      setIsCreateContactModalOpen(false);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create contact';
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: errorMessage
+      });
+    }
+  };
+
+  const handleRemoveContact = async (contactId: string) => {
+    if (!confirm('Are you sure you want to remove this contact from the product?')) {
+      return;
+    }
+
+    try {
+      const currentContactIds = product.relatedContactIds || [];
+      const updatedContactIds = currentContactIds.filter(id => id !== contactId);
+
+      // Update the product
+      const updatedProduct = await productsApi.update(product.id, { 
+        relatedContactIds: updatedContactIds 
+      });
+
+      // Update the contact
+      const contact = await contactsApi.getById(contactId);
+      if (contact) {
+        const currentProductIds = contact.relatedProductIds || [];
+        const updatedProductIds = currentProductIds.filter(id => id !== product.id);
+        await contactsApi.update(contactId, { 
+          relatedProductIds: updatedProductIds 
+        });
+      }
+
+      addToast({
+        type: 'success',
+        title: 'Contact Removed',
+        message: 'Contact has been successfully removed from the product.'
+      });
+
+      // Update the parent component
+      if (onProductUpdate && updatedProduct) {
+        onProductUpdate(updatedProduct);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to remove contact';
       addToast({
         type: 'error',
         title: 'Error',
@@ -962,14 +1071,91 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
               <div id="section-contacts" className="bg-white rounded-lg border border-gray-200 p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">Contacts</h3>
-                  <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
-                    Add Contact
+                  <button 
+                    onClick={() => setIsCreateContactModalOpen(true)}
+                    className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
+                  >
+                    <Icons.Plus className="w-4 h-4 mr-1" />
+                    Create Contact for Product
                   </button>
                 </div>
-                <div className="text-center py-8">
-                  <Icons.Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">No contacts associated yet</p>
-                </div>
+                
+                {loadingContacts ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                    <p className="text-sm text-gray-500">Loading contacts...</p>
+                  </div>
+                ) : relatedContacts.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Contact
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Company
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Contact Info
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Owner
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {relatedContacts.map((contact) => (
+                          <tr key={contact.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="flex-shrink-0 h-8 w-8">
+                                  <Icons.User className="h-6 w-6 text-blue-600" />
+                                </div>
+                                <div className="ml-4">
+                                  <button
+                                    onClick={() => navigate(`/contacts/${contact.id}`)}
+                                    className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors text-left"
+                                  >
+                                    {contact.firstName} {contact.lastName}
+                                  </button>
+                                  <div className="text-sm text-gray-500">{contact.title || '—'}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {contact.companyName}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{contact.email || '—'}</div>
+                              <div className="text-sm text-gray-500">{contact.phone || '—'}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {getUserDisplayName(contact.contactOwner)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <button
+                                onClick={() => handleRemoveContact(contact.id)}
+                                className="text-red-600 hover:text-red-900 transition-colors"
+                                title="Remove Contact"
+                              >
+                                <Icons.X className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Icons.Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">No contacts associated yet</p>
+                  </div>
+                )}
               </div>
 
               {/* Leads Section */}
@@ -1136,6 +1322,19 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
         onClose={() => setIsCreateLeadModalOpen(false)}
         defaultType="lead"
         onSuccess={handleCreateLead}
+        prefillData={{
+          relatedProductIds: [product.id],
+          productName: product.name,
+          productCode: product.productCode
+        }}
+      />
+
+      {/* Create Contact Modal */}
+      <AddNewModal
+        isOpen={isCreateContactModalOpen}
+        onClose={() => setIsCreateContactModalOpen(false)}
+        defaultType="contact"
+        onSuccess={handleCreateContact}
         prefillData={{
           relatedProductIds: [product.id],
           productName: product.name,
@@ -1784,19 +1983,196 @@ const OverviewTab: React.FC<{
         <div id="section-contacts" className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Contacts</h3>
-            <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
-              Add Contact
+            <button 
+              onClick={() => setIsCreateContactModalOpen(true)}
+              className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
+            >
+              <Icons.Plus className="w-4 h-4 mr-1" />
+              Create Contact for Product
             </button>
           </div>
-          <div className="text-center py-8">
-            <Icons.Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-sm text-gray-500">No contacts associated yet</p>
-          </div>
+          
+          {loadingContacts ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+              <p className="text-sm text-gray-500">Loading contacts...</p>
+            </div>
+          ) : relatedContacts.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Contact
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Company
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Contact Info
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Owner
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {relatedContacts.map((contact) => (
+                    <tr key={contact.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-8 w-8">
+                            <Icons.User className="h-6 w-6 text-blue-600" />
+                          </div>
+                          <div className="ml-4">
+                            <button
+                              onClick={() => navigate(`/contacts/${contact.id}`)}
+                              className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors text-left"
+                            >
+                              {contact.firstName} {contact.lastName}
+                            </button>
+                            <div className="text-sm text-gray-500">{contact.title || '—'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {contact.companyName}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{contact.email || '—'}</div>
+                        <div className="text-sm text-gray-500">{contact.phone || '—'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {getUserDisplayName(contact.contactOwner)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={() => handleRemoveContact(contact.id)}
+                          className="text-red-600 hover:text-red-900 transition-colors"
+                          title="Remove Contact"
+                        >
+                          <Icons.X className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Icons.Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">No contacts associated yet</p>
+            </div>
+          )}
         </div>
 
-
-
-
+        {/* Leads Section */}
+        <div id="section-leads" className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Leads</h3>
+            <button 
+              onClick={() => setIsCreateLeadModalOpen(true)}
+              className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
+            >
+              <Icons.Plus className="w-4 h-4 mr-1" />
+              Create Lead for Product
+            </button>
+          </div>
+          
+          {loadingLeads ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+              <p className="text-sm text-gray-500">Loading leads...</p>
+            </div>
+          ) : relatedLeads.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Lead
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Company
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Contact
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Owner
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {relatedLeads.map((lead) => (
+                    <tr key={lead.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-8 w-8">
+                            <Icons.User className="h-6 w-6 text-blue-600" />
+                          </div>
+                          <div className="ml-4">
+                            <button
+                              onClick={() => navigate(`/leads/${lead.id}`)}
+                              className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors text-left"
+                            >
+                              {lead.firstName} {lead.lastName}
+                            </button>
+                            <div className="text-sm text-gray-500">{lead.title || '—'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          lead.leadStatus === 'New' ? 'bg-blue-100 text-blue-800' :
+                          lead.leadStatus === 'Qualified' ? 'bg-green-100 text-green-800' :
+                          lead.leadStatus === 'Contacted' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {lead.leadStatus}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {lead.company}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{lead.email || '—'}</div>
+                        <div className="text-sm text-gray-500">{lead.phone || '—'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {getUserDisplayName(lead.leadOwner)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={() => handleRemoveLead(lead.id)}
+                          className="text-red-600 hover:text-red-900 transition-colors"
+                          title="Remove Lead"
+                        >
+                          <Icons.X className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Icons.UserPlus className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">No leads associated yet</p>
+            </div>
+          )}
+        </div>
 
         {/* Audit Information */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -1820,8 +2196,6 @@ const OverviewTab: React.FC<{
             </div>
           </div>
         </div>
-
-
       </div>
     </div>
   );

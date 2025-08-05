@@ -9,6 +9,7 @@ import SuperAdminHome from './pages/SuperAdminHome';
 import Leads from './pages/Leads';
 import LeadDetailsPage from './pages/LeadDetailsPage';
 import Contacts from './pages/Contacts';
+import ContactDetailsPage from './pages/ContactDetailsPage';
 import Deals from './pages/Deals';
 import Tasks from './pages/Tasks';
 import Products from './pages/Products';
@@ -79,6 +80,7 @@ const App: React.FC = () => {
             <Route path="leads" element={<SuperAdminRouteGuard><Leads /></SuperAdminRouteGuard>} />
             <Route path="leads/:id" element={<SuperAdminRouteGuard><LeadDetailsPage /></SuperAdminRouteGuard>} />
             <Route path="contacts" element={<SuperAdminRouteGuard><Contacts /></SuperAdminRouteGuard>} />
+            <Route path="contacts/:id" element={<SuperAdminRouteGuard><ContactDetailsPage /></SuperAdminRouteGuard>} />
             <Route path="deals" element={<SuperAdminRouteGuard><Deals /></SuperAdminRouteGuard>} />
             <Route path="tasks" element={<SuperAdminRouteGuard><Tasks /></SuperAdminRouteGuard>} />
             <Route path="products" element={<SuperAdminRouteGuard><Products /></SuperAdminRouteGuard>} />

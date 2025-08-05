@@ -374,11 +374,6 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
         value: q.id,
         label: q.quoteName
       }));
-    } else if (type === 'lead') {
-      return leads.map(l => ({
-        value: l.id,
-        label: `${l.firstName} ${l.lastName}`
-      }));
     }
     return [];
   };
@@ -990,11 +985,6 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           validUntil: formData.validUntil || '',
           activeStatus: true,
           
-          // Customer Info (default values)
-          customerName: 'Customer Name',
-          customerEmail: 'customer@example.com',
-          customerPhone: '+1234567890',
-          
           // Line Items
           lineItems: lineItems,
           
@@ -1421,7 +1411,6 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                                   <option value="deal">Deal</option>
                                   <option value="product">Product</option>
                                   <option value="quote">Quote</option>
-                                  <option value="lead">Lead</option>
                                 </select>
                               </div>
                             </div>

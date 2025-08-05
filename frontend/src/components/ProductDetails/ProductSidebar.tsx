@@ -50,6 +50,11 @@ const ProductSidebar: React.FC<ProductSidebarProps> = ({ product, tasks = [] }) 
     return product.relatedLeadIds.length;
   };
 
+  const getContactsCount = () => {
+    if (!product?.relatedContactIds) return 0;
+    return product.relatedContactIds.length;
+  };
+
   const sidebarItems = [
     { 
       id: 'product-information', 
@@ -79,7 +84,7 @@ const ProductSidebar: React.FC<ProductSidebarProps> = ({ product, tasks = [] }) 
       id: 'contacts', 
       label: 'Contacts', 
       icon: Icons.Users, 
-      count: 0 
+      count: getContactsCount()
     },
     { 
       id: 'leads', 

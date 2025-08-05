@@ -30,6 +30,7 @@ export interface Product {
   
   // Related records
   relatedLeadIds?: string[]; // Array of lead IDs related to this product
+  relatedContactIds?: string[]; // Array of contact IDs related to this product
   
   // Legacy fields for backward compatibility
   category?: string;
@@ -80,6 +81,7 @@ export interface CreateProductInput {
   
   // Related records
   relatedLeadIds?: string[]; // Array of lead IDs related to this product
+  relatedContactIds?: string[]; // Array of contact IDs related to this product
   
   // Legacy fields for backward compatibility
   category?: string;
@@ -119,6 +121,7 @@ export interface UpdateProductInput {
   
   // Related records
   relatedLeadIds?: string[]; // Array of lead IDs related to this product
+  relatedContactIds?: string[]; // Array of contact IDs related to this product
   
   // Legacy fields for backward compatibility
   category?: string;
@@ -167,6 +170,7 @@ export class ProductsService {
       
       // Related records
       relatedLeadIds: input.relatedLeadIds || [],
+      relatedContactIds: input.relatedContactIds || [],
       
       // Legacy fields for backward compatibility
       category: input.category,

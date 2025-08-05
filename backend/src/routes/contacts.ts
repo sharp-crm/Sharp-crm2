@@ -182,6 +182,8 @@ const createContact: RequestHandler = async (req: any, res) => {
       zipCode: req.body.zipCode,
       description: req.body.description,
       status: req.body.status,
+      notes: req.body.notes,
+      relatedProductIds: req.body.relatedProductIds,
       visibleTo: req.body.visibleTo
     };
 
@@ -238,7 +240,7 @@ const updateContact: RequestHandler = async (req: any, res) => {
     const updateableFields = [
       'contactOwner', 'firstName', 'lastName', 'companyName', 'email', 'leadSource',
       'phone', 'title', 'department', 'street', 'area', 'city', 'state',
-      'country', 'zipCode', 'description', 'status', 'visibleTo'
+      'country', 'zipCode', 'description', 'status', 'notes', 'relatedProductIds', 'relatedQuoteIds', 'visibleTo'
     ];
 
     updateableFields.forEach(field => {

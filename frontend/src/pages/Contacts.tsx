@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { Dialog } from '@headlessui/react';
 import PageHeader from '../components/Common/PageHeader';
@@ -6,10 +7,12 @@ import DataTable from '../components/Common/DataTable';
 import StatusBadge from '../components/Common/StatusBadge';
 import { contactsApi, Contact } from '../api/services';
 import AddNewModal from '../components/Common/AddNewModal';
+
 import ViewContactModal from '../components/ViewContactModal';
 import EditContactModal from '../components/EditContactModal';
 
 const Contacts: React.FC = () => {
+  const navigate = useNavigate();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -226,6 +229,10 @@ const Contacts: React.FC = () => {
     setIsViewModalOpen(true);
   };
 
+  const handleRowClick = (item: Contact) => {
+    navigate(`/contacts/${item.id}`);
+  };
+
   const handleEdit = (contact: Contact) => {
     setSelectedContact(contact);
     setIsEditModalOpen(true);
@@ -302,14 +309,20 @@ const Contacts: React.FC = () => {
     <div className="flex items-center space-x-2">
       <button 
         className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-        onClick={() => handleView(row)}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleView(row);
+        }}
         title="View contact"
       >
         <Icons.Eye className="w-4 h-4" />
       </button>
       <button 
         className="p-1 text-gray-400 hover:text-green-600 transition-colors"
-        onClick={() => handleEdit(row)}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleEdit(row);
+        }}
         title="Edit contact"
       >
         <Icons.Edit2 className="w-4 h-4" />
@@ -317,7 +330,10 @@ const Contacts: React.FC = () => {
 
       <button 
         className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-        onClick={() => handleDelete(row.id)}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleDelete(row.id);
+        }}
         title="Delete contact"
       >
         <Icons.Trash2 className="w-4 h-4" />
@@ -632,6 +648,7 @@ const Contacts: React.FC = () => {
                 data={Object.values(filters).some(f => f) || phoneSearch.length >= 2 ? filteredContacts : contacts}
                 columns={columns}
                 actions={actions}
+                onRowClick={handleRowClick}
               />
             </div>
           )}
@@ -649,6 +666,8 @@ const Contacts: React.FC = () => {
           setSuccessMessage('New contact has been created successfully.');
         }}
       />
+
+
 
       {/* View Contact Modal */}
       <ViewContactModal

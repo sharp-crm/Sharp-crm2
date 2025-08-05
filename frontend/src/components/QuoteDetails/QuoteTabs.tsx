@@ -1129,7 +1129,7 @@ const TimelineTab: React.FC<{ quote: Quote; getUserDisplayName: (userId: string)
       id: 3,
       type: 'sent',
       title: 'Quote Sent',
-      description: `Quote was sent to ${quote.customerEmail}`,
+      description: 'Quote was sent to customer',
       timestamp: new Date(quote.createdAt),
       user: getUserDisplayName(quote.createdBy)
     }
