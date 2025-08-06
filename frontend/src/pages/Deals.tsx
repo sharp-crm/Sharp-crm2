@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { Dialog } from '@headlessui/react';
 import PageHeader from '../components/Common/PageHeader';
@@ -12,12 +13,13 @@ import ChartView from '../components/Views/ChartView';
 import { dealsApi } from '../api/services';
 import { ViewType, Deal, DEAL_STAGES } from '../types';
 import AddNewModal from '../components/Common/AddNewModal';
-import ViewDealModal from '../components/ViewDealModal';
+
 import EditDealModal from '../components/EditDealModal';
 import API from '../api/client';
 import { useAuthStore } from '../store/useAuthStore';
 
 const Deals: React.FC = () => {
+  const navigate = useNavigate();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [users, setUsers] = useState<{ id: string; userId?: string; firstName: string; lastName: string; }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +27,7 @@ const Deals: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewType>('list');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [defaultType, setDefaultType] = useState<string | undefined>(undefined);
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -166,8 +168,8 @@ const Deals: React.FC = () => {
   };
 
   const handleView = (deal: Deal) => {
-    setSelectedDeal(deal);
-    setIsViewModalOpen(true);
+    // Navigate to deal details page instead of opening modal
+    navigate(`/deals/${deal.id}`);
   };
 
   const handleEdit = (deal: Deal) => {
@@ -177,7 +179,6 @@ const Deals: React.FC = () => {
 
   const handleModalClose = () => {
     setSelectedDeal(null);
-    setIsViewModalOpen(false);
     setIsEditModalOpen(false);
   };
 
@@ -197,16 +198,6 @@ const Deals: React.FC = () => {
 
   const actions = (row: any) => (
     <div className="flex items-center space-x-2">
-      <button
-        className="p-1 text-gray-400 hover:text-blue-600"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleView(row);
-        }}
-        title="View Deal"
-      >
-        <Icons.Eye className="w-4 h-4" />
-      </button>
       {canEditOrDelete && (
         <>
           <button
@@ -348,7 +339,7 @@ const Deals: React.FC = () => {
           type="deals" 
         />;
       case 'grid':
-        return <GridView data={filteredDeals} type="deals" onItemClick={(item) => handleView(item as Deal)} />;
+        return <GridView data={filteredDeals} type="deals" onItemClick={(item) => navigate(`/deals/${item.id}`)} />;
       case 'timeline':
         return <TimelineView data={filteredDeals} type="deals" />;
       case 'chart':
@@ -609,13 +600,7 @@ const Deals: React.FC = () => {
         }}
       />
 
-      {/* View Deal Modal */}
-      <ViewDealModal
-        isOpen={isViewModalOpen}
-        onClose={handleModalClose}
-        deal={selectedDeal}
-        getUserName={getUserName}
-      />
+
 
       {/* Edit Deal Modal */}
       <EditDealModal

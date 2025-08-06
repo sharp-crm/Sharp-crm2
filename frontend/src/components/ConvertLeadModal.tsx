@@ -147,7 +147,8 @@ const ConvertLeadModal: React.FC<ConvertLeadModalProps> = ({
           closeDate: dealFormData.closeDate,
           probability: dealFormData.probability ? parseFloat(dealFormData.probability) : 0,
           description: dealFormData.description,
-          visibleTo: dealFormData.visibleTo
+          visibleTo: dealFormData.visibleTo,
+          relatedContactIds: [contact.id] // Associate the newly created contact with the deal
         });
       }
 

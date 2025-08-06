@@ -237,6 +237,55 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             return prev;
           });
         }
+        
+        // If we have currentContact data, add it to the contacts array
+        if (prefillData.currentContact) {
+          console.log('🔍 DEBUG: Adding currentContact to contacts array:', prefillData.currentContact);
+          setContacts(prev => {
+            const existingContact = prev.find(c => c.id === prefillData.currentContact.id);
+            if (!existingContact) {
+              return [...prev, prefillData.currentContact];
+            }
+            return prev;
+          });
+        }
+        
+        // If we have currentDeal data, add it to the deals array
+        if (prefillData.currentDeal) {
+          console.log('🔍 DEBUG: Adding currentDeal to deals array:', prefillData.currentDeal);
+          setDeals(prev => {
+            const existingDeal = prev.find(d => d.id === prefillData.currentDeal.id);
+            if (!existingDeal) {
+              return [...prev, prefillData.currentDeal];
+            }
+            return prev;
+          });
+        }
+        
+        // Handle related contacts for task creation
+        if (prefillData.relatedContacts && Array.isArray(prefillData.relatedContacts)) {
+          console.log('🔍 DEBUG: Adding relatedContacts to contacts array:', prefillData.relatedContacts);
+          setContacts(prev => {
+            const newContacts = [...prev];
+            prefillData.relatedContacts.forEach((contact: any) => {
+              const existingContact = newContacts.find(c => c.id === contact.id);
+              if (!existingContact) {
+                newContacts.push(contact);
+              }
+            });
+            return newContacts;
+          });
+          
+          // Auto-select contact if only one exists
+          if (prefillData.autoSelectContact) {
+            console.log('🔍 DEBUG: Auto-selecting contact:', prefillData.autoSelectContact);
+            setFormData(prev => ({
+              ...prev,
+              contactLeadId: prefillData.autoSelectContact,
+              contactLeadType: 'contact'
+            }));
+          }
+        }
       } else {
         // Set default values for task form
         if (defaultType === 'task') {
@@ -327,16 +376,26 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
   // Get dynamic options for contact/lead dropdown
   const getContactLeadOptions = (type: string): FormFieldOption[] => {
     if (type === 'contact') {
+      // If we have related contacts from prefillData and requireContactSelection is true,
+      // only show those contacts
+      if (prefillData?.relatedContacts && prefillData?.requireContactSelection) {
+        const relatedContactIds = prefillData.relatedContacts.map((c: any) => c.id);
+        const filteredContacts = contacts.filter(c => relatedContactIds.includes(c.id));
+        return filteredContacts.map(c => ({
+          value: c.id,
+          label: `${c.firstName || ''} ${c.lastName || ''}`
+        }));
+      }
       return contacts.map(c => ({
         value: c.id,
-        label: `${c.firstName} ${c.lastName}`
+        label: `${c.firstName || ''} ${c.lastName || ''}`
       }));
     } else if (type === 'lead') {
       console.log('🔍 DEBUG: Getting lead options. Available leads:', leads);
       console.log('🔍 DEBUG: Current contactLeadId:', formData.contactLeadId);
       const options = leads.map(l => ({
         value: l.id,
-        label: `${l.firstName} ${l.lastName}`
+        label: `${l.firstName || ''} ${l.lastName || ''}`
       }));
       console.log('🔍 DEBUG: Generated lead options:', options);
       return options;
@@ -362,7 +421,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
     if (type === 'deal') {
       return deals.map(d => ({
         value: d.id,
-        label: d.dealName
+        label: d.dealName || d.name || 'Untitled Deal'
       }));
     } else if (type === 'product') {
       return products.map(p => ({
@@ -656,6 +715,21 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
       return;
     }
     
+    // Additional validation for task creation when contacts are required
+    if (selectedType === 'task' && prefillData?.requireContactSelection) {
+      if (!formData.contactLeadId) {
+        if (prefillData.relatedContacts && prefillData.relatedContacts.length === 0) {
+          setError('No contacts associated with this deal. Please associate a contact with the deal first before creating a task.');
+        } else if (prefillData.relatedContacts && prefillData.relatedContacts.length > 0) {
+          setError('Please select a contact for this task.');
+        } else {
+          setError('Please select a contact for this task.');
+        }
+        setLoading(false);
+        return;
+      }
+    }
+    
     // Debug: Log the form data to see what's being submitted
     console.log('Form data being submitted:', formData);
     console.log('visibleTo field:', formData.visibleTo);
@@ -777,7 +851,12 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           });
           break;
         case 'contact':
-          await contactsApi.create({
+          console.log('🚀 Starting contact creation process...');
+          console.log('📋 Form data:', formData);
+          console.log('📋 Prefill data:', prefillData);
+          
+          // Create the contact with relatedProductIds
+          const contactData = {
             contactOwner: formData.contactOwner,
             firstName: formData.firstName,
             lastName: formData.lastName,
@@ -795,8 +874,70 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             zipCode: formData.zipCode,
             description: formData.description,
             status: 'Active',
+            relatedProductIds: formData.relatedProductIds || prefillData?.relatedProductIds || [],
             visibleTo: formData.visibleTo || []
-          });
+          };
+
+          console.log('📤 Creating contact with data:', contactData);
+          console.log('📤 relatedProductIds being sent:', contactData.relatedProductIds);
+          console.log('📤 relatedProductIds type:', typeof contactData.relatedProductIds);
+          console.log('📤 relatedProductIds length:', contactData.relatedProductIds?.length);
+
+          try {
+            const newContact = await contactsApi.create(contactData);
+            console.log('✅ Contact created successfully:', newContact.id);
+            console.log('🔗 Contact relatedProductIds:', newContact.relatedProductIds);
+            console.log('🔗 Contact relatedProductIds type:', typeof newContact.relatedProductIds);
+            console.log('🔗 Contact relatedProductIds length:', newContact.relatedProductIds?.length);
+
+            // Update products with the new contact (bidirectional relationship)
+            if (newContact.relatedProductIds && newContact.relatedProductIds.length > 0) {
+              console.log('🔄 Updating products with new contact...');
+              console.log('🔄 Number of products to update:', newContact.relatedProductIds.length);
+              
+              for (const productId of newContact.relatedProductIds) {
+                try {
+                  console.log(`📦 Processing product ${productId}...`);
+                  console.log(`📦 Fetching product ${productId} from database...`);
+                  
+                  const product = await productsApi.getById(productId);
+                  console.log(`📦 Product ${productId} fetched:`, product ? 'Found' : 'Not found');
+                  
+                  if (product) {
+                    const currentContactIds = product.relatedContactIds || [];
+                    console.log(`📦 Product ${productId} current contacts:`, currentContactIds);
+                    console.log(`📦 Product ${productId} current contacts length:`, currentContactIds.length);
+                    
+                    const updatedContactIds = [...currentContactIds, newContact.id];
+                    console.log(`📦 Product ${productId} updated contacts:`, updatedContactIds);
+                    console.log(`📦 Product ${productId} updated contacts length:`, updatedContactIds.length);
+                    
+                    console.log(`📦 Updating product ${productId} with new contact ${newContact.id}...`);
+                    const updatedProduct = await productsApi.update(productId, { 
+                      relatedContactIds: updatedContactIds 
+                    });
+                    console.log(`✅ Product ${productId} updated successfully with contact ${newContact.id}`);
+                    console.log(`✅ Updated product relatedContactIds:`, updatedProduct?.relatedContactIds);
+                  } else {
+                    console.error(`❌ Product ${productId} not found in database`);
+                  }
+                } catch (error) {
+                  console.error(`❌ Failed to update product ${productId} with new contact:`, error);
+                  console.error(`❌ Error details:`, error instanceof Error ? error.message : 'Unknown error');
+                  // Don't throw here, as the contact was created successfully
+                  // Just log the error for debugging
+                }
+              }
+            } else {
+              console.log('ℹ️ No relatedProductIds found, skipping product updates');
+              console.log('ℹ️ This might indicate the prefillData is not being passed correctly');
+            }
+          } catch (error) {
+            console.error('❌ Failed to create contact:', error);
+            console.error('❌ Error details:', error instanceof Error ? error.message : 'Unknown error');
+            throw error;
+          }
+
           addNotification({
             type: 'success',
             title: 'Contact Created',
@@ -847,12 +988,13 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             assignee: formData.taskOwner || user?.userId || '',
             type: 'Follow-up' as const,
             tenantId: '',
+            // Always include contact/lead relationship if provided
             contactLeadId: formData.contactLeadId || undefined,
             contactLeadType: formData.contactLeadType || undefined,
-            // Only set related record fields if contactLeadType is not 'lead'
-            ...(formData.contactLeadType !== 'lead' && {
-              relatedRecordId: formData.relatedRecordId || undefined,
-              relatedRecordType: formData.relatedRecordType || undefined,
+            // Always include related record relationship if provided (except when contactLeadType is 'lead')
+            ...(formData.contactLeadType !== 'lead' && formData.relatedRecordId && formData.relatedRecordType && {
+              relatedRecordId: formData.relatedRecordId,
+              relatedRecordType: formData.relatedRecordType,
             }),
             visibleTo: formData.visibleTo || []
           };
@@ -1393,6 +1535,30 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                               </div>
                             </div>
                           </div>
+
+                          {/* Show message if contacts need to be associated */}
+                          {prefillData?.requireContactSelection && prefillData?.relatedContacts && prefillData.relatedContacts.length === 0 && (
+                            <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                              <div className="flex items-center">
+                                <Icons.AlertTriangle className="w-4 h-4 text-yellow-600 mr-2" />
+                                <p className="text-sm text-yellow-700">
+                                  <strong>No contacts associated with this deal.</strong> Please associate a contact with the deal first before creating a task.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Show message if multiple contacts are available */}
+                          {prefillData?.requireContactSelection && prefillData?.relatedContacts && prefillData.relatedContacts.length > 1 && !formData.contactLeadId && (
+                            <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                              <div className="flex items-center">
+                                <Icons.Info className="w-4 h-4 text-blue-600 mr-2" />
+                                <p className="text-sm text-blue-700">
+                                  <strong>Multiple contacts associated with this deal.</strong> Please select a contact for this task.
+                                </p>
+                              </div>
+                            </div>
+                          )}
 
                           {/* Related Record Type and Related Record in two columns */}
                           <div className="grid grid-cols-3 gap-4 border-b border-gray-200 pb-4">

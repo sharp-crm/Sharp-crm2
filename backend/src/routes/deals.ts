@@ -227,9 +227,13 @@ const createDeal: RequestHandler = async (req: any, res) => {
       phone: req.body.phone,
       email: req.body.email || undefined, // Make email optional
       description: req.body.description,
+      notes: req.body.notes || undefined, // Make notes optional
       probability: req.body.probability ? parseFloat(req.body.probability) : undefined,
       closeDate: req.body.closeDate,
-      visibleTo: req.body.visibleTo || []
+      visibleTo: req.body.visibleTo || [],
+      relatedProductIds: req.body.relatedProductIds || [],
+      relatedQuoteIds: req.body.relatedQuoteIds || [],
+      relatedContactIds: req.body.relatedContactIds || []
     };
 
     const deal = await dealsService.createDeal(dealInput, userId, req.user.email, tenantId);
@@ -305,14 +309,21 @@ const updateDeal: RequestHandler = async (req: any, res) => {
     // Only include fields that are provided in the request
     const updateableFields = [
       'dealOwner', 'dealName', 'leadSource', 'stage', 'amount', 
-      'phone', 'email', 'description', 'probability', 'closeDate', 'visibleTo'
+      'phone', 'email', 'description', 'notes', 'probability', 'closeDate', 'visibleTo',
+      'relatedProductIds', 'relatedQuoteIds', 'relatedContactIds'
     ];
+
+    console.log('🔍 [updateDeal] Request body:', req.body);
+    console.log('🔍 [updateDeal] Updateable fields:', updateableFields);
 
     updateableFields.forEach(field => {
       if (req.body[field] !== undefined) {
+        console.log(`🔍 [updateDeal] Adding field ${field}:`, req.body[field]);
         updateInput[field as keyof UpdateDealInput] = req.body[field];
       }
     });
+
+    console.log('🔍 [updateDeal] Final updateInput:', updateInput);
 
     const updatedDeal = await dealsService.updateDeal(id, updateInput, userId, req.user.email, tenantId);
     

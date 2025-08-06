@@ -17,11 +17,17 @@ export interface Deal {
   // Optional fields from AddNewModal  
   description?: string;
   email?: string; // Optional email for the deal contact
+  notes?: string; // Notes for the deal
   
   // Additional fields for deal functionality
   value?: number; // same as amount for backward compatibility
   probability?: number;
   closeDate?: string;
+  
+  // Related records
+  relatedProductIds?: string[];
+  relatedQuoteIds?: string[];
+  relatedContactIds?: string[];
   
   // Visibility field
   visibleTo: string[]; // Making this required but can be empty array
@@ -47,9 +53,13 @@ export interface CreateDealInput {
   phone: string; // Required for contacting the deal contact
   description?: string;
   email?: string; // Optional email for the deal contact
+  notes?: string; // Notes for the deal
   probability?: number;
   closeDate?: string;
   visibleTo?: string[];
+  relatedProductIds?: string[];
+  relatedQuoteIds?: string[];
+  relatedContactIds?: string[];
 }
 
 export interface UpdateDealInput {
@@ -61,9 +71,13 @@ export interface UpdateDealInput {
   phone?: string; // Required for contacting the deal contact
   description?: string;
   email?: string; // Optional email for the deal contact
+  notes?: string; // Notes for the deal
   probability?: number;
   closeDate?: string;
   visibleTo?: string[];
+  relatedProductIds?: string[];
+  relatedQuoteIds?: string[];
+  relatedContactIds?: string[];
 }
 
 export class DealsService {
@@ -106,8 +120,12 @@ export class DealsService {
       phone: input.phone || '', // Handle required phone field
       email: input.email || '', // Handle optional email field
       description: input.description || '',
+      notes: input.notes || '', // Handle optional notes field
       closeDate: input.closeDate || this.getDefaultCloseDate(),
       visibleTo: visibleTo,
+      relatedProductIds: input.relatedProductIds || [],
+      relatedQuoteIds: input.relatedQuoteIds || [],
+      relatedContactIds: input.relatedContactIds || [],
       createdBy: userEmail,
       createdAt: timestamp,
       updatedBy: userEmail,

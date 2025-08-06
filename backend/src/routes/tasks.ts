@@ -98,7 +98,7 @@ router.get("/test-filter", (async (req: AuthenticatedRequest, res: Response, nex
 router.get("/", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const tenantId = req.user?.tenantId;
-    const { recordType, recordId } = req.query;
+    const { recordType, recordId, contactLeadType, contactLeadId } = req.query;
     
     if (!tenantId) {
       return res.status(400).json({ error: "Tenant ID required" });
@@ -121,6 +121,31 @@ router.get("/", (async (req: AuthenticatedRequest, res: Response, next: NextFunc
       );
 
       console.log('DynamoDB result for related record filter:', { 
+        count: result.Count, 
+        scannedCount: result.ScannedCount,
+        items: result.Items?.length || 0 
+      });
+
+      return res.json({ data: (result.Items as Task[]) || [] });
+    }
+
+    // If contactLeadType and contactLeadId are provided, filter by contact/lead
+    if (contactLeadType && contactLeadId) {
+      console.log('Filtering tasks by contact/lead:', { contactLeadType, contactLeadId, tenantId });
+      
+      const result = await docClient.send(
+        new ScanCommand({
+          TableName: TABLES.TASKS,
+          FilterExpression: "tenantId = :tenantId AND contactLeadType = :contactLeadType AND contactLeadId = :contactLeadId",
+          ExpressionAttributeValues: {
+            ":tenantId": tenantId,
+            ":contactLeadType": contactLeadType,
+            ":contactLeadId": contactLeadId
+          }
+        })
+      );
+
+      console.log('DynamoDB result for contact/lead filter:', { 
         count: result.Count, 
         scannedCount: result.ScannedCount,
         items: result.Items?.length || 0 

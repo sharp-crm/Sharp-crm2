@@ -54,7 +54,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
             : 'text-gray-700 hover:bg-gray-100'
             } ${level > 0 ? 'ml-4' : ''}`}
           onClick={() => {
-            if (hasChildren) toggleExpanded(item.path);
+            if (hasChildren) {
+              if (isCollapsed) {
+                // If sidebar is collapsed and item has children, expand the sidebar
+                onToggle();
+              } else {
+                toggleExpanded(item.path);
+              }
+            }
           }}
         >
           <Link
@@ -147,10 +154,23 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
               <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 {!isCollapsed && 'Utilities'}
               </div>
-              <Link to="/integrations/email" className="flex items-center px-3 py-2 text-base text-gray-700 rounded-lg hover:bg-gray-100">
-                <Icons.Mail className="w-5 h-5" />
-                {!isCollapsed && <span className="ml-3 font-medium">Email Integration</span>}
-              </Link>
+              <div
+                className={`flex items-center px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                  isActive('/integrations/email')
+                    ? 'bg-blue-100 text-blue-700 border-r-2 border-blue-500'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <Link
+                  to="/integrations/email"
+                  className="flex items-center flex-1 min-w-0"
+                >
+                  <Icons.Mail className="w-5 h-5 flex-shrink-0" />
+                  {!isCollapsed && (
+                    <span className="ml-3 text-base font-medium truncate">Email Integration</span>
+                  )}
+                </Link>
+              </div>
               {/* Chat */}
               <div className="border-t border-gray-200 pt-4">
                 {chatItems.map(item => renderSidebarItem(item))}

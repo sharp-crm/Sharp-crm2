@@ -107,6 +107,9 @@ export interface Deal {
   description?: string;
   phone?: string;
   email?: string;
+  notes?: string;
+  relatedProductIds?: string[];
+  relatedQuoteIds?: string[];
   visibleTo: string[];
   createdBy: string;
   createdAt: string;

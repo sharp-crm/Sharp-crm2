@@ -98,6 +98,12 @@ export interface Deal extends Omit<DealType, 'stage'> {
   // Optional fields from AddNewModal  
   description?: string;
   email?: string; // Optional email for the deal contact
+  notes?: string;
+  
+  // Related records
+  relatedProductIds?: string[];
+  relatedQuoteIds?: string[];
+  relatedContactIds?: string[];
   
   // Additional fields for deal functionality
   value?: number; // same as amount for backward compatibility
@@ -410,6 +416,7 @@ export const dealsApi = {
     probability?: number;
     closeDate?: string;
     visibleTo: string[];
+    relatedContactIds?: string[];
   }): Promise<Deal> => {
     try {
       const response = await API.post<ApiResponse<Deal>>('/deals', deal);
@@ -422,9 +429,16 @@ export const dealsApi = {
 
   update: async (id: string, updates: Partial<Deal>): Promise<Deal> => {
     try {
+      console.log('🔍 [dealsApi.update] Starting update for deal:', id);
+      console.log('🔍 [dealsApi.update] Updates to send:', updates);
+      
       const response = await API.put<ApiResponse<Deal>>(`/deals/${id}`, updates);
+      
+      console.log('🔍 [dealsApi.update] Response received:', response.data);
+      
       return response.data.data;
     } catch (error) {
+      console.error('🔍 [dealsApi.update] Error:', error);
       handleApiError(error);
       throw error;
     }
@@ -530,6 +544,19 @@ export const tasksApi = {
       return response.data.data || [];
     } catch (error) {
       console.error('getByRelatedRecord error:', error);
+      handleApiError(error);
+      return [];
+    }
+  },
+
+  getByContactLead: async (contactLeadType: string, contactLeadId: string): Promise<Task[]> => {
+    try {
+      console.log('Calling getByContactLead with:', { contactLeadType, contactLeadId });
+      const response = await API.get<ApiResponse<Task[]>>(`/tasks?contactLeadType=${contactLeadType}&contactLeadId=${contactLeadId}`);
+      console.log('getByContactLead response:', response.data);
+      return response.data.data || [];
+    } catch (error) {
+      console.error('getByContactLead error:', error);
       handleApiError(error);
       return [];
     }

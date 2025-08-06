@@ -1,61 +1,63 @@
 import React, { useState, useEffect } from 'react';
 import * as Icons from 'lucide-react';
-import { Product, productsApi } from '../../api/services';
+import { Contact, contactsApi } from '../../api/services';
 import { useToastStore } from '../../store/useToastStore';
 
-interface ProductSelectionModalProps {
+interface ContactSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onProductSelect: (productId: string) => void;
-  existingProductIds?: string[];
+  onContactSelect: (contactId: string) => void;
+  existingContactIds?: string[];
 }
 
-const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
+const ContactSelectionModal: React.FC<ContactSelectionModalProps> = ({
   isOpen,
   onClose,
-  onProductSelect,
-  existingProductIds = []
+  onContactSelect,
+  existingContactIds = []
 }) => {
   const { addToast } = useToastStore();
-  const [products, setProducts] = useState<Product[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     if (isOpen) {
-      fetchProducts();
+      fetchContacts();
     }
   }, [isOpen]);
 
-  const fetchProducts = async () => {
+  const fetchContacts = async () => {
     setLoading(true);
     try {
-      const allProducts = await productsApi.getAll();
-      // Filter out products that are already associated with this contact
-      const availableProducts = allProducts.filter(
-        product => !existingProductIds.includes(product.id)
+      const allContacts = await contactsApi.getAll();
+      // Filter out contacts that are already associated with this deal
+      const availableContacts = allContacts.filter(
+        contact => !existingContactIds.includes(contact.id)
       );
-      setProducts(availableProducts);
+      setContacts(availableContacts);
     } catch (error) {
-      console.error('Error fetching products:', error);
+      console.error('Error fetching contacts:', error);
       addToast({
         type: 'error',
         title: 'Error',
-        message: 'Failed to fetch products.'
+        message: 'Failed to fetch contacts.'
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleProductSelect = (productId: string) => {
-    onProductSelect(productId);
+  const handleContactSelect = (contactId: string) => {
+    onContactSelect(contactId);
     onClose();
   };
 
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredContacts = contacts.filter(contact =>
+    (contact.firstName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (contact.lastName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (contact.companyName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (contact.email?.toLowerCase() || '').includes(searchTerm.toLowerCase()) 
   );
 
   if (!isOpen) return null;
@@ -64,7 +66,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Add Product</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Add Contact to Deal</h3>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -79,7 +81,7 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
             <Icons.Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
-              placeholder="Search products..."
+              placeholder="Search contacts..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -87,47 +89,49 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
           </div>
         </div>
 
-        {/* Products List */}
+        {/* Contacts List */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-              <p className="text-sm text-gray-500">Loading products...</p>
+              <p className="text-sm text-gray-500">Loading contacts...</p>
             </div>
-          ) : filteredProducts.length > 0 ? (
+          ) : filteredContacts.length > 0 ? (
             <div className="space-y-3">
-              {filteredProducts.map((product) => (
+              {filteredContacts.map((contact) => (
                 <div
-                  key={product.id}
+                  key={contact.id}
                   className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                  onClick={() => handleProductSelect(product.id)}
+                  onClick={() => handleContactSelect(contact.id)}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-2">
-                        <Icons.Package className="w-4 h-4 text-blue-600" />
-                        <h4 className="text-sm font-medium text-gray-900">{product.name}</h4>
+                        <Icons.User className="w-4 h-4 text-blue-600" />
+                        <h4 className="text-sm font-medium text-gray-900">
+                          {contact.firstName || ''} {contact.lastName || ''}
+                        </h4>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          product.activeStatus 
+                          contact.status === 'Active' 
                             ? 'bg-green-100 text-green-800' 
                             : 'bg-red-100 text-red-800'
                         }`}>
-                          {product.activeStatus ? 'Active' : 'Inactive'}
+                          {contact.status || 'Active'}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600 mb-2">{product.description}</p>
+                      <p className="text-sm text-gray-600 mb-2">{contact.companyName || 'No company'}</p>
                       <div className="flex items-center space-x-4 text-xs text-gray-500">
                         <div className="flex items-center space-x-1">
-                          <Icons.DollarSign className="w-3 h-3" />
-                          <span>${product.unitPrice.toLocaleString()}</span>
+                          <Icons.Mail className="w-3 h-3" />
+                          <span>{contact.email || 'No email'}</span>
                         </div>
                         <div className="flex items-center space-x-1">
-                          <Icons.Box className="w-3 h-3" />
-                          <span>{product.quantityInStock || 0} in stock</span>
+                          <Icons.Phone className="w-3 h-3" />
+                          <span>{contact.phone || 'No phone'}</span>
                         </div>
                         <div className="flex items-center space-x-1">
-                          <Icons.Hash className="w-3 h-3" />
-                          <span>{product.productCode}</span>
+                          <Icons.Briefcase className="w-3 h-3" />
+                          <span>{contact.title || 'No title'}</span>
                         </div>
                       </div>
                     </div>
@@ -138,9 +142,9 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
             </div>
           ) : (
             <div className="text-center py-8">
-              <Icons.Package className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <Icons.User className="w-8 h-8 text-gray-400 mx-auto mb-2" />
               <p className="text-sm text-gray-500">
-                {searchTerm ? 'No products found matching your search.' : 'No products available.'}
+                {searchTerm ? 'No contacts found matching your search.' : 'No contacts available.'}
               </p>
             </div>
           )}
@@ -160,4 +164,4 @@ const ProductSelectionModal: React.FC<ProductSelectionModalProps> = ({
   );
 };
 
-export default ProductSelectionModal; 
+export default ContactSelectionModal; 

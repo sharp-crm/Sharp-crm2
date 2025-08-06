@@ -11,6 +11,7 @@ import LeadDetailsPage from './pages/LeadDetailsPage';
 import Contacts from './pages/Contacts';
 import ContactDetailsPage from './pages/ContactDetailsPage';
 import Deals from './pages/Deals';
+import DealDetailsPage from './pages/DealDetailsPage';
 import Tasks from './pages/Tasks';
 import Products from './pages/Products';
 import ProductDetailsPage from './pages/ProductDetailsPage';
@@ -82,6 +83,7 @@ const App: React.FC = () => {
             <Route path="contacts" element={<SuperAdminRouteGuard><Contacts /></SuperAdminRouteGuard>} />
             <Route path="contacts/:id" element={<SuperAdminRouteGuard><ContactDetailsPage /></SuperAdminRouteGuard>} />
             <Route path="deals" element={<SuperAdminRouteGuard><Deals /></SuperAdminRouteGuard>} />
+            <Route path="deals/:id" element={<SuperAdminRouteGuard><DealDetailsPage /></SuperAdminRouteGuard>} />
             <Route path="tasks" element={<SuperAdminRouteGuard><Tasks /></SuperAdminRouteGuard>} />
             <Route path="products" element={<SuperAdminRouteGuard><Products /></SuperAdminRouteGuard>} />
             <Route path="products/:id" element={<SuperAdminRouteGuard><ProductDetailsPage /></SuperAdminRouteGuard>} />
