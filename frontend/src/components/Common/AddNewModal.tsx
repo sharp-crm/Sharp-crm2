@@ -1243,16 +1243,16 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
              (field.name === 'relatedRecordId' && !formData.relatedRecordType) ? null : (
               <>
                 <div className="flex items-center">
-                  <select
-                    value={formData[field.name] || ''}
-                    onChange={(e) => handleInputChange(field.name, e.target.value)}
+                <select
+                  value={formData[field.name] || ''}
+                  onChange={(e) => handleInputChange(field.name, e.target.value)}
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                    required={field.required}
-                  >
-                    <option value="">Select {field.label}</option>
-                    {field.options?.map(option => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
+                  required={field.required}
+                >
+                  <option value="">Select {field.label}</option>
+                  {field.options?.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
                     {/* Show selected contact if it's not in the options (for deal contact selection) */}
                     {field.name === 'contactId' && formData.contactId && !field.options?.find(opt => opt.value === formData.contactId) && (
                       <option value={formData.contactId}>
@@ -1262,7 +1262,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                         })()}
                       </option>
                     )}
-                  </select>
+                </select>
                   {/* Add search button for contact selection in deals */}
                   {field.name === 'contactId' && selectedType === 'deal' && (
                     <button
@@ -2036,62 +2036,62 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                     <tbody className="bg-white divide-y divide-gray-200">
                       {getFilteredTaskContactLeads().length > 0 ? (
                         getFilteredTaskContactLeads().map((record: any) => (
-                          <tr
-                            key={record.id}
-                            onClick={(e) => {
-                              console.log('🔍 DEBUG: Record row clicked:', record.id, record.firstName, record.lastName);
-                              e.stopPropagation();
-                              const recordName = `${record.firstName} ${record.lastName}`;
-                              console.log('🔍 DEBUG: Setting form data with record:', record.id, recordName);
-                              // Update form data with the selected record
-                              setFormData(prev => {
-                                console.log('🔍 DEBUG: Previous form data:', prev);
-                                const newData = {
-                                  ...prev,
-                                  contactLeadId: record.id
-                                };
-                                console.log('🔍 DEBUG: New form data:', newData);
-                                return newData;
-                              });
-                              console.log('🔍 DEBUG: Closing search overlay');
-                              setShowContactLeadSearch(false);
+                        <tr
+                          key={record.id}
+                          onClick={(e) => {
+                            console.log('🔍 DEBUG: Record row clicked:', record.id, record.firstName, record.lastName);
+                            e.stopPropagation();
+                            const recordName = `${record.firstName} ${record.lastName}`;
+                            console.log('🔍 DEBUG: Setting form data with record:', record.id, recordName);
+                            // Update form data with the selected record
+                            setFormData(prev => {
+                              console.log('🔍 DEBUG: Previous form data:', prev);
+                              const newData = {
+                                ...prev,
+                                contactLeadId: record.id
+                              };
+                              console.log('🔍 DEBUG: New form data:', newData);
+                              return newData;
+                            });
+                            console.log('🔍 DEBUG: Closing search overlay');
+                            setShowContactLeadSearch(false);
                               setTaskContactLeadSearchTerm('');
-                            }}
-                            className="hover:bg-blue-50 cursor-pointer transition-colors"
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center">
-                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                                  <Icons.User className="w-4 h-4 text-blue-600" />
+                          }}
+                          className="hover:bg-blue-50 cursor-pointer transition-colors"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                                <Icons.User className="w-4 h-4 text-blue-600" />
+                              </div>
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">
+                                  {record.firstName} {record.lastName}
                                 </div>
-                                <div>
-                                  <div className="text-sm font-medium text-gray-900">
-                                    {record.firstName} {record.lastName}
-                                  </div>
-                                  <div className="text-sm text-gray-500">
-                                    {record.id}
-                                  </div>
+                                <div className="text-sm text-gray-500">
+                                  {record.id}
                                 </div>
                               </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {record.contactOwner || record.leadOwner || 'Unknown'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {record.email || 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {record.phone || 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {record.companyName || record.company || 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
-                                {record.status || 'Active'}
-                              </span>
-                            </td>
-                          </tr>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {record.contactOwner || record.leadOwner || 'Unknown'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {record.email || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {record.phone || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {record.companyName || record.company || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                              {record.status || 'Active'}
+                            </span>
+                          </td>
+                        </tr>
                         ))
                       ) : (
                         <tr>
@@ -2244,71 +2244,71 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                     <tbody className="bg-white divide-y divide-gray-200">
                       {getFilteredTaskRelatedRecords().length > 0 ? (
                         getFilteredTaskRelatedRecords().map((record: any) => (
-                          <tr
-                            key={record.id}
-                            onClick={(e) => {
-                              console.log('🔍 DEBUG: Related Record row clicked:', record.id, record.dealName || record.name || record.quoteName);
-                              e.stopPropagation();
-                              const recordName = record.dealName || record.name || record.quoteName;
-                              console.log('🔍 DEBUG: Setting form data with related record:', record.id, recordName);
-                              // Update form data with the selected record
-                              setFormData(prev => {
-                                console.log('🔍 DEBUG: Previous form data for related record:', prev);
-                                const newData = {
-                                  ...prev,
-                                  relatedRecordId: record.id
-                                };
-                                console.log('🔍 DEBUG: New form data for related record:', newData);
-                                return newData;
-                              });
-                              console.log('🔍 DEBUG: Closing related record search overlay');
-                              setShowRelatedRecordSearch(false);
+                        <tr
+                          key={record.id}
+                          onClick={(e) => {
+                            console.log('🔍 DEBUG: Related Record row clicked:', record.id, record.dealName || record.name || record.quoteName);
+                            e.stopPropagation();
+                            const recordName = record.dealName || record.name || record.quoteName;
+                            console.log('🔍 DEBUG: Setting form data with related record:', record.id, recordName);
+                            // Update form data with the selected record
+                            setFormData(prev => {
+                              console.log('🔍 DEBUG: Previous form data for related record:', prev);
+                              const newData = {
+                                ...prev,
+                                relatedRecordId: record.id
+                              };
+                              console.log('🔍 DEBUG: New form data for related record:', newData);
+                              return newData;
+                            });
+                            console.log('🔍 DEBUG: Closing related record search overlay');
+                            setShowRelatedRecordSearch(false);
                               setTaskRelatedRecordSearchTerm('');
-                            }}
-                            className="hover:bg-blue-50 cursor-pointer transition-colors"
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center">
-                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                                  {formData.relatedRecordType === 'deal' ? (
-                                    <Icons.Target className="w-4 h-4 text-blue-600" />
-                                  ) : formData.relatedRecordType === 'product' ? (
-                                    <Icons.Package className="w-4 h-4 text-blue-600" />
-                                  ) : (
-                                    <Icons.FileText className="w-4 h-4 text-blue-600" />
-                                  )}
+                          }}
+                          className="hover:bg-blue-50 cursor-pointer transition-colors"
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                                {formData.relatedRecordType === 'deal' ? (
+                                  <Icons.Target className="w-4 h-4 text-blue-600" />
+                                ) : formData.relatedRecordType === 'product' ? (
+                                  <Icons.Package className="w-4 h-4 text-blue-600" />
+                                ) : (
+                                  <Icons.FileText className="w-4 h-4 text-blue-600" />
+                                )}
+                              </div>
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">
+                                  {record.dealName || record.name || record.quoteName}
                                 </div>
-                                <div>
-                                  <div className="text-sm font-medium text-gray-900">
-                                    {record.dealName || record.name || record.quoteName}
-                                  </div>
-                                  <div className="text-sm text-gray-500">
-                                    {record.id}
-                                  </div>
+                                <div className="text-sm text-gray-500">
+                                  {record.id}
                                 </div>
                               </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {record.dealOwner || record.productOwner || record.quoteOwner || 'Unknown'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {formData.relatedRecordType === 'deal' ? `$${record.amount?.toLocaleString() || '0'}` :
-                               formData.relatedRecordType === 'product' ? `$${record.unitPrice?.toLocaleString() || '0'}` :
-                               `$${record.totalAmount?.toLocaleString() || '0'}`}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {formData.relatedRecordType === 'deal' ? record.stage :
-                               formData.relatedRecordType === 'product' ? record.quantityInStock || '0' :
-                               record.status}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
-                                {formData.relatedRecordType === 'product' ? 
-                                  (record.activeStatus ? 'Active' : 'Inactive') :
-                                  record.status || 'Active'}
-                              </span>
-                            </td>
-                          </tr>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {record.dealOwner || record.productOwner || record.quoteOwner || 'Unknown'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {formData.relatedRecordType === 'deal' ? `$${record.amount?.toLocaleString() || '0'}` :
+                             formData.relatedRecordType === 'product' ? `$${record.unitPrice?.toLocaleString() || '0'}` :
+                             `$${record.totalAmount?.toLocaleString() || '0'}`}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {formData.relatedRecordType === 'deal' ? record.stage :
+                             formData.relatedRecordType === 'product' ? record.quantityInStock || '0' :
+                             record.status}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                              {formData.relatedRecordType === 'product' ? 
+                                (record.activeStatus ? 'Active' : 'Inactive') :
+                                record.status || 'Active'}
+                            </span>
+                          </td>
+                        </tr>
                         ))
                       ) : (
                         <tr>
