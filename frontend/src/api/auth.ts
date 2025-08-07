@@ -26,8 +26,13 @@ export const registerUser = (data: { email: string; password: string; firstName:
   AUTH_API.post('/register', data);
 export const loginUser = (data: { email: string; password: string }) => 
   AUTH_API.post('/login', data);
-export const refreshTokenRequest = () =>
-  AUTH_API.post('/refresh', {}); // Token will be sent via cookie
+export const refreshTokenRequest = () => {
+  const fullUrl = `${AUTH_API.defaults.baseURL}/refresh`;
+  console.log('🔄 Refresh token request URL:', fullUrl);
+  console.log('🔄 AUTH_API baseURL:', AUTH_API.defaults.baseURL);
+  console.log('🔄 API_URL:', API_URL);
+  return AUTH_API.post('/refresh', {}); // Token will be sent via cookie
+};
 
 // 4. 🔁 Axios Interceptor Code — place HERE after API instance is defined
 let isRefreshing = false;

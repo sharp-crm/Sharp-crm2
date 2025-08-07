@@ -149,8 +149,7 @@ export class ContactsService {
 
     if (!result.Item || 
         result.Item.tenantId !== tenantId || 
-        result.Item.isDeleted ||
-        (result.Item.createdBy !== userId)) {
+        result.Item.isDeleted) {
       return null;
     }
 
@@ -165,12 +164,10 @@ export class ContactsService {
     const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
       FilterExpression: includeDeleted 
-        ? 'tenantId = :tenantId AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR createdBy = :userId)'
-        : 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR createdBy = :userId)',
+        ? 'tenantId = :tenantId'
+        : 'tenantId = :tenantId AND isDeleted = :isDeleted',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
-        ':userId': userId,
-        ':zero': 0,
         ...(includeDeleted ? {} : { ':isDeleted': false })
       }
     }));

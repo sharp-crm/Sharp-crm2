@@ -13,6 +13,7 @@
     "build:clean": "npm run clean && npm run build",
     "init-db": "ts-node src/utils/initDatabase.ts",
     "init-db:global": "ts-node src/utils/initDatabaseGlobal.ts",
+    "init-refresh-tokens": "ts-node src/utils/createRefreshTokensTable.ts",
     "dev:init": "npm run init-db && npm run dev",
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint src --ext .ts",

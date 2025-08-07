@@ -59,6 +59,9 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
   const [showContactLeadSearch, setShowContactLeadSearch] = useState(false);
   const [showRelatedRecordSearch, setShowRelatedRecordSearch] = useState(false);
   const [showDealContactSearch, setShowDealContactSearch] = useState(false);
+  const [showUserSearch, setShowUserSearch] = useState(false);
+  const [userSearchTerm, setUserSearchTerm] = useState('');
+  const [currentUserSearchField, setCurrentUserSearchField] = useState<string>('');
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
   const [dealContactSearchTerm, setDealContactSearchTerm] = useState('');
   const [taskContactLeadSearchTerm, setTaskContactLeadSearchTerm] = useState('');
@@ -338,6 +341,10 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
         return 'dealOwner';
       case 'task':
         return 'taskOwner';
+      case 'product':
+        return 'productOwner';
+      case 'quote':
+        return 'quoteOwner';
       default:
         return null;
     }
@@ -364,6 +371,9 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
     setShowContactLeadSearch(false);
     setShowRelatedRecordSearch(false);
     setShowDealContactSearch(false);
+    setShowUserSearch(false);
+    setUserSearchTerm('');
+    setCurrentUserSearchField('');
     setDealContactSearchTerm('');
     setTaskContactLeadSearchTerm('');
     setTaskRelatedRecordSearchTerm('');
@@ -378,6 +388,27 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
     value: getUserId(u),
     label: `${u.firstName} ${u.lastName}${getUserId(u) === user?.userId ? ' (You)' : ''}`
   })).filter((opt): opt is FormFieldOption => Boolean(opt.value));
+
+  // Get filtered users based on search term
+  const getFilteredUsers = () => {
+    if (!userSearchTerm.trim()) {
+      return tenantUsers;
+    }
+    
+    const searchTerm = userSearchTerm.toLowerCase();
+    return tenantUsers.filter((user: TenantUser) => {
+      const firstName = user.firstName?.toLowerCase() || '';
+      const lastName = user.lastName?.toLowerCase() || '';
+      const email = user.email?.toLowerCase() || '';
+      const role = user.role?.toLowerCase() || '';
+      
+      return firstName.includes(searchTerm) || 
+             lastName.includes(searchTerm) || 
+             email.includes(searchTerm) || 
+             role.includes(searchTerm) ||
+             `${firstName} ${lastName}`.includes(searchTerm);
+    });
+  };
 
   // Get dynamic options for contact/lead dropdown
   const getContactLeadOptions = (type: string): FormFieldOption[] => {
@@ -499,7 +530,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
     switch (selectedType) {
       case 'lead':
         return [
-          { name: 'leadOwner', label: 'Lead Owner', type: 'text', required: true },
+          { name: 'leadOwner', label: 'Lead Owner', type: 'select', options: getUserOptions(tenantUsers), required: true },
           { name: 'firstName', label: 'First Name', type: 'text', required: true },
           { name: 'lastName', label: 'Last Name', type: 'text', required: true },
           { name: 'company', label: 'Company', type: 'text', required: true },
@@ -519,7 +550,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
         ];
       case 'contact':
         return [
-          { name: 'contactOwner', label: 'Contact Owner', type: 'text', required: true },
+          { name: 'contactOwner', label: 'Contact Owner', type: 'select', options: getUserOptions(tenantUsers), required: true },
           { name: 'firstName', label: 'First Name', type: 'text', required: true },
           { name: 'lastName', label: 'Last Name', type: 'text', required: true },
           { name: 'companyName', label: 'Company', type: 'text', required: true },
@@ -548,7 +579,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
       case 'deal':
         return [
           // Deal Information Section
-          { name: 'dealOwner', label: 'Deal Owner', type: 'text', required: true, group: 'deal' },
+          { name: 'dealOwner', label: 'Deal Owner', type: 'select', options: getUserOptions(tenantUsers), required: true, group: 'deal' },
           { name: 'dealName', label: 'Deal Name', type: 'text', required: true, group: 'deal' },
           { name: 'amount', label: 'Amount', type: 'number', required: true, group: 'deal' },
           { name: 'leadSource', label: 'Lead Source', type: 'select', options: leadSourceOptions, required: true, group: 'deal' },
@@ -1246,7 +1277,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 <select
                   value={formData[field.name] || ''}
                   onChange={(e) => handleInputChange(field.name, e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-sm"
                   required={field.required}
                 >
                   <option value="">Select {field.label}</option>
@@ -1276,6 +1307,23 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                       }}
                       className="ml-2 p-2 text-gray-400 hover:text-gray-600 transition-colors"
                       title="Search contacts"
+                    >
+                      <Icons.Search className="w-4 h-4" />
+                    </button>
+                  )}
+                  {/* Add search button for user selection fields */}
+                  {(field.name === 'productOwner' || field.name === 'quoteOwner' || field.name === 'taskOwner' || field.name === 'leadOwner' || field.name === 'contactOwner' || field.name === 'dealOwner') && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setCurrentUserSearchField(field.name);
+                        setUserSearchTerm('');
+                        setShowUserSearch(true);
+                      }}
+                      className="ml-2 p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                      title={`Search ${field.label}`}
                     >
                       <Icons.Search className="w-4 h-4" />
                     </button>
@@ -1326,7 +1374,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 onChange={(e) => handleInputChange(field.name, e.target.value)}
                 required={field.required}
                 rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
                 placeholder={`Enter ${field.label.toLowerCase()}...`}
               />
             ) : (
@@ -1336,7 +1384,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 onChange={(e) => handleInputChange(field.name, field.type === 'number' ? Number(e.target.value) : e.target.value)}
                 required={field.required}
                 disabled={selectedType === 'deal' && (field.name === 'phone' || field.name === 'email') && formData.contactId}
-                className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm ${
                   field.group === 'stock' && field.name === 'quantityInStock' ? 'border-green-300 focus:border-green-500 focus:ring-green-500' :
                   field.group === 'stock' && field.name === 'quantityInDemand' ? 'border-orange-300 focus:border-orange-500 focus:ring-orange-500' :
                   field.group === 'stock' && field.name === 'reorderLevel' ? 'border-red-300 focus:border-red-500 focus:ring-red-500' :
@@ -1457,80 +1505,93 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
 
   return (
       <Dialog open={isOpen} onClose={handleMainModalClose} className="relative z-50">
-      <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" aria-hidden="true" />
       
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <Dialog.Panel 
-          className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" 
+          className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[95vh] overflow-hidden flex flex-col" 
           onClick={(e) => {
             console.log('🔍 DEBUG: Main modal Dialog.Panel clicked');
             e.stopPropagation();
           }}
         >
-          <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
             <div className="flex items-center space-x-4">
-              <Dialog.Title className="text-xl font-semibold text-gray-900">
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                {selectedType && Icons[getFilteredRecordTypes().find(t => t.id === selectedType)?.icon as keyof typeof Icons] ? 
+                  React.createElement(Icons[getFilteredRecordTypes().find(t => t.id === selectedType)?.icon as keyof typeof Icons] as any, { className: "w-5 h-5 text-blue-600" }) :
+                  <Icons.Plus className="w-5 h-5 text-blue-600" />
+                }
+              </div>
+              <div>
+                <Dialog.Title className="text-xl font-bold text-gray-900">
                 {selectedType ? `Create ${selectedType.charAt(0).toUpperCase() + selectedType.slice(1)}` : 'Create New Record'}
               </Dialog.Title>
-              
+                <p className="text-sm text-gray-600 mt-1">
+                  {selectedType ? getFilteredRecordTypes().find(t => t.id === selectedType)?.description : 'Select a record type to get started'}
+                </p>
+              </div>
             </div>
             <button
               onClick={() => {
                 console.log('🔍 DEBUG: Main modal close button clicked');
                 handleMainModalClose();
               }}
-              className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors group"
             >
-              <Icons.X className="w-5 h-5 text-gray-500" />
+              <Icons.X className="w-5 h-5 text-gray-500 group-hover:text-gray-700" />
             </button>
           </div>
           
-          <div className="p-6">
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-6">
             {!selectedType ? (
               <div>
-                <p className="text-sm text-gray-600 mb-6">
-                  Select the type of record you want to create.
+                <p className="text-sm text-gray-600 mb-8 text-center">
+                  Select the type of record you want to create from the options below.
                 </p>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {recordTypes.map((type) => {
                     const Icon = Icons[type.icon as keyof typeof Icons] as any;
                     return (
                       <button
                         key={type.id}
                         onClick={() => handleTypeSelection(type.id)}
-                        className="flex items-start p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors text-left"
+                        className="group flex flex-col items-center p-6 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-gradient-to-br hover:from-blue-50 hover:to-indigo-50 transition-all duration-200 text-center hover:shadow-lg"
                       >
-                        <Icon className="w-6 h-6 text-blue-600 mt-1 mr-3 shrink-0" />
-                        <div>
-                          <h3 className="font-medium text-gray-900">{type.name}</h3>
-                          <p className="text-sm text-gray-500">{type.description}</p>
+                        <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-200 transition-colors">
+                          <Icon className="w-6 h-6 text-blue-600" />
                         </div>
+                        <h3 className="font-semibold text-gray-900 mb-2">{type.name}</h3>
+                        <p className="text-sm text-gray-500">{type.description}</p>
                       </button>
                     );
                   })}
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleSubmit}>
-                <div className="mb-6 flex items-center">
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Back Button */}
+                <div className="flex items-center">
                   <button
                     type="button"
                     onClick={handleBackToSelection}
-                    className="text-gray-600 hover:text-gray-900 flex items-center"
+                    className="text-gray-600 hover:text-gray-900 flex items-center px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
                   >
-                    <Icons.ArrowLeft className="w-4 h-4 mr-1" />
+                    <Icons.ArrowLeft className="w-4 h-4 mr-2" />
                     Back to selection
                   </button>
                 </div>
 
                 {/* Error Display */}
                 {error && (
-                  <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
                     <div className="flex">
-                      <Icons.AlertCircle className="w-5 h-5 text-red-600 mr-2 mt-0.5" />
+                      <Icons.AlertCircle className="w-5 h-5 text-red-600 mr-3 mt-0.5 flex-shrink-0" />
                       <div>
-                        <h3 className="text-sm font-medium text-red-800">Error</h3>
+                        <h3 className="text-sm font-semibold text-red-800">Error</h3>
                         <p className="text-sm text-red-700 mt-1">{error}</p>
                       </div>
                     </div>
@@ -1539,11 +1600,11 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
 
                 {/* Product Association Indicator */}
                 {selectedType === 'lead' && prefillData?.relatedProductIds && prefillData.relatedProductIds.length > 0 && (
-                  <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
                     <div className="flex items-center">
-                      <Icons.Package className="w-5 h-5 text-blue-600 mr-2" />
+                      <Icons.Package className="w-5 h-5 text-blue-600 mr-3 flex-shrink-0" />
                       <div>
-                        <h3 className="text-sm font-medium text-blue-800">Product Association</h3>
+                        <h3 className="text-sm font-semibold text-blue-800">Product Association</h3>
                         <p className="text-sm text-blue-700 mt-1">
                           This lead will be automatically associated with{' '}
                           <span className="font-medium">
@@ -1560,343 +1621,85 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 )}
 
                 {/* Form Fields - Clean Layout */}
-                <div className="space-y-6">
-                  {/* Task Information Section */}
-                  {selectedType === 'task' && (
-                    <>
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Task Information</h3>
-                        <div className="space-y-4">
-                          {/* Task Owner */}
-                          <div className="border-b border-gray-200 pb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Task Owner
-                            </label>
-                            <div className="flex items-center">
-                              <select
-                                value={formData.taskOwner || ''}
-                                onChange={(e) => handleInputChange('taskOwner', e.target.value)}
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                                required
-                              >
-                                <option value="">Select Task Owner</option>
-                                {getUserOptions(tenantUsers).map(option => (
-                                  <option key={option.value} value={option.value}>{option.label}</option>
-                                ))}
-                              </select>
-                              <Icons.ChevronDown className="w-4 h-4 text-gray-400 ml-2" />
-                              <Icons.User className="w-4 h-4 text-gray-400 ml-2" />
-                            </div>
-                          </div>
+                <div className="space-y-8">
+                  {(() => {
+                    const formFields = getFormFields();
+                    const groupedFields = formFields.reduce((acc, field) => {
+                      const group = field.group || 'default';
+                      if (!acc[group]) acc[group] = [];
+                      acc[group].push(field);
+                      return acc;
+                    }, {} as Record<string, typeof formFields>);
 
-                          {/* Subject */}
-                          <div className="border-b border-gray-200 pb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Subject
+                    return Object.entries(groupedFields).map(([groupName, fields]) => (
+                      <div key={groupName} className="bg-gray-50 rounded-xl p-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                          {groupName === 'default' ? 'Basic Information' : 
+                           groupName === 'task' ? 'Task Information' :
+                           groupName === 'deal' ? 'Deal Information' :
+                           groupName === 'contact' ? 'Contact Information' :
+                           groupName === 'product' ? 'Product Information' :
+                           groupName === 'quote' ? 'Quote Information' :
+                           groupName === 'price' ? 'Pricing Information' :
+                           groupName === 'stock' ? 'Stock Information' :
+                           groupName === 'description' ? 'Description Information' :
+                           groupName === 'lineItems' ? 'Line Items Information' :
+                           groupName === 'details' ? 'Quote Details' :
+                           groupName === 'additional' ? 'Additional Information' :
+                           groupName.charAt(0).toUpperCase() + groupName.slice(1) + ' Information'
+                          }
+                          {groupName === 'lineItems' && <span className="text-red-500 ml-1">*</span>}
+                        </h3>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {fields.map(field => {
+                            if (field.type === 'lineItems') {
+                              return (
+                                <div key={field.name} className="md:col-span-2">
+                                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                                    {field.label}
+                                    {field.required && <span className="text-red-500 ml-1">*</span>}
                             </label>
-                            <input
-                              type="text"
-                              value={formData.subject || ''}
-                              onChange={(e) => handleInputChange('subject', e.target.value)}
-                              required
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="Enter subject"
+                                  <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                    <LineItemsInput
+                                      value={formData[field.name] || []}
+                                      onChange={(items) => handleInputChange(field.name, items)}
+                                      className="w-full"
                             />
                           </div>
-
-                          {/* Due Date */}
-                          <div className="border-b border-gray-200 pb-4">
+                              </div>
+                              );
+                            }
+                            
+                            return (
+                              <div key={field.name} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Due Date
-                            </label>
-                            <input
-                              type="date"
-                              value={formData.dueDate || ''}
-                              onChange={(e) => handleInputChange('dueDate', e.target.value)}
-                              required
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                              placeholder="DD/MM/YYYY"
-                            />
-                          </div>
-
-                          {/* Contact/Lead Type and Contact/Lead in two columns */}
-                          <div className="grid grid-cols-3 gap-4 border-b border-gray-200 pb-4">
-                            <div>
-                              <div className="flex items-center">
-                                <select
-                                  value={formData.contactLeadType || 'contact'}
-                                  onChange={(e) => handleInputChange('contactLeadType', e.target.value)}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                                >
-                                  <option value="contact">Contact</option>
-                                  <option value="lead">Lead</option>
-                                </select>
-                              </div>
-                            </div>
-                            <div className="col-span-2">
-                              <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
-                                <select
-                                  key={`contact-lead-${formData.contactLeadId || 'empty'}`}
-                                  value={formData.contactLeadId || ''}
-                                  onChange={(e) => handleInputChange('contactLeadId', e.target.value)}
-                                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                                >
-                                  <option value="">Select {formData.contactLeadType || 'contact'}</option>
-                                  {getContactLeadOptions(formData.contactLeadType || 'contact').map(option => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                  {/* Show selected record if it's not in the options */}
-                                  {formData.contactLeadId && !getContactLeadOptions(formData.contactLeadType || 'contact').find(opt => opt.value === formData.contactLeadId) && (
-                                    <option value={formData.contactLeadId}>
-                                      {getSelectedContactLeadName()}
-                                    </option>
-                                  )}
-                                </select>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    console.log('🔍 DEBUG: Search button clicked for Contact/Lead');
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    console.log('🔍 DEBUG: Setting showContactLeadSearch to true');
-                                    // Ensure contactLeadType is set to 'contact' by default
-                                    if (!formData.contactLeadType) {
-                                      setFormData(prev => ({
-                                        ...prev,
-                                        contactLeadType: 'contact'
-                                      }));
-                                    }
-                                    setShowContactLeadSearch(true);
-                                  }}
-                                  className="ml-2 p-2 text-gray-400 hover:text-gray-600 transition-colors"
-                                  title={`Search ${formData.contactLeadType || 'contact'}s`}
-                                >
-                                  <Icons.Search className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Show message if contacts need to be associated */}
-                          {prefillData?.requireContactSelection && prefillData?.relatedContacts && prefillData.relatedContacts.length === 0 && (
-                            <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                              <div className="flex items-center">
-                                <Icons.AlertTriangle className="w-4 h-4 text-yellow-600 mr-2" />
-                                <p className="text-sm text-yellow-700">
-                                  <strong>No contacts associated with this deal.</strong> Please associate a contact with the deal first before creating a task.
-                                </p>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Show message if multiple contacts are available */}
-                          {prefillData?.requireContactSelection && prefillData?.relatedContacts && prefillData.relatedContacts.length > 1 && !formData.contactLeadId && (
-                            <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                              <div className="flex items-center">
-                                <Icons.Info className="w-4 h-4 text-blue-600 mr-2" />
-                                <p className="text-sm text-blue-700">
-                                  <strong>Multiple contacts associated with this deal.</strong> Please select a contact for this task.
-                                </p>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Related Record Type and Related Record in two columns */}
-                          <div className="grid grid-cols-3 gap-4 border-b border-gray-200 pb-4">
-                            <div>
-                              <div className="flex items-center">
-                                <select
-                                  value={formData.relatedRecordType || 'deal'}
-                                  onChange={(e) => handleInputChange('relatedRecordType', e.target.value)}
-                                  disabled={formData.contactLeadType === 'lead'}
-                                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                    formData.contactLeadType === 'lead' 
-                                      ? 'bg-gray-100 text-gray-500 cursor-not-allowed' 
-                                      : 'bg-white'
-                                  }`}
-                                >
-                                  <option value="deal">Deal</option>
-                                  <option value="product">Product</option>
-                                  <option value="quote">Quote</option>
-                                </select>
-                              </div>
-                            </div>
-                            <div className="col-span-2">
-                              <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
-                                <select
-                                  key={`related-record-${formData.relatedRecordId || 'empty'}`}
-                                  value={formData.relatedRecordId || ''}
-                                  onChange={(e) => handleInputChange('relatedRecordId', e.target.value)}
-                                  disabled={formData.contactLeadType === 'lead'}
-                                  className={`flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                                    formData.contactLeadType === 'lead' 
-                                      ? 'bg-gray-100 text-gray-500 cursor-not-allowed' 
-                                      : 'bg-white'
-                                  }`}
-                                >
-                                  <option value="">
-                                    {formData.contactLeadType === 'lead' 
-                                      ? 'Same as Contact/Lead' 
-                                      : `Select ${formData.relatedRecordType || 'deal'}`
-                                    }
-                                  </option>
-                                  {formData.contactLeadType !== 'lead' && getRelatedRecordOptions(formData.relatedRecordType || 'deal').map(option => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                  {/* Show selected record if it's not in the options */}
-                                  {formData.relatedRecordId && !getRelatedRecordOptions(formData.relatedRecordType || 'deal').find(opt => opt.value === formData.relatedRecordId) && (
-                                    <option value={formData.relatedRecordId}>
-                                      {getSelectedRelatedRecordName()}
-                                    </option>
-                                  )}
-                                </select>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    console.log('🔍 DEBUG: Search button clicked for Related Record');
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    console.log('🔍 DEBUG: Setting showRelatedRecordSearch to true');
-                                    // Ensure relatedRecordType is set to 'deal' by default
-                                    if (!formData.relatedRecordType) {
-                                      setFormData(prev => ({
-                                        ...prev,
-                                        relatedRecordType: 'deal'
-                                      }));
-                                    }
-                                    setShowRelatedRecordSearch(true);
-                                  }}
-                                  disabled={formData.contactLeadType === 'lead'}
-                                  className={`ml-2 p-2 transition-colors ${
-                                    formData.contactLeadType === 'lead'
-                                      ? 'text-gray-300 cursor-not-allowed'
-                                      : 'text-gray-400 hover:text-gray-600'
-                                  }`}
-                                  title={formData.contactLeadType === 'lead' 
-                                    ? 'Not available when Contact/Lead is Lead' 
-                                    : `Search ${formData.relatedRecordType || 'deal'}s`
-                                  }
-                                >
-                                  <Icons.Search className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                          {formData.contactLeadType === 'lead' && (
-                            <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
-                              <p className="text-sm text-blue-700">
-                                <Icons.Info className="w-4 h-4 inline mr-1" />
-                                Related record automatically set to the same lead
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Status */}
-                          <div className="border-b border-gray-200 pb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Status
-                            </label>
-                            <div className="flex items-center">
-                              <select
-                                value={formData.status || ''}
-                                onChange={(e) => handleInputChange('status', e.target.value)}
-                                required
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                              >
-                                <option value="">Select Status</option>
-                                {taskStatusOptions.map(option => (
-                                  <option key={option.value} value={option.value}>{option.label}</option>
-                                ))}
-                              </select>
-                              <Icons.ChevronDown className="w-4 h-4 text-gray-400 ml-2" />
-                            </div>
-                          </div>
-
-                          {/* Priority */}
-                          <div className="border-b border-gray-200 pb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Priority
-                            </label>
-                            <div className="flex items-center">
-                              <select
-                                value={formData.priority || ''}
-                                onChange={(e) => handleInputChange('priority', e.target.value)}
-                                required
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                              >
-                                <option value="">Select Priority</option>
-                                {taskPriorityOptions.map(option => (
-                                  <option key={option.value} value={option.value}>{option.label}</option>
-                                ))}
-                              </select>
-                              <Icons.ChevronDown className="w-4 h-4 text-gray-400 ml-2" />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Description Information Section */}
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Description Information</h3>
-                        <div className="border-b border-gray-200 pb-4">
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Description
-                          </label>
-                          <textarea
-                            value={formData.description || ''}
-                            onChange={(e) => handleInputChange('description', e.target.value)}
-                            rows={4}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                            placeholder="Enter description"
-                          />
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Other record types - keep existing structure for now */}
-                  {selectedType !== 'task' && (
-                    <div className="space-y-6">
-                      {Object.entries(groupedFields).map(([group, fields]) => (
-                        <div key={group}>
-                          {group !== 'default' && (
-                            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                              {group.charAt(0).toUpperCase() + group.slice(1)} Information
-                            </h3>
-                          )}
-                          <div className="space-y-4">
-                            {fields.map((field) => (
-                              <div key={field.name} className="border-b border-gray-200 pb-4">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  {field.label} {field.required && <span className="text-red-500">*</span>}
+                                  {field.label}
+                                  {field.required && <span className="text-red-500 ml-1">*</span>}
                                 </label>
                                 {renderField(field)}
                               </div>
-                            ))}
+                            );
+                          })}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                    ));
+                  })()}
                 </div>
 
                 {/* Form Actions */}
-                <div className="flex justify-end space-x-3 mt-8 pt-6 border-t border-gray-200">
+                <div className="flex justify-end space-x-3 mt-8 pt-6 border-t border-gray-200 bg-gray-50 -mx-6 -mb-6 px-6 pb-6">
                   <button
                     type="button"
                     onClick={handleMainModalClose}
-                    className="px-4 py-2 text-gray-700 hover:text-gray-900 transition-colors"
+                    className="px-6 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center shadow-sm"
                   >
                     {loading ? (
                       <>
@@ -1904,7 +1707,10 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                         Creating...
                       </>
                     ) : (
-                      `Create ${selectedType?.charAt(0).toUpperCase() + selectedType?.slice(1)}`
+                      <>
+                        <Icons.Plus className="w-4 h-4 mr-2" />
+                        Create {selectedType?.charAt(0).toUpperCase() + selectedType?.slice(1)}
+                      </>
                     )}
                   </button>
                 </div>
@@ -2532,6 +2338,194 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                               {dealContactSearchTerm && (
                                 <button
                                   onClick={() => setDealContactSearchTerm('')}
+                                  className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+                                >
+                                  Clear search
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* User Search Modal */}
+      {showUserSearch && createPortal(
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div 
+            className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"
+            onClick={(e) => {
+              console.log('🔍 DEBUG: User Search outer overlay div clicked');
+              e.stopPropagation();
+            }}
+          >
+            <div className="overflow-x-auto">
+              <div className="sticky top-0 bg-white border-b border-gray-200 z-10 min-w-[800px]">
+                <div className="flex items-center justify-between p-6">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Search Users
+                  </h3>
+                  <button
+                    onClick={(e) => {
+                      console.log('🔍 DEBUG: User Search close button clicked');
+                      e.stopPropagation();
+                      setShowUserSearch(false);
+                      setUserSearchTerm('');
+                      setCurrentUserSearchField('');
+                    }}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <Icons.X className="w-5 h-5 text-gray-500" />
+                  </button>
+                </div>
+                {/* Search Bar */}
+                <div className="px-6 pb-4">
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Icons.Search className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setUserSearchTerm('');
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      placeholder="Search users by name, email, or role..."
+                      autoFocus
+                    />
+                    {userSearchTerm && (
+                      <button
+                        onClick={() => setUserSearchTerm('')}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                      >
+                        <Icons.X className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                      </button>
+                    )}
+                  </div>
+                  {/* Search Results Count */}
+                  {userSearchTerm ? (
+                    <div className="mt-2 text-sm text-gray-500">
+                      Found {getFilteredUsers().length} user{getFilteredUsers().length !== 1 ? 's' : ''} matching "{userSearchTerm}"
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-sm text-gray-500">
+                      {tenantUsers.length} total user{tenantUsers.length !== 1 ? 's' : ''} available
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="overflow-y-auto max-h-[calc(80vh-80px)]">
+                <div className="bg-white min-w-[800px]">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center">
+                            USER
+                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
+                          </div>
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center">
+                            EMAIL
+                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
+                          </div>
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center">
+                            ROLE
+                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
+                          </div>
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center">
+                            STATUS
+                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
+                          </div>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {getFilteredUsers().length > 0 ? (
+                        getFilteredUsers().map((userItem: TenantUser) => (
+                          <tr
+                            key={getUserId(userItem)}
+                            onClick={(e) => {
+                              console.log('🔍 DEBUG: User row clicked:', getUserId(userItem), userItem.firstName, userItem.lastName);
+                              e.stopPropagation();
+                              const userName = `${userItem.firstName} ${userItem.lastName}`;
+                              console.log('🔍 DEBUG: Setting form data with user:', getUserId(userItem), userName);
+                              // Update form data with the selected user
+                              setFormData(prev => {
+                                console.log('🔍 DEBUG: Previous form data for user:', prev);
+                                const newData = {
+                                  ...prev,
+                                  [currentUserSearchField]: getUserId(userItem)
+                                };
+                                console.log('🔍 DEBUG: New form data for user:', newData);
+                                return newData;
+                              });
+                              console.log('🔍 DEBUG: Closing user search overlay');
+                              setShowUserSearch(false);
+                              setUserSearchTerm('');
+                              setCurrentUserSearchField('');
+                            }}
+                            className="hover:bg-blue-50 cursor-pointer transition-colors"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                                  <Icons.User className="w-4 h-4 text-blue-600" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {userItem.firstName} {userItem.lastName}
+                                    {getUserId(userItem) === user?.userId && ' (You)'}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {getUserId(userItem)}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {userItem.email || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {userItem.role || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                                Active
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-8 text-center">
+                            <div className="flex flex-col items-center">
+                              <Icons.Search className="w-8 h-8 text-gray-400 mb-2" />
+                              <p className="text-gray-500 text-sm">
+                                {userSearchTerm ? `No users found matching "${userSearchTerm}"` : 'No users available'}
+                              </p>
+                              {userSearchTerm && (
+                                <button
+                                  onClick={() => setUserSearchTerm('')}
                                   className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
                                 >
                                   Clear search
