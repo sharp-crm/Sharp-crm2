@@ -1,22 +1,20 @@
-export interface Role {
-  id: string;
-  name: string;
-  permissions: string[]; // List of permission keys
-}
-
 export interface User {
   id: string;
   name: string;
   email: string;
-  avatar: string;
-  role: Role;
-  department: string;
+  avatar?: string;
+  role: 'admin' | 'manager' | 'rep';
+  department?: string;
   userId: string;
   firstName: string;
   lastName: string;
   domain?: string;
   profileImage?: string;
   phoneNumber?: string;
+  reportingTo?: string;
+  tenantId?: string;
+  createdBy?: string;
+  isDeleted?: boolean;
 }
 
 export interface Lead {
@@ -110,7 +108,6 @@ export interface Deal {
   notes?: string;
   relatedProductIds?: string[];
   relatedQuoteIds?: string[];
-  visibleTo: string[];
   createdBy: string;
   createdAt: string;
   updatedBy: string;
@@ -130,6 +127,9 @@ export interface Task {
   assignee: string;
   type: 'Call' | 'Email' | 'Meeting' | 'Follow-up' | 'Demo';
   tenantId: string;
+  
+  // Notes field
+  notes?: string;
   
   // Audit fields
   createdAt: string;
@@ -197,7 +197,6 @@ export interface Dealer {
   status: 'Active' | 'Inactive';
   description: string;
   createdAt: string;
-  visibleTo: string[];
 }
 
 export interface Subsidiary {
@@ -211,7 +210,6 @@ export interface Subsidiary {
   status: 'Active' | 'Inactive';
   description: string;
   createdAt: string;
-  visibleTo: string[];
 }
 
 export interface TenantUser {

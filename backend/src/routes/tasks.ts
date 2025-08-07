@@ -15,12 +15,21 @@ interface Task {
   type: string;
   tenantId: string;
   createdAt: string;
+  notes?: string;
   // New fields for related records
   contactLeadId?: string;
   contactLeadType?: string; // 'contact' or 'lead'
   relatedRecordId?: string;
   relatedRecordType?: string; // 'deal', 'product', or 'quote'
   visibleTo?: string[];
+  // Auditing fields
+  createdBy?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  deletedAt?: string;
+  deletedBy?: string;
+  isDeleted?: boolean;
+  userId?: string;
 }
 
 const router = express.Router();
@@ -50,9 +59,10 @@ router.get("/test-filter", (async (req: AuthenticatedRequest, res: Response, nex
     const allTasks = await docClient.send(
       new ScanCommand({
         TableName: TABLES.TASKS,
-        FilterExpression: "tenantId = :tenantId",
+        FilterExpression: "tenantId = :tenantId AND (attribute_not_exists(isDeleted) OR isDeleted = :isDeleted)",
         ExpressionAttributeValues: {
-          ":tenantId": tenantId
+          ":tenantId": tenantId,
+          ":isDeleted": false
         }
       })
     );
@@ -64,11 +74,12 @@ router.get("/test-filter", (async (req: AuthenticatedRequest, res: Response, nex
       const filteredTasks = await docClient.send(
         new ScanCommand({
           TableName: TABLES.TASKS,
-          FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId",
+          FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId AND (attribute_not_exists(isDeleted) OR isDeleted = :isDeleted)",
           ExpressionAttributeValues: {
             ":tenantId": tenantId,
             ":recordType": recordType,
-            ":recordId": recordId
+            ":recordId": recordId,
+            ":isDeleted": false
           }
         })
       );
@@ -111,11 +122,12 @@ router.get("/", (async (req: AuthenticatedRequest, res: Response, next: NextFunc
       const result = await docClient.send(
         new ScanCommand({
           TableName: TABLES.TASKS,
-          FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId",
+          FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId AND (attribute_not_exists(isDeleted) OR isDeleted = :isDeleted)",
           ExpressionAttributeValues: {
             ":tenantId": tenantId,
             ":recordType": recordType,
-            ":recordId": recordId
+            ":recordId": recordId,
+            ":isDeleted": false
           }
         })
       );
@@ -136,11 +148,12 @@ router.get("/", (async (req: AuthenticatedRequest, res: Response, next: NextFunc
       const result = await docClient.send(
         new ScanCommand({
           TableName: TABLES.TASKS,
-          FilterExpression: "tenantId = :tenantId AND contactLeadType = :contactLeadType AND contactLeadId = :contactLeadId",
+          FilterExpression: "tenantId = :tenantId AND contactLeadType = :contactLeadType AND contactLeadId = :contactLeadId AND (attribute_not_exists(isDeleted) OR isDeleted = :isDeleted)",
           ExpressionAttributeValues: {
             ":tenantId": tenantId,
             ":contactLeadType": contactLeadType,
-            ":contactLeadId": contactLeadId
+            ":contactLeadId": contactLeadId,
+            ":isDeleted": false
           }
         })
       );
@@ -158,9 +171,10 @@ router.get("/", (async (req: AuthenticatedRequest, res: Response, next: NextFunc
     const result = await docClient.send(
       new ScanCommand({
         TableName: TABLES.TASKS,
-        FilterExpression: "tenantId = :tenantId",
+        FilterExpression: "tenantId = :tenantId AND (attribute_not_exists(isDeleted) OR isDeleted = :isDeleted)",
         ExpressionAttributeValues: {
-          ":tenantId": tenantId
+          ":tenantId": tenantId,
+          ":isDeleted": false
         }
       })
     );
@@ -191,22 +205,24 @@ router.get("/by-related-record", (async (req: AuthenticatedRequest, res: Respons
 
     console.log('Querying DynamoDB with:', {
       TableName: TABLES.TASKS,
-      FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId",
+      FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId AND (attribute_not_exists(isDeleted) OR isDeleted = :isDeleted)",
       ExpressionAttributeValues: {
         ":tenantId": tenantId,
         ":recordType": recordType,
-        ":recordId": recordId
+        ":recordId": recordId,
+        ":isDeleted": false
       }
     });
 
     const result = await docClient.send(
       new ScanCommand({
         TableName: TABLES.TASKS,
-        FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId",
+        FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId AND (attribute_not_exists(isDeleted) OR isDeleted = :isDeleted)",
         ExpressionAttributeValues: {
           ":tenantId": tenantId,
           ":recordType": recordType,
-          ":recordId": recordId
+          ":recordId": recordId,
+          ":isDeleted": false
         }
       })
     );
@@ -224,7 +240,7 @@ router.get("/by-related-record", (async (req: AuthenticatedRequest, res: Respons
   }
 }) as express.RequestHandler);
 
-// Get task by ID (tenant-aware) - MUST BE AFTER specific routes
+// Get task by ID
 router.get("/:id", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
@@ -233,7 +249,7 @@ router.get("/:id", (async (req: AuthenticatedRequest, res: Response, next: NextF
     if (!tenantId) {
       return res.status(400).json({ error: "Tenant ID required" });
     }
-    
+
     const result = await docClient.send(
       new GetCommand({
         TableName: TABLES.TASKS,
@@ -248,6 +264,11 @@ router.get("/:id", (async (req: AuthenticatedRequest, res: Response, next: NextF
     // Check if task belongs to the same tenant
     if (result.Item.tenantId !== tenantId) {
       return res.status(403).json({ error: "Access denied" });
+    }
+
+    // Check if task is soft deleted
+    if (result.Item.isDeleted) {
+      return res.status(404).json({ error: "Task not found" });
     }
 
     res.json({ data: result.Item as Task });
@@ -271,9 +292,12 @@ router.post("/", (async (req: AuthenticatedRequest, res: Response, next: NextFun
       contactLeadType,
       relatedRecordId,
       relatedRecordType,
-      visibleTo = []
+      visibleTo = [],
+      notes
     } = req.body;
     const tenantId = req.user?.tenantId;
+    const userId = req.user?.userId;
+    const userEmail = req.user?.email;
     
     if (!tenantId) {
       return res.status(400).json({ error: "Tenant ID required" });
@@ -298,7 +322,14 @@ router.post("/", (async (req: AuthenticatedRequest, res: Response, next: NextFun
       ...(contactLeadType && { contactLeadType }),
       ...(relatedRecordId && { relatedRecordId }),
       ...(relatedRecordType && { relatedRecordType }),
-      ...(visibleTo && visibleTo.length > 0 && { visibleTo })
+      ...(visibleTo && visibleTo.length > 0 && { visibleTo }),
+      ...(notes && { notes }),
+      // Auditing fields
+      createdBy: userEmail || userId || 'Unknown',
+      updatedAt: createdAt,
+      updatedBy: userEmail || userId || 'Unknown',
+      isDeleted: false,
+      userId: userId || 'Unknown'
     };
 
     await docClient.send(
@@ -320,6 +351,8 @@ router.put("/:id", (async (req: AuthenticatedRequest, res: Response, next: NextF
     const { id } = req.params;
     const updates = req.body;
     const tenantId = req.user?.tenantId;
+    const userId = req.user?.userId;
+    const userEmail = req.user?.email;
     
     if (!tenantId) {
       return res.status(400).json({ error: "Tenant ID required" });
@@ -354,6 +387,13 @@ router.put("/:id", (async (req: AuthenticatedRequest, res: Response, next: NextF
       return res.status(400).json({ error: "No valid fields to update" });
     }
 
+    // Add auditing fields
+    updateExpressions.push('#updatedAt = :updatedAt', '#updatedBy = :updatedBy');
+    expressionAttributeNames['#updatedAt'] = 'updatedAt';
+    expressionAttributeNames['#updatedBy'] = 'updatedBy';
+    expressionAttributeValues[':updatedAt'] = new Date().toISOString();
+    expressionAttributeValues[':updatedBy'] = userEmail || userId || 'Unknown';
+
     const result = await docClient.send(
       new UpdateCommand({
         TableName: TABLES.TASKS,
@@ -371,11 +411,13 @@ router.put("/:id", (async (req: AuthenticatedRequest, res: Response, next: NextF
   }
 }) as express.RequestHandler);
 
-// Delete task
+// Delete task (soft delete)
 router.delete("/:id", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const tenantId = req.user?.tenantId;
+    const userId = req.user?.userId;
+    const userEmail = req.user?.email;
     
     if (!tenantId) {
       return res.status(400).json({ error: "Tenant ID required" });
@@ -393,14 +435,31 @@ router.delete("/:id", (async (req: AuthenticatedRequest, res: Response, next: Ne
       return res.status(404).json({ error: "Task not found" });
     }
 
-    await docClient.send(
-      new DeleteCommand({
+    // Soft delete by updating the task
+    const result = await docClient.send(
+      new UpdateCommand({
         TableName: TABLES.TASKS,
-        Key: { id }
+        Key: { id },
+        UpdateExpression: 'SET #isDeleted = :isDeleted, #deletedAt = :deletedAt, #deletedBy = :deletedBy, #updatedAt = :updatedAt, #updatedBy = :updatedBy',
+        ExpressionAttributeNames: {
+          '#isDeleted': 'isDeleted',
+          '#deletedAt': 'deletedAt',
+          '#deletedBy': 'deletedBy',
+          '#updatedAt': 'updatedAt',
+          '#updatedBy': 'updatedBy'
+        },
+        ExpressionAttributeValues: {
+          ':isDeleted': true,
+          ':deletedAt': new Date().toISOString(),
+          ':deletedBy': userEmail || userId || 'Unknown',
+          ':updatedAt': new Date().toISOString(),
+          ':updatedBy': userEmail || userId || 'Unknown'
+        },
+        ReturnValues: "ALL_NEW"
       })
     );
 
-    res.json({ message: "Task deleted successfully" });
+    res.json({ message: "Task deleted successfully", data: result.Attributes as Task });
   } catch (error) {
     next(error);
   }

@@ -9,6 +9,8 @@ import { authenticate } from '../middlewares/authenticate';
 import { uploadToS3 } from '../services/s3Service';
 import { DynamoDBClient, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { uploadToLocal } from '../services/localStorageService';
+import { requirePermission, requireCreatePermission, requireEditPermission, requireDeletePermission } from '../middlewares/rbac';
+import { checkPermission } from '../utils/rbac';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -48,46 +50,66 @@ router.post('/profile-image', authenticate as express.RequestHandler, upload.sin
   }
 });
 
-// Role-based permissions mapping
-const rolePermissions: Record<string, string[]> = {
-  SUPER_ADMIN: [
-    "CREATE_ADMIN", "DELETE_ADMIN", "VIEW_ALL_TENANTS", "MANAGE_SYSTEM",
-    "CREATE_USER", "UPDATE_USER", "DELETE_USER", "VIEW_ALL_REPORTS", "MANAGE_ROLES",
-    "CREATE_LEAD", "UPDATE_LEAD", "VIEW_LEADS", "VIEW_TEAM_REPORTS", "UPDATE_OWN_LEADS",
-    "CREATE_SUBSIDIARY", "UPDATE_SUBSIDIARY", "DELETE_SUBSIDIARY", "VIEW_SUBSIDIARIES",
-    "CREATE_DEALER", "UPDATE_DEALER", "DELETE_DEALER", "VIEW_DEALERS"
-  ],
-  ADMIN: [
-    "CREATE_USER", "UPDATE_USER", "DELETE_USER", "VIEW_TENANT_REPORTS", "MANAGE_TENANT_ROLES",
-    "CREATE_LEAD", "UPDATE_LEAD", "VIEW_LEADS", "VIEW_TEAM_REPORTS", "UPDATE_OWN_LEADS",
-    "CREATE_SUBSIDIARY", "UPDATE_SUBSIDIARY", "DELETE_SUBSIDIARY", "VIEW_SUBSIDIARIES",
-    "CREATE_DEALER", "UPDATE_DEALER", "DELETE_DEALER", "VIEW_DEALERS"
-  ],
-  SALES_MANAGER: [
-    "CREATE_LEAD", "UPDATE_LEAD", "VIEW_LEADS", "VIEW_TEAM_REPORTS", "UPDATE_OWN_LEADS",
-    "VIEW_SUBSIDIARIES", "VIEW_DEALERS"
-  ],
-  SALES_REP: [
-    "CREATE_LEAD", "VIEW_LEADS", "UPDATE_OWN_LEADS"
-  ],
-};
-
 // Helper function to check if a string is a UUID
 const isUUID = (str: string): boolean => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return uuidRegex.test(str);
 };
 
+// Helper function to normalize role string
+function normalizeRole(role: string): 'admin' | 'manager' | 'rep' {
+  const normalized = role.toLowerCase();
+  if (normalized === 'admin' || normalized === 'super_admin') return 'admin';
+  if (normalized === 'manager' || normalized === 'sales_manager') return 'manager';
+  if (normalized === 'rep' || normalized === 'sales_rep') return 'rep';
+  return 'rep'; // Default to rep
+}
+
+// Helper function to get reporting reps for a manager
+async function getReportingReps(managerId: string) {
+  try {
+    const result = await docClient.send(
+      new ScanCommand({
+        TableName: TABLES.USERS,
+        FilterExpression: 'reportingTo = :managerId AND #role = :role AND isDeleted = :isDeleted',
+        ExpressionAttributeNames: {
+          '#role': 'role'
+        },
+        ExpressionAttributeValues: {
+          ':managerId': managerId,
+          ':role': 'rep',
+          ':isDeleted': false
+        }
+      })
+    );
+
+    return (result.Items || []).map(item => ({
+      userId: item.userId,
+      email: item.email,
+      firstName: item.firstName || '',
+      lastName: item.lastName || '',
+      role: normalizeRole(item.role),
+      tenantId: item.tenantId,
+      reportingTo: item.reportingTo,
+      createdBy: item.createdBy,
+      isDeleted: item.isDeleted
+    }));
+  } catch (error) {
+    console.error('Error getting reporting reps:', error);
+    return [];
+  }
+}
+
 // Get managers for reporting hierarchy
-router.get("/managers", async (req, res, next) => {
+router.get("/managers", authenticate, requirePermission('view', 'user'), async (req, res, next) => {
   try {
     const currentUser = (req as any).user;
     if (!currentUser) {
       throw createError("User not found in token", 401);
     }
 
-    // Only admins can create users, so they can access managers
-    if (!['SUPER_ADMIN', 'ADMIN'].includes(currentUser.role)) {
+    // Only admins can access managers
+    if (!['admin'].includes(currentUser.role.toLowerCase())) {
       throw createError("Access denied. Admin role required.", 403);
     }
 
@@ -101,7 +123,7 @@ router.get("/managers", async (req, res, next) => {
         },
         ExpressionAttributeValues: {
           ":tenantId": currentUser.tenantId,
-          ":role": "SALES_MANAGER",
+          ":role": "manager",
           ":isDeleted": false
         }
       })
@@ -125,7 +147,7 @@ router.get("/managers", async (req, res, next) => {
 
 
 // Get all users for the same tenant (hierarchical)
-router.get("/tenant-users", async (req, res, next) => {
+router.get("/tenant-users", authenticate, requirePermission('view', 'user'), async (req, res, next) => {
   try {
     const currentUser = (req as any).user;
     if (!currentUser) {
@@ -144,19 +166,24 @@ router.get("/tenant-users", async (req, res, next) => {
     // Filter out deleted users first
     users = users.filter(user => !user.isDeleted);
 
-    // User filtering logic based on requirements
-    if (currentUser.role === 'SUPER_ADMIN') {
-      // SuperAdmin sees all users they created (admins) and themselves
-      users = users.filter(user => 
-        user.createdBy === currentUser.userId || 
-        user.userId === currentUser.userId ||
-        user.createdBy === 'SYSTEM' ||
-        user.createdBy === 'SELF_REGISTRATION'
-      );
-    } else {
-      // Any other user - show all users with the same tenant ID
+    // User filtering logic based on RBAC requirements
+    if (currentUser.role.toLowerCase() === 'admin') {
+      // Admin sees all users in their tenant
       users = users.filter(user => 
         user.tenantId === currentUser.tenantId
+      );
+    } else if (currentUser.role.toLowerCase() === 'manager') {
+      // Manager sees themselves and their reporting reps
+      const reportingReps = await getReportingReps(currentUser.userId);
+      const repIds = reportingReps.map(rep => rep.userId);
+      users = users.filter(user => 
+        user.userId === currentUser.userId || 
+        repIds.includes(user.userId)
+      );
+    } else {
+      // Rep only sees themselves
+      users = users.filter(user => 
+        user.userId === currentUser.userId
       );
     }
 
@@ -167,11 +194,10 @@ router.get("/tenant-users", async (req, res, next) => {
       lastName: user.lastName || '',
       name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
       email: user.email,
-      role: user.role || 'SALES_REP',
+      role: normalizeRole(user.role),
       tenantId: user.tenantId,
       createdBy: user.createdBy,
       reportingTo: user.reportingTo,
-      permissions: rolePermissions[user.role?.toUpperCase()] || [],
       isDeleted: user.isDeleted || false,
       createdAt: user.createdAt,
       phoneNumber: user.phoneNumber
@@ -184,10 +210,10 @@ router.get("/tenant-users", async (req, res, next) => {
 });
 
 // Get all users (admin only)
-router.get("/", async (req, res, next) => {
+router.get("/", authenticate, requirePermission('view', 'user'), async (req, res, next) => {
   try {
     const userRole = (req as any).user?.role;
-    if (userRole !== 'ADMIN') {
+    if (userRole.toLowerCase() !== 'admin') {
       throw createError("Access denied. Admin role required.", 403);
     }
 
@@ -204,8 +230,7 @@ router.get("/", async (req, res, next) => {
       lastName: user.lastName || '',
       name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
       email: user.email,
-      role: user.role || 'SALES_REP',
-      permissions: rolePermissions[user.role?.toUpperCase()] || [],
+      role: normalizeRole(user.role),
       isDeleted: user.isDeleted || false,
       createdAt: user.createdAt,
       phoneNumber: user.phoneNumber
@@ -218,7 +243,7 @@ router.get("/", async (req, res, next) => {
 });
 
 // Get user by ID
-router.get("/:id", async (req, res, next) => {
+router.get("/:id", authenticate, requirePermission('view', 'user'), async (req, res, next) => {
   try {
     const { id } = req.params;
     
@@ -245,9 +270,8 @@ router.get("/:id", async (req, res, next) => {
       lastName: user.lastName || '',
       name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
       email: user.email,
-      role: user.role || 'SALES_REP',
+      role: normalizeRole(user.role),
       reportingTo: user.reportingTo,
-      permissions: rolePermissions[user.role?.toUpperCase()] || [],
       isDeleted: user.isDeleted || false,
       createdAt: user.createdAt,
       phoneNumber: user.phoneNumber
@@ -260,43 +284,28 @@ router.get("/:id", async (req, res, next) => {
 });
 
 // Create new user
-router.post("/", async (req, res, next) => {
+router.post("/", authenticate, requireCreatePermission('user'), async (req, res, next) => {
   try {
     const currentUser = (req as any).user;
     const userRole = currentUser?.role;
     
-    // Check permissions based on role hierarchy
-    if (!['SUPER_ADMIN', 'ADMIN'].includes(userRole)) {
-      throw createError("Access denied. Admin or Super Admin role required.", 403);
+    // Only admins can create users
+    if (userRole.toLowerCase() !== 'admin') {
+      throw createError("Access denied. Admin role required.", 403);
     }
 
-    const { email, password, firstName, lastName, role = "SALES_REP", phoneNumber, reportingTo } = req.body;
+    const { email, password, firstName, lastName, role = "rep", phoneNumber, reportingTo } = req.body;
 
     if (!email || !password || !firstName || !lastName) {
       throw createError("Email, password, firstName, and lastName are required", 400);
     }
 
     // Validate role creation permissions
-    const requestedRole = role.toUpperCase();
+    const requestedRole = normalizeRole(role);
     
-    if (userRole === 'SUPER_ADMIN') {
-      // Super admins can ONLY create admins
-      if (requestedRole !== 'ADMIN') {
-        throw createError("Super admins can only create admins", 403);
-      }
-    } else if (userRole === 'ADMIN') {
-      // Admins cannot create other admins or super admins
-      if (requestedRole === 'ADMIN') {
-        throw createError("Admins cannot create other admins", 403);
-      }
-      if (requestedRole === 'SUPER_ADMIN') {
-        throw createError("Admins cannot create super admins", 403);
-      }
-    } else {
-      // Other roles cannot create admins or super admins
-      if (requestedRole === 'ADMIN' || requestedRole === 'SUPER_ADMIN') {
-        throw createError("Insufficient permissions to create admin or super admin", 403);
-      }
+    // Admins can only create managers and reps
+    if (requestedRole === 'admin') {
+      throw createError("Admins cannot create other admins", 403);
     }
 
     // Check if user already exists with this email
@@ -311,77 +320,48 @@ router.post("/", async (req, res, next) => {
       throw createError("User already exists with this email", 400);
     }
 
-    // Check if phone number already exists (if provided)
-    if (phoneNumber) {
-      const existingPhoneUser = await docClient.send(
-        new ScanCommand({
-          TableName: TABLES.USERS,
-          FilterExpression: "phoneNumber = :phoneNumber",
-          ExpressionAttributeValues: {
-            ":phoneNumber": phoneNumber
-          }
-        })
-      );
-
-      if (existingPhoneUser.Items && existingPhoneUser.Items.length > 0) {
-        throw createError("User already exists with this phone number", 400);
-      }
-    }
-
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
     const userId = uuidv4();
-
-    // Determine tenant assignment and reporting hierarchy
-    let tenantId = "default-tenant";
+    const tenantId = currentUser.tenantId;
     let createdBy = currentUser.userId;
     let finalReportingTo = null;
 
-    if (userRole === 'SUPER_ADMIN') {
-      // Super admin only creates admins - each gets their own tenant ID
-      tenantId = uuidv4();
-      // Admins don't report to anyone (null)
-      finalReportingTo = null;
-    } else if (userRole === 'ADMIN') {
-      // Admin creating user - assign to admin's tenant
-      tenantId = currentUser.tenantId;
-      
-      // Determine reporting structure based on role being created
-      if (requestedRole === 'SALES_MANAGER') {
-        // Sales managers report to the admin
-        finalReportingTo = currentUser.userId;
-      } else if (requestedRole === 'SALES_REP') {
-        // Sales reps report to a manager (reportingTo is required)
-        if (!reportingTo) {
-          throw createError("Sales representatives must have a reporting manager", 400);
-        }
-        
-        // Validate that the reportingTo user exists and is a manager in the same tenant
-        const managerResult = await docClient.send(
-          new ScanCommand({
-            TableName: TABLES.USERS,
-            FilterExpression: "userId = :userId AND tenantId = :tenantId AND #role = :role AND isDeleted = :isDeleted",
-            ExpressionAttributeNames: {
-              "#role": "role"
-            },
-            ExpressionAttributeValues: {
-              ":userId": reportingTo,
-              ":tenantId": currentUser.tenantId,
-              ":role": "SALES_MANAGER",
-              ":isDeleted": false
-            }
-          })
-        );
-        
-        if (!managerResult.Items || managerResult.Items.length === 0) {
-          throw createError("Invalid reporting manager. Must be a sales manager in the same tenant.", 400);
-        }
-        
-        finalReportingTo = reportingTo;
+    // Determine reporting structure based on role being created
+    if (requestedRole === 'manager') {
+      // Sales managers report to the admin
+      finalReportingTo = currentUser.userId;
+    } else if (requestedRole === 'rep') {
+      // Sales reps report to a manager (reportingTo is required)
+      if (!reportingTo) {
+        throw createError("Sales representatives must have a reporting manager", 400);
       }
+      
+      // Validate that the reportingTo user exists and is a manager in the same tenant
+      const managerResult = await docClient.send(
+        new ScanCommand({
+          TableName: TABLES.USERS,
+          FilterExpression: "userId = :userId AND tenantId = :tenantId AND #role = :role AND isDeleted = :isDeleted",
+          ExpressionAttributeNames: {
+            "#role": "role"
+          },
+          ExpressionAttributeValues: {
+            ":userId": reportingTo,
+            ":tenantId": currentUser.tenantId,
+            ":role": "manager",
+            ":isDeleted": false
+          }
+        })
+      );
+      
+      if (!managerResult.Items || managerResult.Items.length === 0) {
+        throw createError("Invalid reporting manager. Must be a sales manager in the same tenant.", 400);
+      }
+      
+      finalReportingTo = reportingTo;
     }
 
-    // Create user object, filtering out undefined values
+    // Create user object
     const user: any = {
       userId,
       email,
@@ -423,7 +403,6 @@ router.post("/", async (req, res, next) => {
       tenantId,
       createdBy,
       reportingTo: finalReportingTo,
-      permissions: rolePermissions[requestedRole] || [],
       isDeleted: false,
       createdAt: user.createdAt,
       phoneNumber
@@ -436,14 +415,14 @@ router.post("/", async (req, res, next) => {
 });
 
 // Soft delete user (moved before general update route)
-router.put("/:id/soft-delete", async (req, res, next) => {
+router.put("/:id/soft-delete", authenticate, requireDeletePermission('user'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const currentUser = (req as any).user;
     const currentUserRole = currentUser?.role;
 
-    if (!['SUPER_ADMIN', 'ADMIN'].includes(currentUserRole)) {
-      throw createError("Access denied. Admin or Super Admin role required.", 403);
+    if (currentUserRole.toLowerCase() !== 'admin') {
+      throw createError("Access denied. Admin role required.", 403);
     }
 
     // First, get the user to delete to check permissions
@@ -463,70 +442,61 @@ router.put("/:id/soft-delete", async (req, res, next) => {
     }
 
     // Check deletion permissions based on tenant hierarchy
-    if (currentUserRole === 'ADMIN') {
-      // Admins can only delete users in their own tenant, but not other admins
-      if (userToDelete.tenantId !== currentUser.tenantId) {
-        throw createError("Cannot delete user from different tenant", 403);
-      }
-      if (userToDelete.role === 'ADMIN') {
-        throw createError("Admins cannot delete other admins", 403);
-      }
-      if (userToDelete.role === 'SUPER_ADMIN') {
-        throw createError("Admins cannot delete super admins", 403);
-      }
-    } else if (currentUserRole === 'SUPER_ADMIN') {
-      // Super admin can delete admins and users, but not other super admins
-      if (userToDelete.role === 'SUPER_ADMIN' && userToDelete.userId !== currentUser.userId) {
-        throw createError("Super admin cannot delete other super admins", 403);
-      }
+    // Admins can only delete users in their own tenant, but not other admins
+    if (userToDelete.tenantId !== currentUser.tenantId) {
+      throw createError("Cannot delete user from different tenant", 403);
+    }
+    if (userToDelete.role.toLowerCase() === 'admin') {
+      throw createError("Admins cannot delete other admins", 403);
     }
 
     // Prevent self-deletion
     if (userToDelete.userId === currentUser.userId) {
-      throw createError("Cannot delete your own account", 403);
+      throw createError("Cannot delete your own account", 400);
     }
 
-    // Perform soft delete using email as key
-    const result = await docClient.send(
+    // Soft delete the user
+    await docClient.send(
       new UpdateCommand({
         TableName: TABLES.USERS,
         Key: { email: userToDelete.email },
-        UpdateExpression: "SET isDeleted = :isDeleted, updatedAt = :updatedAt, deletedBy = :deletedBy, deletedAt = :deletedAt",
+        UpdateExpression: "SET isDeleted = :isDeleted, deletedAt = :deletedAt, deletedBy = :deletedBy, updatedAt = :updatedAt",
         ExpressionAttributeValues: {
           ":isDeleted": true,
-          ":updatedAt": new Date().toISOString(),
+          ":deletedAt": new Date().toISOString(),
           ":deletedBy": currentUser.userId,
-          ":deletedAt": new Date().toISOString()
-        },
-        ReturnValues: "ALL_NEW"
+          ":updatedAt": new Date().toISOString()
+        }
       })
     );
 
-    if (!result.Attributes) {
-      throw createError("Failed to delete user", 500);
-    }
-
-    res.json({ message: "User soft deleted successfully" });
+    res.json({ 
+      message: "User soft deleted successfully",
+      data: {
+        id: userToDelete.userId,
+        userId: userToDelete.userId,
+        firstName: userToDelete.firstName || '',
+        lastName: userToDelete.lastName || '',
+        name: `${userToDelete.firstName || ''} ${userToDelete.lastName || ''}`.trim(),
+        email: userToDelete.email,
+        role: normalizeRole(userToDelete.role),
+        isDeleted: true,
+        deletedAt: new Date().toISOString(),
+        deletedBy: currentUser.userId
+      }
+    });
   } catch (error) {
     next(error);
   }
 });
 
 // Update user profile (current user) - MUST come before /:id route
-router.put("/profile", async (req, res, next) => {
+router.put("/profile", authenticate, async (req, res, next) => {
   try {
-    console.log("=== PUT /profile route hit ===");
-    console.log("Request method:", req.method);
-    console.log("Request URL:", req.url);
-    console.log("Headers:", req.headers);
-    
     const currentUser = (req as any).user;
     if (!currentUser) {
-      console.log("No current user found in token");
       throw createError("User not found in token", 401);
     }
-    
-    console.log("Current user:", currentUser);
 
     const { firstName, lastName, phoneNumber } = req.body;
 
@@ -573,19 +543,20 @@ router.put("/profile", async (req, res, next) => {
     }
 
     const updatedUser = {
+      id: result.Attributes.userId,
       userId: result.Attributes.userId,
+      firstName: result.Attributes.firstName || '',
+      lastName: result.Attributes.lastName || '',
+      name: `${result.Attributes.firstName || ''} ${result.Attributes.lastName || ''}`.trim(),
       email: result.Attributes.email,
-      firstName: result.Attributes.firstName,
-      lastName: result.Attributes.lastName,
-      role: result.Attributes.role,
-      tenantId: result.Attributes.tenantId,
+      role: normalizeRole(result.Attributes.role),
       phoneNumber: result.Attributes.phoneNumber,
       updatedAt: result.Attributes.updatedAt
     };
 
     res.json({ 
       message: "Profile updated successfully",
-      user: updatedUser 
+      data: updatedUser
     });
   } catch (error) {
     next(error);
@@ -593,18 +564,15 @@ router.put("/profile", async (req, res, next) => {
 });
 
 // Update user
-router.put("/:id", async (req, res, next) => {
+router.put("/:id", authenticate, requireEditPermission('user'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const updates = req.body;
-    const currentUserId = (req as any).user?.userId;
-    const currentUserRole = (req as any).user?.role;
+    const currentUser = (req as any).user;
+    const currentUserRole = currentUser?.role;
 
-    console.log(`PUT /users/${id} called with updates:`, updates);
-    console.log(`Current user: ${currentUserId}, Role: ${currentUserRole}`);
-
-    // Users can update their own profile, admins and super admins can update anyone
-    if (currentUserId !== id && !['ADMIN', 'SUPER_ADMIN'].includes(currentUserRole)) {
+    // Users can update their own profile, admins can update anyone in their tenant
+    if (currentUser.userId !== id && currentUserRole.toLowerCase() !== 'admin') {
       throw createError("Access denied. You can only update your own profile.", 403);
     }
 
@@ -624,13 +592,13 @@ router.put("/:id", async (req, res, next) => {
       throw createError("User not found", 404);
     }
 
-    console.log(`Found user to update:`, userToUpdate.email);
+    // Check if user is trying to update someone from a different tenant
+    if (currentUserRole.toLowerCase() === 'admin' && userToUpdate.tenantId !== currentUser.tenantId) {
+      throw createError("Cannot update user from different tenant", 403);
+    }
 
     // Check if phone number is being updated and validate uniqueness
     if (updates.phoneNumber && updates.phoneNumber !== userToUpdate.phoneNumber) {
-      console.log(`Checking phone number uniqueness for: ${updates.phoneNumber}`);
-      
-      // For now, let's do a simple scan to check phone number uniqueness
       const phoneCheckResult = await docClient.send(
         new ScanCommand({
           TableName: TABLES.USERS,
@@ -647,10 +615,10 @@ router.put("/:id", async (req, res, next) => {
       }
     }
 
-    // Handle email updates for admins/super admins
+    // Handle email updates for admins
     if (updates.email && updates.email !== userToUpdate.email) {
-      // Only admins and super admins can update email addresses
-      if (!['ADMIN', 'SUPER_ADMIN'].includes(currentUserRole)) {
+      // Only admins can update email addresses
+      if (currentUserRole.toLowerCase() !== 'admin') {
         throw createError("Access denied. Only admins can update email addresses.", 403);
       }
 
@@ -681,11 +649,12 @@ router.put("/:id", async (req, res, next) => {
           expressionAttributeNames[`#${key}`] = key;
           expressionAttributeValues[`:${key}`] = hashedPassword;
         } 
-        // Handle role updates (only admins and super admins can change roles)
-        else if (key === 'role' && ['ADMIN', 'SUPER_ADMIN'].includes(currentUserRole)) {
+        // Handle role updates (only admins can change roles)
+        else if (key === 'role' && currentUserRole.toLowerCase() === 'admin') {
+          const normalizedRole = normalizeRole(value as string);
           updateExpressions.push(`#${key} = :${key}`);
           expressionAttributeNames[`#${key}`] = key;
-          expressionAttributeValues[`:${key}`] = (value as string).toUpperCase();
+          expressionAttributeValues[`:${key}`] = normalizedRole;
         } 
         // Handle other fields
         else if (key !== 'role') {
@@ -700,24 +669,25 @@ router.put("/:id", async (req, res, next) => {
       throw createError("No valid fields to update", 400);
     }
 
-    console.log(`Update expressions:`, updateExpressions);
+    // Add updatedAt to the update
+    updateExpressions.push("#updatedAt = :updatedAt");
+    expressionAttributeNames["#updatedAt"] = "updatedAt";
+    expressionAttributeValues[":updatedAt"] = new Date().toISOString();
 
+    // Update the user
     const result = await docClient.send(
       new UpdateCommand({
         TableName: TABLES.USERS,
         Key: { email: userToUpdate.email },
-        UpdateExpression: `SET ${updateExpressions.join(', ')}, updatedAt = :updatedAt`,
+        UpdateExpression: `SET ${updateExpressions.join(", ")}`,
         ExpressionAttributeNames: expressionAttributeNames,
-        ExpressionAttributeValues: {
-          ...expressionAttributeValues,
-          ":updatedAt": new Date().toISOString()
-        },
+        ExpressionAttributeValues: expressionAttributeValues,
         ReturnValues: "ALL_NEW"
       })
     );
 
     if (!result.Attributes) {
-      throw createError("User not found", 404);
+      throw createError("Failed to update user", 500);
     }
 
     const updatedUser = {
@@ -727,18 +697,16 @@ router.put("/:id", async (req, res, next) => {
       lastName: result.Attributes.lastName || '',
       name: `${result.Attributes.firstName || ''} ${result.Attributes.lastName || ''}`.trim(),
       email: result.Attributes.email,
-      role: result.Attributes.role || 'SALES_REP',
-      permissions: rolePermissions[result.Attributes.role?.toUpperCase()] || [],
-      isDeleted: result.Attributes.isDeleted || false,
-      createdAt: result.Attributes.createdAt,
-      phoneNumber: result.Attributes.phoneNumber
+      role: normalizeRole(result.Attributes.role),
+      phoneNumber: result.Attributes.phoneNumber,
+      updatedAt: result.Attributes.updatedAt
     };
 
-    console.log(`User updated successfully:`, updatedUser.email);
-    res.json({ data: updatedUser });
-    
+    res.json({ 
+      message: "User updated successfully",
+      data: updatedUser
+    });
   } catch (error) {
-    console.error('User update error:', error);
     next(error);
   }
 });
@@ -750,7 +718,7 @@ router.get("/profile/test", async (req, res) => {
 });
 
 // Get user profile (current user)
-router.get("/profile/me", async (req, res, next) => {
+router.get("/profile/me", authenticate, async (req, res, next) => {
   try {
     const email = (req as any).user?.email;
     
@@ -772,10 +740,9 @@ router.get("/profile/me", async (req, res, next) => {
       lastName: result.Item.lastName || '',
       name: `${result.Item.firstName || ''} ${result.Item.lastName || ''}`.trim(),
       email: result.Item.email,
-      role: result.Item.role || 'SALES_REP',
+      role: normalizeRole(result.Item.role),
       tenantId: result.Item.tenantId,
       createdBy: result.Item.createdBy,
-      permissions: rolePermissions[result.Item.role?.toUpperCase()] || [],
       isDeleted: result.Item.isDeleted || false,
       createdAt: result.Item.createdAt,
       phoneNumber: result.Item.phoneNumber

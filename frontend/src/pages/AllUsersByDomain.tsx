@@ -10,29 +10,13 @@ interface User {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: 'admin' | 'manager' | 'rep';
   phoneNumber?: string;
   reportingTo?: string;
-  permissions?: string[];
   isDeleted?: boolean;
   deletedAt?: string;
   deletedBy?: string;
 }
-
-// Role-permissions mapping based on your backend Role enum
-const rolePermissions: Record<string, string[]> = {
-  ADMIN: [
-    "CREATE_USER", "UPDATE_USER", "DELETE_USER", "VIEW_ALL_REPORTS", "MANAGE_ROLES",
-  ],
-  SALES_MANAGER: [
-    "CREATE_LEAD", "UPDATE_LEAD", "VIEW_LEADS", "VIEW_TEAM_REPORTS",
-  ],
-  SALES_REP: [
-    "CREATE_LEAD", "VIEW_LEADS", "UPDATE_OWN_LEADS",
-  ],
-};
-
-
 
 interface AllUsersProps {
   hideHeader?: boolean;
@@ -54,7 +38,6 @@ const AllUsers: React.FC<AllUsersProps> = ({ hideHeader = false, hideBreadcrumbs
       setError('');
 
       const res = await API.get('/users/tenant-users');
-
 
       const data = res.data;
       const userArray = Array.isArray(data)
@@ -112,15 +95,15 @@ const AllUsers: React.FC<AllUsersProps> = ({ hideHeader = false, hideBreadcrumbs
   };
 
   // Group users by role
-  const groupedUsers: Record<string, User[]> = filteredUsers.reduce((acc, user) => {
-    const roleKey = user.role?.toUpperCase() || 'UNKNOWN';
+  const groupedUsers = users.reduce((acc, user) => {
+    const roleKey = user.role.toUpperCase();
     if (!acc[roleKey]) acc[roleKey] = [];
     acc[roleKey].push(user);
     return acc;
   }, {} as Record<string, User[]>);
 
   // Define role order
-  const roleOrder = ['SUPER_ADMIN', 'ADMIN', 'SALES_MANAGER', 'SALES_REP'];
+  const roleOrder = ['ADMIN', 'MANAGER', 'REP'];
 
   // Sort roles based on the defined order
   const sortedRoles = Object.keys(groupedUsers).sort((a, b) => {
@@ -149,7 +132,7 @@ const AllUsers: React.FC<AllUsersProps> = ({ hideHeader = false, hideBreadcrumbs
             subtitle="List of all registered users grouped by role"
             breadcrumbs={hideBreadcrumbs ? [] : [{ name: 'Home', path: '/' }, { name: 'Users' }]}
           />
-          {(currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'ADMIN' || currentUser?.role === 'Admin' || currentUser?.role === 'SuperAdmin') && (
+          {(currentUser?.role === 'admin') && (
             <button
               onClick={() => setIsModalOpen(true)}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
@@ -173,7 +156,7 @@ const AllUsers: React.FC<AllUsersProps> = ({ hideHeader = false, hideBreadcrumbs
             <div key={role}>
               {/* Role Header */}
               <h3 className="text-xl font-semibold text-gray-800 mb-3">
-                {role.replace('_', ' ')}
+                {role.charAt(0) + role.slice(1).toLowerCase()}
               </h3>
 
               {/* User List */}
@@ -189,23 +172,17 @@ const AllUsers: React.FC<AllUsersProps> = ({ hideHeader = false, hideBreadcrumbs
                       <span className="text-sm text-gray-500">({user.email})</span>
                     </div>
                     <div className="text-sm text-gray-700 mt-1">
-                      Role: <span className="font-semibold">{user.role}</span>
+                      Role: <span className="font-semibold">{user.role.charAt(0).toUpperCase() + user.role.slice(1)}</span>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {(rolePermissions[user.role?.toUpperCase()] || []).map((perm) => (
-                        <span
-                          key={perm}
-                          className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full border border-green-300"
-                        >
-                          {perm.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                        </span>
-                      ))}
-                    </div>
+                    {user.reportingTo && (
+                      <div className="text-sm text-gray-600 mt-1">
+                        Reports to: {getManagerName(user.reportingTo)}
+                      </div>
+                    )}
 
-                    {(currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'Admin' || currentUser?.role === 'SuperAdmin') && (
+                    {(currentUser?.role === 'admin') && (
                       <div className="mt-3 flex gap-4">
-                        {currentUser?.userId !== user.id && 
-                         user.email !== 'rootuser@sharp.com' && (
+                        {currentUser?.userId !== user.id && (
                           <button
                             onClick={() => handleSoftDelete(user.id, user.firstName, user.lastName)}
                             className="text-sm text-red-600 hover:underline"
@@ -227,8 +204,8 @@ const AllUsers: React.FC<AllUsersProps> = ({ hideHeader = false, hideBreadcrumbs
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onUserAdded={() => {
-          fetchUsers();
           setIsModalOpen(false);
+          fetchUsers();
         }}
       />
     </div>

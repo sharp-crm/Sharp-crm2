@@ -182,6 +182,7 @@ const AddNewUserModal: React.FC<AddNewUserModalProps> = ({ isOpen, onClose, onUs
               value={formData.password} 
               onChange={handleChange} 
               required 
+              autoComplete="new-password"
               className={`w-full p-2 border rounded ${
                 formData.password && !passwordValidation.isValid ? 'border-red-500' : 'border-gray-300'
               }`}
@@ -202,6 +203,7 @@ const AddNewUserModal: React.FC<AddNewUserModalProps> = ({ isOpen, onClose, onUs
             value={formData.confirmPassword} 
             onChange={handleChange} 
             required 
+            autoComplete="new-password"
             className={`w-full p-2 border rounded ${
               formData.confirmPassword && formData.password !== formData.confirmPassword ? 'border-red-500' : 'border-gray-300'
             }`}

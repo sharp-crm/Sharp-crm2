@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import PageHeader from '../components/Common/PageHeader';
 import DataTable from '../components/Common/DataTable';
@@ -25,6 +26,7 @@ interface User {
 }
 
 const Tasks: React.FC = () => {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,7 +102,12 @@ const Tasks: React.FC = () => {
             <Icons.CheckSquare className="w-4 h-4 text-blue-600" />
           </div>
           <div>
-            <div className="font-medium text-gray-900">{value}</div>
+            <div 
+              className="font-medium text-gray-900 hover:text-blue-600 cursor-pointer hover:underline"
+              onClick={() => navigate(`/tasks/${row.id}`)}
+            >
+              {value}
+            </div>
             <div className="text-sm text-gray-500 line-clamp-1">{row.description}</div>
           </div>
         </div>
@@ -182,10 +189,8 @@ const Tasks: React.FC = () => {
     <div className="flex items-center space-x-2">
       <button 
         className="p-1 text-gray-400 hover:text-gray-600"
-        onClick={() => {
-          setSelectedTask(row);
-          setIsViewModalOpen(true);
-        }}
+        onClick={() => navigate(`/tasks/${row.id}`)}
+        title="View Details"
       >
         <Icons.Eye className="w-4 h-4" />
       </button>
@@ -195,18 +200,21 @@ const Tasks: React.FC = () => {
           setSelectedTask(row);
           setIsEditModalOpen(true);
         }}
+        title="Edit Task"
       >
         <Icons.Edit2 className="w-4 h-4" />
       </button>
       <button 
         className="p-1 text-gray-400 hover:text-green-600"
         onClick={() => handleUpdateTask(row.id, { status: 'Completed' })}
+        title="Mark Complete"
       >
         <Icons.Check className="w-4 h-4" />
       </button>
       <button 
         className="p-1 text-gray-400 hover:text-red-600"
         onClick={() => handleDelete(row.id)}
+        title="Delete Task"
       >
         <Icons.Trash2 className="w-4 h-4" />
       </button>

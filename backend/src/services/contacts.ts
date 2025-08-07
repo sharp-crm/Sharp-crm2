@@ -34,9 +34,6 @@ export interface Contact {
   relatedProductIds?: string[]; // Array of product IDs related to this contact
   relatedQuoteIds?: string[]; // Array of quote IDs related to this contact
   
-  // Visibility field
-  visibleTo?: string[];
-  
   // Auditing fields
   createdBy: string;
   createdAt: string;
@@ -70,7 +67,6 @@ export interface CreateContactInput {
   notes?: string;
   relatedProductIds?: string[]; // Array of product IDs related to this contact
   relatedQuoteIds?: string[]; // Array of quote IDs related to this contact
-  visibleTo?: string[];
 }
 
 export interface UpdateContactInput {
@@ -94,7 +90,6 @@ export interface UpdateContactInput {
   notes?: string;
   relatedProductIds?: string[]; // Array of product IDs related to this contact
   relatedQuoteIds?: string[]; // Array of quote IDs related to this contact
-  visibleTo?: string[];
 }
 
 export class ContactsService {
@@ -127,7 +122,6 @@ export class ContactsService {
       notes: input.notes || '',
       relatedProductIds: input.relatedProductIds || [],
       relatedQuoteIds: input.relatedQuoteIds || [],
-      visibleTo: input.visibleTo || [],
       createdBy: userEmail,
       createdAt: timestamp,
       updatedBy: userEmail,
@@ -156,10 +150,7 @@ export class ContactsService {
     if (!result.Item || 
         result.Item.tenantId !== tenantId || 
         result.Item.isDeleted ||
-        (result.Item.visibleTo && 
-         result.Item.visibleTo.length > 0 && 
-         !result.Item.visibleTo.includes(userId) && 
-         result.Item.createdBy !== userId)) {
+        (result.Item.createdBy !== userId)) {
       return null;
     }
 
@@ -193,12 +184,10 @@ export class ContactsService {
       TableName: this.tableName,
       IndexName: 'ContactOwnerIndex',
       KeyConditionExpression: 'contactOwner = :contactOwner',
-      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted',
       ExpressionAttributeValues: {
         ':contactOwner': contactOwner,
         ':tenantId': tenantId,
-        ':userId': userId,
-        ':zero': 0,
         ':isDeleted': false
       }
     }));
@@ -212,14 +201,11 @@ export class ContactsService {
       TableName: this.tableName,
       IndexName: 'EmailIndex',
       KeyConditionExpression: 'email = :email',
-      FilterExpression: userId 
-        ? 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)'
-        : 'tenantId = :tenantId AND isDeleted = :isDeleted',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted',
       ExpressionAttributeValues: {
         ':email': email,
         ':tenantId': tenantId,
-        ':isDeleted': false,
-        ...(userId ? { ':userId': userId, ':zero': 0 } : {})
+        ':isDeleted': false
       }
     }));
 
@@ -250,21 +236,9 @@ export class ContactsService {
     // Add fields to update if they are provided
     Object.entries(input).forEach(([key, value]) => {
       if (value !== undefined) {
-        // Special handling for visibleTo array
-        if (key === 'visibleTo') {
-          if (!Array.isArray(value)) {
-            throw new Error('visibleTo must be an array of user IDs');
-          }
-          // Ensure we're using the correct userId field
-          const validatedVisibleTo = value.map(id => id.toString());
-          updateExpressions.push(`#${key} = :${key}`);
-          expressionAttributeNames[`#${key}`] = key;
-          expressionAttributeValues[`:${key}`] = validatedVisibleTo;
-        } else {
-          updateExpressions.push(`#${key} = :${key}`);
-          expressionAttributeNames[`#${key}`] = key;
-          expressionAttributeValues[`:${key}`] = value;
-        }
+        updateExpressions.push(`#${key} = :${key}`);
+        expressionAttributeNames[`#${key}`] = key;
+        expressionAttributeValues[`:${key}`] = value;
       }
     });
 
@@ -279,17 +253,15 @@ export class ContactsService {
         Key: { id },
         UpdateExpression: updateExpression,
         ExpressionAttributeNames: expressionAttributeNames,
-        ConditionExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted',
         ExpressionAttributeValues: expressionAttributeValues,
+        ConditionExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted',
         ReturnValues: 'ALL_NEW'
       }));
 
       return result.Attributes as Contact;
-    } catch (error: any) {
-      if (error.name === 'ConditionalCheckFailedException') {
-        return null; // Contact not found or conditions not met
-      }
-      throw error;
+    } catch (error) {
+      console.error('Error updating contact:', error);
+      return null;
     }
   }
 
@@ -376,11 +348,9 @@ export class ContactsService {
   async searchContacts(tenantId: string, userId: string, searchTerm: string): Promise<Contact[]> {
     const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId) AND (contains(firstName, :searchTerm) OR contains(companyName, :searchTerm) OR contains(email, :searchTerm))',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (contains(firstName, :searchTerm) OR contains(companyName, :searchTerm) OR contains(email, :searchTerm))',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
-        ':userId': userId,
-        ':zero': 0,
         ':isDeleted': false,
         ':searchTerm': searchTerm
       }
@@ -399,11 +369,9 @@ export class ContactsService {
   }> {
     const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      FilterExpression: 'tenantId = :tenantId AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+      FilterExpression: 'tenantId = :tenantId',
       ExpressionAttributeValues: {
-        ':tenantId': tenantId,
-        ':userId': userId,
-        ':zero': 0
+        ':tenantId': tenantId
       }
     }));
 

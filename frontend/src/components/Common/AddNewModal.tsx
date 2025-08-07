@@ -58,6 +58,11 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
   const [selectedRelatedRecordType, setSelectedRelatedRecordType] = useState<string>('');
   const [showContactLeadSearch, setShowContactLeadSearch] = useState(false);
   const [showRelatedRecordSearch, setShowRelatedRecordSearch] = useState(false);
+  const [showDealContactSearch, setShowDealContactSearch] = useState(false);
+  const [isLoadingContacts, setIsLoadingContacts] = useState(false);
+  const [dealContactSearchTerm, setDealContactSearchTerm] = useState('');
+  const [taskContactLeadSearchTerm, setTaskContactLeadSearchTerm] = useState('');
+  const [taskRelatedRecordSearchTerm, setTaskRelatedRecordSearchTerm] = useState('');
   const { user } = useAuthStore();
   const { addNotification } = useNotificationStore();
   const { addToast } = useToastStore();
@@ -103,12 +108,6 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           const response = await API.get('/users/tenant-users');
           const users = response.data?.data || [];
           setTenantUsers(users);
-
-          // Pre-select current user in visibleTo field
-          if (user?.userId) {
-            const currentUserSelected = [user.userId];
-            setFormData(prev => ({ ...prev, visibleTo: currentUserSelected }));
-          }
         } catch (error) {
           console.error('Failed to fetch tenant users:', error);
         }
@@ -117,14 +116,15 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
     }
   }, [isOpen, selectedType, user]);
 
-  // Fetch related data for task form
+  // Fetch related data for task and deal forms
   useEffect(() => {
-    console.log('🔍 DEBUG: Task data useEffect - isOpen:', isOpen, 'selectedType:', selectedType);
-    if (isOpen && selectedType === 'task') {
-      console.log('🔍 DEBUG: Fetching task related data triggered');
-      const fetchTaskRelatedData = async () => {
+    console.log('🔍 DEBUG: Task/Deal data useEffect - isOpen:', isOpen, 'selectedType:', selectedType);
+    if (isOpen && (selectedType === 'task' || selectedType === 'deal')) {
+      console.log('🔍 DEBUG: Fetching task/deal related data triggered');
+      const fetchRelatedData = async () => {
         try {
-          console.log('🔍 DEBUG: Fetching task related data...');
+          setIsLoadingContacts(true);
+          console.log('🔍 DEBUG: Fetching task/deal related data...');
           // Fetch contacts, leads, deals, products, and quotes for dropdowns
           const [contactsRes, leadsRes, dealsRes, productsRes, quotesRes] = await Promise.all([
             contactsApi.getAll(),
@@ -143,10 +143,12 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           setProducts(productsRes);
           setQuotes(quotesRes);
         } catch (error) {
-          console.error('Failed to fetch task related data:', error);
+          console.error('Failed to fetch task/deal related data:', error);
+        } finally {
+          setIsLoadingContacts(false);
         }
       };
-      fetchTaskRelatedData();
+      fetchRelatedData();
     }
   }, [isOpen, selectedType]);
 
@@ -361,6 +363,10 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
     setSelectedRelatedRecordType('');
     setShowContactLeadSearch(false);
     setShowRelatedRecordSearch(false);
+    setShowDealContactSearch(false);
+    setDealContactSearchTerm('');
+    setTaskContactLeadSearchTerm('');
+    setTaskRelatedRecordSearchTerm('');
     onClose();
   };
 
@@ -433,6 +439,11 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
         value: q.id,
         label: q.quoteName
       }));
+    } else if (type === 'lead') {
+      return leads.map(l => ({
+        value: l.id,
+        label: `${l.firstName} ${l.lastName}`
+      }));
     }
     return [];
   };
@@ -498,7 +509,6 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           { name: 'leadSource', label: 'Lead Source', type: 'select', options: leadSourceOptions, required: true },
           { name: 'leadStatus', label: 'Lead Status', type: 'select', options: leadStatusOptions, required: true },
           { name: 'value', label: 'Lead Value', type: 'number', required: true },
-          { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers), required: false },
           { name: 'street', label: 'Street', type: 'text', required: false, group: 'address' },
           { name: 'area', label: 'Area', type: 'text', required: false, group: 'address' },
           { name: 'city', label: 'City', type: 'text', required: false, group: 'address' },
@@ -517,7 +527,6 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           { name: 'phone', label: 'Phone', type: 'tel', required: true },
           { name: 'title', label: 'Title', type: 'text', required: false },
           { name: 'leadSource', label: 'Source', type: 'select', options: leadSourceOptions, required: true },
-          { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers), required: false },
           { name: 'street', label: 'Street', type: 'text', required: false, group: 'address' },
           { name: 'city', label: 'City', type: 'text', required: false, group: 'address' },
           { name: 'state', label: 'State', type: 'text', required: false, group: 'address' },
@@ -548,12 +557,12 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           { name: 'probability', label: 'Probability (%)', type: 'number', required: false, group: 'deal' },
           
           // Contact Information Section
+          { name: 'contactId', label: 'Contact', type: 'select', options: isLoadingContacts ? [{ value: '', label: 'Loading contacts...' }] : contacts.length > 0 ? contacts.map(c => ({ value: c.id, label: `${c.firstName} ${c.lastName}${c.companyName ? ` (${c.companyName})` : ''}` })) : [{ value: '', label: 'No contacts available' }], required: false, group: 'contact' },
           { name: 'phone', label: 'Contact Phone', type: 'tel', required: true, group: 'contact' },
           { name: 'email', label: 'Contact Email', type: 'email', required: false, group: 'contact' },
           
           // Additional Information Section
-          { name: 'description', label: 'Description', type: 'textarea', required: false, group: 'additional' },
-          { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers), required: false, group: 'additional' }
+          { name: 'description', label: 'Description', type: 'textarea', required: false, group: 'additional' }
         ];
       case 'dealer':
         return [
@@ -566,8 +575,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           { name: 'status', label: 'Status', type: 'select', options: [
             { value: 'Active', label: 'Active' },
             { value: 'Inactive', label: 'Inactive' }
-          ], required: true },
-          { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers) }
+          ], required: true }
         ];
       case 'subsidiary':
         return [
@@ -575,8 +583,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           { name: 'email', label: 'Email', type: 'email', required: true },
           { name: 'contact', label: 'Contact Number', type: 'tel', required: true },
           { name: 'address', label: 'Address', type: 'textarea', required: true },
-          { name: 'totalEmployees', label: 'Total Employees', type: 'number', required: true },
-          { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers) }
+          { name: 'totalEmployees', label: 'Total Employees', type: 'number', required: true }
         ];
       case 'product':
         return [
@@ -614,10 +621,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           
           // Description Information Section
           { name: 'description', label: 'Description', type: 'textarea', required: false, group: 'description' },
-          { name: 'notes', label: 'Notes', type: 'textarea', required: false, group: 'description' },
-          
-          // Visibility Section
-          { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers), required: false, group: 'visibility' }
+          { name: 'notes', label: 'Notes', type: 'textarea', required: false, group: 'description' }
         ];
       case 'quote':
         return [
@@ -638,10 +642,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           
           // Quote Details Section
           { name: 'description', label: 'Description', type: 'textarea', required: false, group: 'details' },
-          { name: 'terms', label: 'Terms and Conditions', type: 'textarea', required: false, group: 'details' },
-          
-          // Visibility Section
-          { name: 'visibleTo', label: 'Visible To', type: 'multiselect', options: getUserOptions(tenantUsers), required: false, group: 'visibility' }
+          { name: 'terms', label: 'Terms and Conditions', type: 'textarea', required: false, group: 'details' }
         ];
       default:
         return [];
@@ -670,6 +671,12 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
         if (value === 'lead') {
           newData.relatedRecordType = 'lead';
           newData.relatedRecordId = ''; // Will be set when contactLeadId is selected
+          setSelectedRelatedRecordType('lead');
+        } else if (value === 'contact') {
+          // If switching back to 'contact', reset related record type to 'deal' (default)
+          newData.relatedRecordType = 'deal';
+          newData.relatedRecordId = ''; // Reset the related record ID as well
+          setSelectedRelatedRecordType('deal');
         }
         
         return newData;
@@ -690,6 +697,15 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
         [name]: value,
         relatedRecordId: value,
         relatedRecordType: 'lead'
+      }));
+    } else if (name === 'contactId' && selectedType === 'deal') {
+      // When a contact is selected for a deal, automatically populate phone and email
+      const selectedContact = contacts.find(c => c.id === value);
+      setFormData(prev => ({
+        ...prev,
+        [name]: value,
+        phone: selectedContact?.phone || '',
+        email: selectedContact?.email || ''
       }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
@@ -732,7 +748,6 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
     
     // Debug: Log the form data to see what's being submitted
     console.log('Form data being submitted:', formData);
-    console.log('visibleTo field:', formData.visibleTo);
     console.log('🔍 DEBUG: Current selectedRelatedRecordType:', selectedRelatedRecordType);
     console.log('🔍 DEBUG: Current selectedContactLeadType:', selectedContactLeadType);
     console.log('🔍 DEBUG: Form data relatedRecordType:', formData.relatedRecordType);
@@ -773,8 +788,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             leadSource: formData.leadSource,
             source: formData.leadSource, // Backward compatibility
             status: formData.leadStatus, // Backward compatibility
-            relatedProductIds: formData.relatedProductIds || prefillData?.relatedProductIds || [],
-            visibleTo: formData.visibleTo || []
+            relatedProductIds: formData.relatedProductIds || prefillData?.relatedProductIds || []
           };
 
           console.log('📤 Creating lead with data:', leadData);
@@ -874,8 +888,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             zipCode: formData.zipCode,
             description: formData.description,
             status: 'Active',
-            relatedProductIds: formData.relatedProductIds || prefillData?.relatedProductIds || [],
-            visibleTo: formData.visibleTo || []
+            relatedProductIds: formData.relatedProductIds || prefillData?.relatedProductIds || []
           };
 
           console.log('📤 Creating contact with data:', contactData);
@@ -963,7 +976,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             description: formData.description,
             probability: parseFloat(formData.probability) || 0,
             closeDate: formData.closeDate,
-            visibleTo: formData.visibleTo || []
+            relatedContactIds: formData.contactId ? [formData.contactId] : undefined // Add contact relationship
           });
           addNotification({
             type: 'success',
@@ -995,8 +1008,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             ...(formData.contactLeadType !== 'lead' && formData.relatedRecordId && formData.relatedRecordType && {
               relatedRecordId: formData.relatedRecordId,
               relatedRecordType: formData.relatedRecordType,
-            }),
-            visibleTo: formData.visibleTo || []
+            })
           };
           
           console.log('Creating task with data:', taskData);
@@ -1021,8 +1033,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             email: formData.email || '',
             contact: formData.contact || '',
             address: formData.address || '',
-            totalEmployees: parseInt(formData.totalEmployees) || 0,
-            visibleTo: formData.visibleTo || []
+            totalEmployees: parseInt(formData.totalEmployees) || 0
           });
           addNotification({
             type: 'success',
@@ -1045,8 +1056,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             company: formData.company || '',
             location: formData.location || '',
             territory: formData.territory || '',
-            status: formData.status || 'Active',
-            visibleTo: formData.visibleTo || []
+            status: formData.status || 'Active'
           });
           addNotification({
             type: 'success',
@@ -1088,7 +1098,6 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           price: parseFloat(formData.unitPrice) || 0,
           cost: 0,
           
-          visibleTo: formData.visibleTo || [],
           tenantId: '',
           createdBy: user?.userId || '',
           userId: user?.userId || ''
@@ -1140,9 +1149,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           // Quote Details
           description: formData.description || '',
           terms: formData.terms || '',
-          notes: '',
-          
-          visibleTo: formData.visibleTo || []
+          notes: ''
         });
         addNotification({
           type: 'success',
@@ -1235,23 +1242,57 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             {(field.name === 'contactLeadId' && !formData.contactLeadType) ? null : 
              (field.name === 'relatedRecordId' && !formData.relatedRecordType) ? null : (
               <>
-                <select
-                  value={formData[field.name] || ''}
-                  onChange={(e) => handleInputChange(field.name, e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                  required={field.required}
-                >
-                  <option value="">Select {field.label}</option>
-                  {field.options?.map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
+                <div className="flex items-center">
+                  <select
+                    value={formData[field.name] || ''}
+                    onChange={(e) => handleInputChange(field.name, e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    required={field.required}
+                  >
+                    <option value="">Select {field.label}</option>
+                    {field.options?.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                    {/* Show selected contact if it's not in the options (for deal contact selection) */}
+                    {field.name === 'contactId' && formData.contactId && !field.options?.find(opt => opt.value === formData.contactId) && (
+                      <option value={formData.contactId}>
+                        {(() => {
+                          const selectedContact = contacts.find(c => c.id === formData.contactId);
+                          return selectedContact ? `${selectedContact.firstName} ${selectedContact.lastName}${selectedContact.companyName ? ` (${selectedContact.companyName})` : ''}` : 'Selected Contact';
+                        })()}
+                      </option>
+                    )}
+                  </select>
+                  {/* Add search button for contact selection in deals */}
+                  {field.name === 'contactId' && selectedType === 'deal' && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        console.log('🔍 DEBUG: Search button clicked for Deal Contact');
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('🔍 DEBUG: Setting showDealContactSearch to true');
+                        setShowDealContactSearch(true);
+                      }}
+                      className="ml-2 p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                      title="Search contacts"
+                    >
+                      <Icons.Search className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
                 {/* Show helper text for dependent dropdowns */}
                 {(field.name === 'contactLeadType' && !formData.contactLeadType) && (
                   <p className="mt-1 text-sm text-gray-500">Select a type to see available options</p>
                 )}
                 {(field.name === 'relatedRecordType' && !formData.relatedRecordType) && (
                   <p className="mt-1 text-sm text-gray-500">Select a type to see available options</p>
+                )}
+                {/* Show helper text for contact selection in deals */}
+                {field.name === 'contactId' && selectedType === 'deal' && (
+                  <p className="mt-1 text-sm text-blue-600">
+                    {formData.contactId ? '✓ Contact selected - Phone and Email will be auto-filled' : 'Select a contact to auto-fill phone and email'}
+                  </p>
                 )}
               </>
             )}
@@ -1275,8 +1316,9 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 value={formData[field.name] || ''}
                 onChange={(phoneNumber) => handleInputChange(field.name, phoneNumber)}
                 placeholder={`Enter ${field.label.toLowerCase()}...`}
-                className="w-full"
+                className={`w-full ${selectedType === 'deal' && field.name === 'phone' && formData.contactId ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                 defaultCountryCode="+91"
+                disabled={selectedType === 'deal' && field.name === 'phone' && formData.contactId}
               />
             ) : field.type === 'textarea' ? (
               <textarea
@@ -1293,11 +1335,13 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 value={formData[field.name] || ''}
                 onChange={(e) => handleInputChange(field.name, field.type === 'number' ? Number(e.target.value) : e.target.value)}
                 required={field.required}
+                disabled={selectedType === 'deal' && (field.name === 'phone' || field.name === 'email') && formData.contactId}
                 className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                   field.group === 'stock' && field.name === 'quantityInStock' ? 'border-green-300 focus:border-green-500 focus:ring-green-500' :
                   field.group === 'stock' && field.name === 'quantityInDemand' ? 'border-orange-300 focus:border-orange-500 focus:ring-orange-500' :
                   field.group === 'stock' && field.name === 'reorderLevel' ? 'border-red-300 focus:border-red-500 focus:ring-red-500' :
                   field.group === 'stock' && field.name === 'quantityOrdered' ? 'border-blue-300 focus:border-blue-500 focus:ring-blue-500' :
+                  selectedType === 'deal' && (field.name === 'phone' || field.name === 'email') && formData.contactId ? 'bg-gray-100 cursor-not-allowed' :
                   ''
                 }`}
                 placeholder={`Enter ${field.label.toLowerCase()}...`}
@@ -1307,9 +1351,108 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                 })}
               />
             )}
+            {/* Show helper text for read-only fields when contact is selected */}
+            {selectedType === 'deal' && (field.name === 'phone' || field.name === 'email') && formData.contactId && (
+              <p className="mt-1 text-sm text-gray-500">
+                ✓ Auto-filled from selected contact
+              </p>
+            )}
           </div>
         );
     }
+  };
+
+  // Get filtered contacts for deal contact search
+  const getFilteredContacts = () => {
+    if (!dealContactSearchTerm.trim()) {
+      return contacts;
+    }
+    
+    const searchTerm = dealContactSearchTerm.toLowerCase();
+    return contacts.filter((contact: any) => {
+      const firstName = contact.firstName?.toLowerCase() || '';
+      const lastName = contact.lastName?.toLowerCase() || '';
+      const email = contact.email?.toLowerCase() || '';
+      const phone = contact.phone?.toLowerCase() || '';
+      const companyName = contact.companyName?.toLowerCase() || '';
+      const contactOwner = contact.contactOwner?.toLowerCase() || '';
+      
+      return (
+        firstName.includes(searchTerm) ||
+        lastName.includes(searchTerm) ||
+        email.includes(searchTerm) ||
+        phone.includes(searchTerm) ||
+        companyName.includes(searchTerm) ||
+        contactOwner.includes(searchTerm) ||
+        `${firstName} ${lastName}`.includes(searchTerm)
+      );
+    });
+  };
+
+  // Get filtered contacts/leads for task search
+  const getFilteredTaskContactLeads = () => {
+    if (!taskContactLeadSearchTerm.trim()) {
+      return formData.contactLeadType === 'contact' ? contacts : leads;
+    }
+    
+    const searchTerm = taskContactLeadSearchTerm.toLowerCase();
+    const records = formData.contactLeadType === 'contact' ? contacts : leads;
+    
+    return records.filter((record: any) => {
+      const firstName = record.firstName?.toLowerCase() || '';
+      const lastName = record.lastName?.toLowerCase() || '';
+      const email = record.email?.toLowerCase() || '';
+      const phone = record.phone?.toLowerCase() || '';
+      const companyName = record.companyName?.toLowerCase() || '';
+      const company = record.company?.toLowerCase() || '';
+      const owner = record.contactOwner?.toLowerCase() || record.leadOwner?.toLowerCase() || '';
+      
+      return (
+        firstName.includes(searchTerm) ||
+        lastName.includes(searchTerm) ||
+        email.includes(searchTerm) ||
+        phone.includes(searchTerm) ||
+        companyName.includes(searchTerm) ||
+        company.includes(searchTerm) ||
+        owner.includes(searchTerm) ||
+        `${firstName} ${lastName}`.includes(searchTerm)
+      );
+    });
+  };
+
+  // Get filtered related records for task search
+  const getFilteredTaskRelatedRecords = () => {
+    if (!taskRelatedRecordSearchTerm.trim()) {
+      if (formData.relatedRecordType === 'deal') return deals;
+      if (formData.relatedRecordType === 'product') return products;
+      if (formData.relatedRecordType === 'quote') return quotes;
+      return [];
+    }
+    
+    const searchTerm = taskRelatedRecordSearchTerm.toLowerCase();
+    let records: any[] = [];
+    
+    if (formData.relatedRecordType === 'deal') {
+      records = deals;
+    } else if (formData.relatedRecordType === 'product') {
+      records = products;
+    } else if (formData.relatedRecordType === 'quote') {
+      records = quotes;
+    }
+    
+    return records.filter((record: any) => {
+      const name = record.dealName?.toLowerCase() || record.name?.toLowerCase() || record.quoteName?.toLowerCase() || '';
+      const owner = record.dealOwner?.toLowerCase() || record.productOwner?.toLowerCase() || record.quoteOwner?.toLowerCase() || '';
+      const amount = record.amount?.toString() || record.unitPrice?.toString() || record.totalAmount?.toString() || '';
+      const stage = record.stage?.toLowerCase() || record.status?.toLowerCase() || '';
+      
+      return (
+        name.includes(searchTerm) ||
+        owner.includes(searchTerm) ||
+        amount.includes(searchTerm) ||
+        stage.includes(searchTerm)
+      );
+    });
   };
 
   return (
@@ -1798,11 +1941,52 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                       console.log('🔍 DEBUG: Close button clicked');
                       e.stopPropagation();
                       setShowContactLeadSearch(false);
+                      setTaskContactLeadSearchTerm('');
                     }}
                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                   >
                     <Icons.X className="w-5 h-5 text-gray-500" />
                   </button>
+                </div>
+                {/* Search Bar */}
+                <div className="px-6 pb-4">
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Icons.Search className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      value={taskContactLeadSearchTerm}
+                      onChange={(e) => setTaskContactLeadSearchTerm(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setTaskContactLeadSearchTerm('');
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      placeholder={`Search ${formData.contactLeadType || 'contact'}s by name, email, phone, company, or owner...`}
+                      autoFocus
+                    />
+                    {taskContactLeadSearchTerm && (
+                      <button
+                        onClick={() => setTaskContactLeadSearchTerm('')}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                      >
+                        <Icons.X className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                      </button>
+                    )}
+                  </div>
+                  {/* Search Results Count */}
+                  {taskContactLeadSearchTerm ? (
+                    <div className="mt-2 text-sm text-gray-500">
+                      Found {getFilteredTaskContactLeads().length} {formData.contactLeadType || 'contact'}{getFilteredTaskContactLeads().length !== 1 ? 's' : ''} matching "{taskContactLeadSearchTerm}"
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-sm text-gray-500">
+                      {(formData.contactLeadType === 'contact' ? contacts : leads).length} total {formData.contactLeadType || 'contact'}{(formData.contactLeadType === 'contact' ? contacts : leads).length !== 1 ? 's' : ''} available
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -1850,63 +2034,85 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {(formData.contactLeadType === 'contact' ? contacts : leads).map((record: any) => (
-                        <tr
-                          key={record.id}
-                          onClick={(e) => {
-                            console.log('🔍 DEBUG: Record row clicked:', record.id, record.firstName, record.lastName);
-                            e.stopPropagation();
-                            const recordName = `${record.firstName} ${record.lastName}`;
-                            console.log('🔍 DEBUG: Setting form data with record:', record.id, recordName);
-                            // Update form data with the selected record
-                            setFormData(prev => {
-                              console.log('🔍 DEBUG: Previous form data:', prev);
-                              const newData = {
-                                ...prev,
-                                contactLeadId: record.id
-                              };
-                              console.log('🔍 DEBUG: New form data:', newData);
-                              return newData;
-                            });
-                            console.log('🔍 DEBUG: Closing search overlay');
-                            setShowContactLeadSearch(false);
-                          }}
-                          className="hover:bg-blue-50 cursor-pointer transition-colors"
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                                <Icons.User className="w-4 h-4 text-blue-600" />
-                              </div>
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  {record.firstName} {record.lastName}
+                      {getFilteredTaskContactLeads().length > 0 ? (
+                        getFilteredTaskContactLeads().map((record: any) => (
+                          <tr
+                            key={record.id}
+                            onClick={(e) => {
+                              console.log('🔍 DEBUG: Record row clicked:', record.id, record.firstName, record.lastName);
+                              e.stopPropagation();
+                              const recordName = `${record.firstName} ${record.lastName}`;
+                              console.log('🔍 DEBUG: Setting form data with record:', record.id, recordName);
+                              // Update form data with the selected record
+                              setFormData(prev => {
+                                console.log('🔍 DEBUG: Previous form data:', prev);
+                                const newData = {
+                                  ...prev,
+                                  contactLeadId: record.id
+                                };
+                                console.log('🔍 DEBUG: New form data:', newData);
+                                return newData;
+                              });
+                              console.log('🔍 DEBUG: Closing search overlay');
+                              setShowContactLeadSearch(false);
+                              setTaskContactLeadSearchTerm('');
+                            }}
+                            className="hover:bg-blue-50 cursor-pointer transition-colors"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                                  <Icons.User className="w-4 h-4 text-blue-600" />
                                 </div>
-                                <div className="text-sm text-gray-500">
-                                  {record.id}
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {record.firstName} {record.lastName}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {record.id}
+                                  </div>
                                 </div>
                               </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {record.contactOwner || record.leadOwner || 'Unknown'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {record.email || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {record.phone || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {record.companyName || record.company || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                                {record.status || 'Active'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-8 text-center">
+                            <div className="flex flex-col items-center">
+                              <Icons.Search className="w-8 h-8 text-gray-400 mb-2" />
+                              <p className="text-gray-500 text-sm">
+                                {taskContactLeadSearchTerm ? `No ${formData.contactLeadType || 'contact'}s found matching "${taskContactLeadSearchTerm}"` : `No ${formData.contactLeadType || 'contact'}s available`}
+                              </p>
+                              {taskContactLeadSearchTerm && (
+                                <button
+                                  onClick={() => setTaskContactLeadSearchTerm('')}
+                                  className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+                                >
+                                  Clear search
+                                </button>
+                              )}
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.contactOwner || record.leadOwner || 'Unknown'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.email || 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.phone || 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.companyName || record.company || 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
-                              {record.status || 'Active'}
-                            </span>
-                          </td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -1944,11 +2150,54 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                       console.log('🔍 DEBUG: Related Record close button clicked');
                       e.stopPropagation();
                       setShowRelatedRecordSearch(false);
+                      setTaskRelatedRecordSearchTerm('');
                     }}
                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                   >
                     <Icons.X className="w-5 h-5 text-gray-500" />
                   </button>
+                </div>
+                {/* Search Bar */}
+                <div className="px-6 pb-4">
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Icons.Search className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      value={taskRelatedRecordSearchTerm}
+                      onChange={(e) => setTaskRelatedRecordSearchTerm(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setTaskRelatedRecordSearchTerm('');
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      placeholder={`Search ${formData.relatedRecordType || 'deal'}s by name, owner, amount, or status...`}
+                      autoFocus
+                    />
+                    {taskRelatedRecordSearchTerm && (
+                      <button
+                        onClick={() => setTaskRelatedRecordSearchTerm('')}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                      >
+                        <Icons.X className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                      </button>
+                    )}
+                  </div>
+                  {/* Search Results Count */}
+                  {taskRelatedRecordSearchTerm ? (
+                    <div className="mt-2 text-sm text-gray-500">
+                      Found {getFilteredTaskRelatedRecords().length} {formData.relatedRecordType || 'deal'}{getFilteredTaskRelatedRecords().length !== 1 ? 's' : ''} matching "{taskRelatedRecordSearchTerm}"
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-sm text-gray-500">
+                      {(formData.relatedRecordType === 'deal' ? deals : 
+                        formData.relatedRecordType === 'product' ? products : quotes).length} total {formData.relatedRecordType || 'deal'}{(formData.relatedRecordType === 'deal' ? deals : 
+                        formData.relatedRecordType === 'product' ? products : quotes).length !== 1 ? 's' : ''} available
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -1993,73 +2242,305 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {(formData.relatedRecordType === 'deal' ? deals : 
-                        formData.relatedRecordType === 'product' ? products : quotes).map((record: any) => (
-                        <tr
-                          key={record.id}
-                          onClick={(e) => {
-                            console.log('🔍 DEBUG: Related Record row clicked:', record.id, record.dealName || record.name || record.quoteName);
-                            e.stopPropagation();
-                            const recordName = record.dealName || record.name || record.quoteName;
-                            console.log('🔍 DEBUG: Setting form data with related record:', record.id, recordName);
-                            // Update form data with the selected record
-                            setFormData(prev => {
-                              console.log('🔍 DEBUG: Previous form data for related record:', prev);
-                              const newData = {
-                                ...prev,
-                                relatedRecordId: record.id
-                              };
-                              console.log('🔍 DEBUG: New form data for related record:', newData);
-                              return newData;
-                            });
-                            console.log('🔍 DEBUG: Closing related record search overlay');
-                            setShowRelatedRecordSearch(false);
-                          }}
-                          className="hover:bg-blue-50 cursor-pointer transition-colors"
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                                {formData.relatedRecordType === 'deal' ? (
-                                  <Icons.Target className="w-4 h-4 text-blue-600" />
-                                ) : formData.relatedRecordType === 'product' ? (
-                                  <Icons.Package className="w-4 h-4 text-blue-600" />
-                                ) : (
-                                  <Icons.FileText className="w-4 h-4 text-blue-600" />
-                                )}
-                              </div>
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  {record.dealName || record.name || record.quoteName}
+                      {getFilteredTaskRelatedRecords().length > 0 ? (
+                        getFilteredTaskRelatedRecords().map((record: any) => (
+                          <tr
+                            key={record.id}
+                            onClick={(e) => {
+                              console.log('🔍 DEBUG: Related Record row clicked:', record.id, record.dealName || record.name || record.quoteName);
+                              e.stopPropagation();
+                              const recordName = record.dealName || record.name || record.quoteName;
+                              console.log('🔍 DEBUG: Setting form data with related record:', record.id, recordName);
+                              // Update form data with the selected record
+                              setFormData(prev => {
+                                console.log('🔍 DEBUG: Previous form data for related record:', prev);
+                                const newData = {
+                                  ...prev,
+                                  relatedRecordId: record.id
+                                };
+                                console.log('🔍 DEBUG: New form data for related record:', newData);
+                                return newData;
+                              });
+                              console.log('🔍 DEBUG: Closing related record search overlay');
+                              setShowRelatedRecordSearch(false);
+                              setTaskRelatedRecordSearchTerm('');
+                            }}
+                            className="hover:bg-blue-50 cursor-pointer transition-colors"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                                  {formData.relatedRecordType === 'deal' ? (
+                                    <Icons.Target className="w-4 h-4 text-blue-600" />
+                                  ) : formData.relatedRecordType === 'product' ? (
+                                    <Icons.Package className="w-4 h-4 text-blue-600" />
+                                  ) : (
+                                    <Icons.FileText className="w-4 h-4 text-blue-600" />
+                                  )}
                                 </div>
-                                <div className="text-sm text-gray-500">
-                                  {record.id}
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {record.dealName || record.name || record.quoteName}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {record.id}
+                                  </div>
                                 </div>
                               </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {record.dealOwner || record.productOwner || record.quoteOwner || 'Unknown'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {formData.relatedRecordType === 'deal' ? `$${record.amount?.toLocaleString() || '0'}` :
+                               formData.relatedRecordType === 'product' ? `$${record.unitPrice?.toLocaleString() || '0'}` :
+                               `$${record.totalAmount?.toLocaleString() || '0'}`}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {formData.relatedRecordType === 'deal' ? record.stage :
+                               formData.relatedRecordType === 'product' ? record.quantityInStock || '0' :
+                               record.status}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                                {formData.relatedRecordType === 'product' ? 
+                                  (record.activeStatus ? 'Active' : 'Inactive') :
+                                  record.status || 'Active'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-8 text-center">
+                            <div className="flex flex-col items-center">
+                              <Icons.Search className="w-8 h-8 text-gray-400 mb-2" />
+                              <p className="text-gray-500 text-sm">
+                                {taskRelatedRecordSearchTerm ? `No ${formData.relatedRecordType || 'deal'}s found matching "${taskRelatedRecordSearchTerm}"` : `No ${formData.relatedRecordType || 'deal'}s available`}
+                              </p>
+                              {taskRelatedRecordSearchTerm && (
+                                <button
+                                  onClick={() => setTaskRelatedRecordSearchTerm('')}
+                                  className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+                                >
+                                  Clear search
+                                </button>
+                              )}
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.dealOwner || record.productOwner || record.quoteOwner || 'Unknown'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formData.relatedRecordType === 'deal' ? `$${record.amount?.toLocaleString() || '0'}` :
-                             formData.relatedRecordType === 'product' ? `$${record.unitPrice?.toLocaleString() || '0'}` :
-                             `$${record.totalAmount?.toLocaleString() || '0'}`}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formData.relatedRecordType === 'deal' ? record.stage :
-                             formData.relatedRecordType === 'product' ? record.quantityInStock || '0' :
-                             record.status}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
-                              {formData.relatedRecordType === 'product' ? 
-                                (record.activeStatus ? 'Active' : 'Inactive') :
-                                record.status || 'Active'}
-                            </span>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Deal Contact Search Overlay */}
+      {showDealContactSearch && createPortal(
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" 
+          onClick={(e) => {
+            console.log('🔍 DEBUG: Deal Contact outer overlay div clicked');
+            e.stopPropagation();
+          }}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[80vh] overflow-hidden" 
+            onClick={(e) => {
+              console.log('🔍 DEBUG: Deal Contact inner overlay div clicked');
+              e.stopPropagation();
+            }}
+          >
+            <div className="overflow-x-auto">
+              <div className="sticky top-0 bg-white border-b border-gray-200 z-10 min-w-[800px]">
+                <div className="flex items-center justify-between p-6">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Search Contacts
+                  </h3>
+                  <button
+                    onClick={(e) => {
+                      console.log('🔍 DEBUG: Deal Contact close button clicked');
+                      e.stopPropagation();
+                      setShowDealContactSearch(false);
+                      setDealContactSearchTerm('');
+                    }}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <Icons.X className="w-5 h-5 text-gray-500" />
+                  </button>
+                </div>
+                {/* Search Bar */}
+                <div className="px-6 pb-4">
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Icons.Search className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      value={dealContactSearchTerm}
+                      onChange={(e) => setDealContactSearchTerm(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setDealContactSearchTerm('');
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      placeholder="Search contacts by name, email, phone, company, or owner..."
+                      autoFocus
+                    />
+                    {dealContactSearchTerm && (
+                      <button
+                        onClick={() => setDealContactSearchTerm('')}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                      >
+                        <Icons.X className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                      </button>
+                    )}
+                  </div>
+                  {/* Search Results Count */}
+                  {dealContactSearchTerm ? (
+                    <div className="mt-2 text-sm text-gray-500">
+                      Found {getFilteredContacts().length} contact{getFilteredContacts().length !== 1 ? 's' : ''} matching "{dealContactSearchTerm}"
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-sm text-gray-500">
+                      {contacts.length} total contact{contacts.length !== 1 ? 's' : ''} available
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="overflow-y-auto max-h-[calc(80vh-80px)]">
+                <div className="bg-white min-w-[800px]">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center">
+                            CONTACT
+                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
+                          </div>
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center">
+                            OWNER
+                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
+                          </div>
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center">
+                            EMAIL
+                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
+                          </div>
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center">
+                            PHONE
+                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
+                          </div>
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center">
+                            COMPANY
+                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
+                          </div>
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center">
+                            STATUS
+                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
+                          </div>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {getFilteredContacts().length > 0 ? (
+                        getFilteredContacts().map((contact: any) => (
+                          <tr
+                            key={contact.id}
+                            onClick={(e) => {
+                              console.log('🔍 DEBUG: Deal Contact row clicked:', contact.id, contact.firstName, contact.lastName);
+                              e.stopPropagation();
+                              const contactName = `${contact.firstName} ${contact.lastName}`;
+                              console.log('🔍 DEBUG: Setting form data with contact:', contact.id, contactName);
+                              // Update form data with the selected contact
+                              setFormData(prev => {
+                                console.log('🔍 DEBUG: Previous form data for deal contact:', prev);
+                                const newData = {
+                                  ...prev,
+                                  contactId: contact.id,
+                                  phone: contact.phone || '',
+                                  email: contact.email || ''
+                                };
+                                console.log('🔍 DEBUG: New form data for deal contact:', newData);
+                                return newData;
+                              });
+                              console.log('🔍 DEBUG: Closing deal contact search overlay');
+                              setShowDealContactSearch(false);
+                              setDealContactSearchTerm('');
+                            }}
+                            className="hover:bg-blue-50 cursor-pointer transition-colors"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                                  <Icons.User className="w-4 h-4 text-blue-600" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {contact.firstName} {contact.lastName}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {contact.id}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {contact.contactOwner || 'Unknown'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {contact.email || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {contact.phone || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {contact.companyName || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                                {contact.status || 'Active'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-8 text-center">
+                            <div className="flex flex-col items-center">
+                              <Icons.Search className="w-8 h-8 text-gray-400 mb-2" />
+                              <p className="text-gray-500 text-sm">
+                                {dealContactSearchTerm ? `No contacts found matching "${dealContactSearchTerm}"` : 'No contacts available'}
+                              </p>
+                              {dealContactSearchTerm && (
+                                <button
+                                  onClick={() => setDealContactSearchTerm('')}
+                                  className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+                                >
+                                  Clear search
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
                 </div>

@@ -323,6 +323,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                        name="newPassword" 
                        value={formData.newPassword} 
                        onChange={handleInputChange} 
+                       autoComplete="new-password"
                        className={`w-full px-3 py-2 border rounded-md ${
                          formData.newPassword && !passwordValidation.isValid ? 'border-red-500' : 'border-gray-300'
                        }`}
@@ -345,6 +346,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
                       name="confirmPassword" 
                       value={formData.confirmPassword} 
                       onChange={handleInputChange} 
+                      autoComplete="new-password"
                       className={`w-full px-3 py-2 border rounded-md ${
                         formData.confirmPassword && formData.newPassword !== formData.confirmPassword ? 'border-red-500' : 'border-gray-300'
                       }`}

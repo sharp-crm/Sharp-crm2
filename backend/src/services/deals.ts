@@ -29,9 +29,6 @@ export interface Deal {
   relatedQuoteIds?: string[];
   relatedContactIds?: string[];
   
-  // Visibility field
-  visibleTo: string[]; // Making this required but can be empty array
-  
   // Auditing fields
   createdBy: string;
   createdAt: string;
@@ -56,7 +53,6 @@ export interface CreateDealInput {
   notes?: string; // Notes for the deal
   probability?: number;
   closeDate?: string;
-  visibleTo?: string[];
   relatedProductIds?: string[];
   relatedQuoteIds?: string[];
   relatedContactIds?: string[];
@@ -74,7 +70,6 @@ export interface UpdateDealInput {
   notes?: string; // Notes for the deal
   probability?: number;
   closeDate?: string;
-  visibleTo?: string[];
   relatedProductIds?: string[];
   relatedQuoteIds?: string[];
   relatedContactIds?: string[];
@@ -104,9 +99,6 @@ export class DealsService {
       throw new Error('Probability must be a number between 0 and 100');
     }
 
-    // Ensure visibleTo is an array
-    const visibleTo = Array.isArray(input.visibleTo) ? input.visibleTo : (input.visibleTo ? [input.visibleTo] : []);
-
     // Create deal object with required fields
     const deal: Deal = {
       id: dealId,
@@ -122,7 +114,6 @@ export class DealsService {
       description: input.description || '',
       notes: input.notes || '', // Handle optional notes field
       closeDate: input.closeDate || this.getDefaultCloseDate(),
-      visibleTo: visibleTo,
       relatedProductIds: input.relatedProductIds || [],
       relatedQuoteIds: input.relatedQuoteIds || [],
       relatedContactIds: input.relatedContactIds || [],
@@ -182,10 +173,7 @@ export class DealsService {
     if (!result.Item || 
         result.Item.tenantId !== tenantId || 
         result.Item.isDeleted ||
-        (result.Item.visibleTo && 
-         result.Item.visibleTo.length > 0 && 
-         !result.Item.visibleTo.includes(userId) && 
-         result.Item.userId !== userId)) {
+        result.Item.userId !== userId) {
       return null;
     }
 
@@ -218,12 +206,10 @@ export class DealsService {
   async getDealsByOwner(dealOwner: string, tenantId: string, userId: string): Promise<Deal[]> {
     const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      FilterExpression: 'dealOwner = :dealOwner AND tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+      FilterExpression: 'dealOwner = :dealOwner AND tenantId = :tenantId AND isDeleted = :isDeleted',
       ExpressionAttributeValues: {
         ':dealOwner': dealOwner,
         ':tenantId': tenantId,
-        ':userId': userId,
-        ':zero': 0,
         ':isDeleted': false
       }
     }));
@@ -235,12 +221,10 @@ export class DealsService {
   async getDealsByStage(stage: string, tenantId: string, userId: string): Promise<Deal[]> {
     const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      FilterExpression: 'stage = :stage AND tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId)',
+      FilterExpression: 'stage = :stage AND tenantId = :tenantId AND isDeleted = :isDeleted',
       ExpressionAttributeValues: {
         ':stage': stage,
         ':tenantId': tenantId,
-        ':userId': userId,
-        ':zero': 0,
         ':isDeleted': false
       }
     }));
@@ -252,11 +236,9 @@ export class DealsService {
   async searchDeals(tenantId: string, userId: string, query: string): Promise<Deal[]> {
     const result = await docClient.send(new ScanCommand({
       TableName: this.tableName,
-      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (attribute_not_exists(visibleTo) OR size(visibleTo) = :zero OR contains(visibleTo, :userId) OR userId = :userId) AND (contains(dealName, :query) OR contains(dealOwner, :query))',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (contains(dealName, :query) OR contains(dealOwner, :query))',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
-        ':userId': userId,
-        ':zero': 0,
         ':isDeleted': false,
         ':query': query
       }

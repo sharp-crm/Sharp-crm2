@@ -110,8 +110,6 @@ export interface Deal extends Omit<DealType, 'stage'> {
   probability?: number;
   closeDate?: string;
   
-  // Visibility field
-  visibleTo: string[]; // Making this required but can be empty array
   
   // Backward compatibility fields
   name?: string; // maps to dealName
@@ -142,14 +140,21 @@ export interface Task {
   type: 'Call' | 'Email' | 'Meeting' | 'Follow-up' | 'Demo';
   tenantId: string;
   createdAt: string;
+  notes?: string;
   visibleTo?: string[];
   // New fields for related records
   contactLeadId?: string;
   contactLeadType?: 'contact' | 'lead';
   relatedRecordId?: string;
   relatedRecordType?: 'deal' | 'product' | 'quote';
-  // Soft delete field
+  // Auditing fields
+  createdBy?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  deletedAt?: string;
+  deletedBy?: string;
   isDeleted?: boolean;
+  userId?: string;
 }
 
 export interface Product {
@@ -415,7 +420,6 @@ export const dealsApi = {
     email?: string; // Optional email for the deal contact
     probability?: number;
     closeDate?: string;
-    visibleTo: string[];
     relatedContactIds?: string[];
   }): Promise<Deal> => {
     try {

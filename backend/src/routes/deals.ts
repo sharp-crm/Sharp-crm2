@@ -230,7 +230,6 @@ const createDeal: RequestHandler = async (req: any, res) => {
       notes: req.body.notes || undefined, // Make notes optional
       probability: req.body.probability ? parseFloat(req.body.probability) : undefined,
       closeDate: req.body.closeDate,
-      visibleTo: req.body.visibleTo || [],
       relatedProductIds: req.body.relatedProductIds || [],
       relatedQuoteIds: req.body.relatedQuoteIds || [],
       relatedContactIds: req.body.relatedContactIds || []
