@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { User } from '../types';
 import { API_CONFIG } from '../config/api';
 import { isTokenValid } from '../utils/token';
+import authService from '../services/authService';
 
 interface AuthState {
   user: User | null;
@@ -56,6 +57,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Set axios default Authorization header for all future requests
     axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
     
+    // Start the auth service for automatic token refresh and inactivity tracking
     console.log('✅ Login successful - Token stored and axios headers set');
   },
 
@@ -72,6 +74,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     // Clear axios default Authorization header
     delete axios.defaults.headers.common['Authorization'];
+    
+    // Clean up auth service
+    authService.cleanup();
     
     console.log('✅ Logout successful - Storage cleared and axios headers removed');
 
@@ -188,7 +193,7 @@ if (typeof window !== 'undefined') {
           const isValid = payload.exp > currentTime;
           const timeLeft = Math.round((payload.exp - currentTime) / 60);
           
-          console.log('Token analysis:', {
+          console.log('Access Token analysis:', {
             isValid,
             expiresAt: new Date(payload.exp * 1000).toLocaleString(),
             minutesLeft: timeLeft,
@@ -196,13 +201,34 @@ if (typeof window !== 'undefined') {
             email: payload.email
           });
         } else {
-          console.log('Token format invalid');
+          console.log('Access token format invalid');
         }
       } catch (e) {
-        console.log('Token parse error:', e);
+        console.log('Access token parse error:', e);
       }
     } else {
-      console.log('No token found');
+      console.log('No access token found');
+    }
+    
+    // Check refresh token
+    try {
+      const { getRefreshTokenExpiryInfo } = require('../utils/token');
+      const refreshTokenInfo = getRefreshTokenExpiryInfo();
+      
+      if (refreshTokenInfo) {
+        console.log('Refresh Token analysis:', {
+          isValid: refreshTokenInfo.isValid,
+          expiresAt: refreshTokenInfo.expiryDate?.toLocaleString() || 'Unknown',
+          daysLeft: refreshTokenInfo.daysLeft,
+          hoursLeft: refreshTokenInfo.hoursLeft,
+          minutesLeft: refreshTokenInfo.minutesLeft,
+          timeUntilExpiry: refreshTokenInfo.timeUntilExpiry ? Math.round(refreshTokenInfo.timeUntilExpiry / 1000 / 60) + ' minutes' : 'Unknown'
+        });
+      } else {
+        console.log('No refresh token found');
+      }
+    } catch (e) {
+      console.log('Refresh token analysis error:', e);
     }
     
     // Check Zustand state
@@ -215,6 +241,17 @@ if (typeof window !== 'undefined') {
       });
     } catch (e) {
       console.log('Cannot access Zustand state:', e);
+    }
+
+    // Check auth service status
+    try {
+      const inactivityStatus = authService.getInactivityStatus();
+      console.log('Auth service status:', {
+        lastActivity: inactivityStatus.lastActivity.toLocaleString(),
+        timeUntilLogout: Math.round(inactivityStatus.timeUntilLogout / 1000 / 60) + ' minutes'
+      });
+    } catch (e) {
+      console.log('Cannot access auth service:', e);
     }
   };
 }

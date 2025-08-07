@@ -101,9 +101,9 @@ async function getReportingReps(managerId: string) {
 }
 
 // Get managers for reporting hierarchy
-router.get("/managers", authenticate, requirePermission('view', 'user'), async (req, res, next) => {
+router.get("/managers", authenticate, requirePermission('view', 'user'), async (req: any, res, next) => {
   try {
-    const currentUser = (req as any).user;
+    const currentUser = req.user;
     if (!currentUser) {
       throw createError("User not found in token", 401);
     }
@@ -147,9 +147,9 @@ router.get("/managers", authenticate, requirePermission('view', 'user'), async (
 
 
 // Get all users for the same tenant (hierarchical)
-router.get("/tenant-users", authenticate, requirePermission('view', 'user'), async (req, res, next) => {
+router.get("/tenant-users", authenticate, requirePermission('view', 'user'), async (req: any, res, next) => {
   try {
-    const currentUser = (req as any).user;
+    const currentUser = req.user;
     if (!currentUser) {
       throw createError("User not found in token", 401);
     }
@@ -210,9 +210,9 @@ router.get("/tenant-users", authenticate, requirePermission('view', 'user'), asy
 });
 
 // Get all users (admin only)
-router.get("/", authenticate, requirePermission('view', 'user'), async (req, res, next) => {
+router.get("/", authenticate, requirePermission('view', 'user'), async (req: any, res, next) => {
   try {
-    const userRole = (req as any).user?.role;
+    const userRole = req.user?.role;
     if (userRole.toLowerCase() !== 'admin') {
       throw createError("Access denied. Admin role required.", 403);
     }
@@ -243,7 +243,7 @@ router.get("/", authenticate, requirePermission('view', 'user'), async (req, res
 });
 
 // Get user by ID
-router.get("/:id", authenticate, requirePermission('view', 'user'), async (req, res, next) => {
+router.get("/:id", authenticate, requirePermission('view', 'user'), async (req: any, res, next) => {
   try {
     const { id } = req.params;
     
@@ -284,9 +284,9 @@ router.get("/:id", authenticate, requirePermission('view', 'user'), async (req, 
 });
 
 // Create new user
-router.post("/", authenticate, requireCreatePermission('user'), async (req, res, next) => {
+router.post("/", authenticate, requireCreatePermission('user'), async (req: any, res, next) => {
   try {
-    const currentUser = (req as any).user;
+    const currentUser = req.user;
     const userRole = currentUser?.role;
     
     // Only admins can create users
@@ -414,19 +414,21 @@ router.post("/", authenticate, requireCreatePermission('user'), async (req, res,
   }
 });
 
-// Soft delete user (moved before general update route)
-router.put("/:id/soft-delete", authenticate, requireDeletePermission('user'), async (req, res, next) => {
+// Soft delete user
+router.put("/:id/soft-delete", authenticate, requireDeletePermission('user'), async (req: any, res, next) => {
   try {
-    const { id } = req.params;
-    const currentUser = (req as any).user;
-    const currentUserRole = currentUser?.role;
-
-    if (currentUserRole.toLowerCase() !== 'admin') {
+    const currentUser = req.user;
+    const userRole = currentUser?.role;
+    
+    // Only admins can soft delete users
+    if (userRole.toLowerCase() !== 'admin') {
       throw createError("Access denied. Admin role required.", 403);
     }
 
-    // First, get the user to delete to check permissions
-    const getUserResult = await docClient.send(
+    const { id } = req.params;
+    
+    // First find the user by userId to get their email (since email is the primary key)
+    const scanResult = await docClient.send(
       new ScanCommand({
         TableName: TABLES.USERS,
         FilterExpression: "userId = :userId",
@@ -436,22 +438,13 @@ router.put("/:id/soft-delete", authenticate, requireDeletePermission('user'), as
       })
     );
 
-    const userToDelete = getUserResult.Items?.[0];
-    if (!userToDelete) {
+    const user = scanResult.Items?.[0];
+    if (!user) {
       throw createError("User not found", 404);
     }
 
-    // Check deletion permissions based on tenant hierarchy
-    // Admins can only delete users in their own tenant, but not other admins
-    if (userToDelete.tenantId !== currentUser.tenantId) {
-      throw createError("Cannot delete user from different tenant", 403);
-    }
-    if (userToDelete.role.toLowerCase() === 'admin') {
-      throw createError("Admins cannot delete other admins", 403);
-    }
-
     // Prevent self-deletion
-    if (userToDelete.userId === currentUser.userId) {
+    if (user.userId === currentUser.userId) {
       throw createError("Cannot delete your own account", 400);
     }
 
@@ -459,32 +452,17 @@ router.put("/:id/soft-delete", authenticate, requireDeletePermission('user'), as
     await docClient.send(
       new UpdateCommand({
         TableName: TABLES.USERS,
-        Key: { email: userToDelete.email },
-        UpdateExpression: "SET isDeleted = :isDeleted, deletedAt = :deletedAt, deletedBy = :deletedBy, updatedAt = :updatedAt",
+        Key: { email: user.email },
+        UpdateExpression: "SET isDeleted = :isDeleted, deletedBy = :deletedBy, deletedAt = :deletedAt",
         ExpressionAttributeValues: {
           ":isDeleted": true,
-          ":deletedAt": new Date().toISOString(),
-          ":deletedBy": currentUser.userId,
-          ":updatedAt": new Date().toISOString()
+          ":deletedBy": currentUser.email,
+          ":deletedAt": new Date().toISOString()
         }
       })
     );
 
-    res.json({ 
-      message: "User soft deleted successfully",
-      data: {
-        id: userToDelete.userId,
-        userId: userToDelete.userId,
-        firstName: userToDelete.firstName || '',
-        lastName: userToDelete.lastName || '',
-        name: `${userToDelete.firstName || ''} ${userToDelete.lastName || ''}`.trim(),
-        email: userToDelete.email,
-        role: normalizeRole(userToDelete.role),
-        isDeleted: true,
-        deletedAt: new Date().toISOString(),
-        deletedBy: currentUser.userId
-      }
-    });
+    res.json({ message: "User soft deleted successfully" });
   } catch (error) {
     next(error);
   }
@@ -564,20 +542,13 @@ router.put("/profile", authenticate, async (req, res, next) => {
 });
 
 // Update user
-router.put("/:id", authenticate, requireEditPermission('user'), async (req, res, next) => {
+router.put("/:id", authenticate, requireEditPermission('user'), async (req: any, res, next) => {
   try {
+    const currentUser = req.user;
     const { id } = req.params;
-    const updates = req.body;
-    const currentUser = (req as any).user;
-    const currentUserRole = currentUser?.role;
-
-    // Users can update their own profile, admins can update anyone in their tenant
-    if (currentUser.userId !== id && currentUserRole.toLowerCase() !== 'admin') {
-      throw createError("Access denied. You can only update your own profile.", 403);
-    }
-
-    // First get the user to find their current email (since email is the primary key)
-    const getUserResult = await docClient.send(
+    
+    // First find the user by userId to get their email (since email is the primary key)
+    const scanResult = await docClient.send(
       new ScanCommand({
         TableName: TABLES.USERS,
         FilterExpression: "userId = :userId",
@@ -587,24 +558,24 @@ router.put("/:id", authenticate, requireEditPermission('user'), async (req, res,
       })
     );
 
-    const userToUpdate = getUserResult.Items?.[0];
-    if (!userToUpdate) {
+    const user = scanResult.Items?.[0];
+    if (!user) {
       throw createError("User not found", 404);
     }
 
     // Check if user is trying to update someone from a different tenant
-    if (currentUserRole.toLowerCase() === 'admin' && userToUpdate.tenantId !== currentUser.tenantId) {
+    if (currentUser.role.toLowerCase() === 'admin' && user.tenantId !== currentUser.tenantId) {
       throw createError("Cannot update user from different tenant", 403);
     }
 
     // Check if phone number is being updated and validate uniqueness
-    if (updates.phoneNumber && updates.phoneNumber !== userToUpdate.phoneNumber) {
+    if (req.body.phoneNumber && req.body.phoneNumber !== user.phoneNumber) {
       const phoneCheckResult = await docClient.send(
         new ScanCommand({
           TableName: TABLES.USERS,
           FilterExpression: "phoneNumber = :phoneNumber AND userId <> :currentUserId",
           ExpressionAttributeValues: {
-            ":phoneNumber": updates.phoneNumber,
+            ":phoneNumber": req.body.phoneNumber,
             ":currentUserId": id
           }
         })
@@ -616,9 +587,9 @@ router.put("/:id", authenticate, requireEditPermission('user'), async (req, res,
     }
 
     // Handle email updates for admins
-    if (updates.email && updates.email !== userToUpdate.email) {
+    if (req.body.email && req.body.email !== user.email) {
       // Only admins can update email addresses
-      if (currentUserRole.toLowerCase() !== 'admin') {
+      if (currentUser.role.toLowerCase() !== 'admin') {
         throw createError("Access denied. Only admins can update email addresses.", 403);
       }
 
@@ -626,7 +597,7 @@ router.put("/:id", authenticate, requireEditPermission('user'), async (req, res,
       const emailCheckResult = await docClient.send(
         new GetCommand({
           TableName: TABLES.USERS,
-          Key: { email: updates.email }
+          Key: { email: req.body.email }
         })
       );
 
@@ -640,7 +611,7 @@ router.put("/:id", authenticate, requireEditPermission('user'), async (req, res,
     const expressionAttributeNames: Record<string, string> = {};
     const expressionAttributeValues: Record<string, any> = {};
     
-    for (const [key, value] of Object.entries(updates)) {
+    for (const [key, value] of Object.entries(req.body)) {
       if (key !== 'id' && key !== 'userId' && key !== 'email' && value !== undefined) {
         // Hash password if being updated
         if (key === 'password' && value) {
@@ -650,7 +621,7 @@ router.put("/:id", authenticate, requireEditPermission('user'), async (req, res,
           expressionAttributeValues[`:${key}`] = hashedPassword;
         } 
         // Handle role updates (only admins can change roles)
-        else if (key === 'role' && currentUserRole.toLowerCase() === 'admin') {
+        else if (key === 'role' && currentUser.role.toLowerCase() === 'admin') {
           const normalizedRole = normalizeRole(value as string);
           updateExpressions.push(`#${key} = :${key}`);
           expressionAttributeNames[`#${key}`] = key;
@@ -678,7 +649,7 @@ router.put("/:id", authenticate, requireEditPermission('user'), async (req, res,
     const result = await docClient.send(
       new UpdateCommand({
         TableName: TABLES.USERS,
-        Key: { email: userToUpdate.email },
+        Key: { email: user.email },
         UpdateExpression: `SET ${updateExpressions.join(", ")}`,
         ExpressionAttributeNames: expressionAttributeNames,
         ExpressionAttributeValues: expressionAttributeValues,

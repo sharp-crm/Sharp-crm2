@@ -1,30 +1,26 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
-import SuperAdminHeader from './SuperAdminHeader';
-import { Outlet } from 'react-router-dom';
-import { isSuperAdmin } from '../../utils/roleAccess';
+import InactivityWarning from '../Common/InactivityWarning';
+// import AuthStatus from '../Common/AuthStatus';
 
 const Layout: React.FC = () => {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const isSuperAdminUser = isSuperAdmin();
-
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar
-        isCollapsed={isSuperAdminUser ? false : isSidebarCollapsed}
-        onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-      />
-      <div className="flex flex-col flex-1 overflow-hidden">
-        {isSuperAdminUser ? (
-          <SuperAdminHeader onToggleSidebar={() => {}} />
-        ) : (
-          <Header onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)} />
-        )}
+      <Sidebar />
+      <div className="flex-1 flex flex-col">
+        <Header />
         <main className="p-4 bg-gray-50 flex-1 overflow-y-auto">
           <Outlet />
         </main>
       </div>
+      
+      {/* Inactivity warning component */}
+      <InactivityWarning />
+      
+      {/* Auth status component (only in development) */}
+      {/* {process.env.NODE_ENV === 'development' && <AuthStatus />} */}
     </div>
   );
 };

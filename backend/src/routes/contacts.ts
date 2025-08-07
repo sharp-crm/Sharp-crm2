@@ -184,7 +184,7 @@ const createContact: RequestHandler = async (req: any, res) => {
       status: req.body.status,
       notes: req.body.notes,
       relatedProductIds: req.body.relatedProductIds,
-      visibleTo: req.body.visibleTo
+      relatedQuoteIds: req.body.relatedQuoteIds
     };
 
     const contact = await contactsService.createContact(contactInput, userId, req.user.email, tenantId);
@@ -226,21 +226,13 @@ const updateContact: RequestHandler = async (req: any, res) => {
       }
     }
 
-    // Validate visibleTo array if provided
-    if (req.body.visibleTo !== undefined) {
-      if (!Array.isArray(req.body.visibleTo)) {
-        res.status(400).json({ error: "visibleTo must be an array of user IDs" });
-        return;
-      }
-    }
-
     const updateInput: UpdateContactInput = {};
     
     // Only include fields that are provided in the request
     const updateableFields = [
       'contactOwner', 'firstName', 'lastName', 'companyName', 'email', 'leadSource',
       'phone', 'title', 'department', 'street', 'area', 'city', 'state',
-      'country', 'zipCode', 'description', 'status', 'notes', 'relatedProductIds', 'relatedQuoteIds', 'visibleTo'
+      'country', 'zipCode', 'description', 'status', 'notes', 'relatedProductIds', 'relatedQuoteIds'
     ];
 
     updateableFields.forEach(field => {
@@ -262,11 +254,7 @@ const updateContact: RequestHandler = async (req: any, res) => {
     });
   } catch (error) {
     logError('updateContact', error, { tenantId, userId, contactId: id });
-    if (error instanceof Error && error.message === 'visibleTo must be an array of user IDs') {
-      res.status(400).json({ error: error.message });
-    } else {
-      res.status(500).json({ message: "Internal server error" });
-    }
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 

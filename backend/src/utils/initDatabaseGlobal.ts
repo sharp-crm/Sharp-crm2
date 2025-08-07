@@ -449,22 +449,102 @@ async function createSuperAdmin(usersTable: string) {
   }
 }
 
+async function ensureRefreshTokensTable() {
+  const refreshTokensTableName = getTableName("RefreshTokens");
+  console.log(`\n🔐 Ensuring RefreshTokens table exists: ${refreshTokensTableName}`);
+  
+  try {
+    const exists = await tableExists(refreshTokensTableName);
+    if (!exists) {
+      console.log(`🔄 Creating RefreshTokens table: ${refreshTokensTableName}`);
+      
+      const refreshTokensTableConfig = {
+        TableName: refreshTokensTableName,
+        KeySchema: [
+          { AttributeName: "jti", KeyType: "HASH" }
+        ],
+        AttributeDefinitions: [
+          { AttributeName: "jti", AttributeType: "S" },
+          { AttributeName: "userId", AttributeType: "S" }
+        ],
+        GlobalSecondaryIndexes: [
+          {
+            IndexName: "UserTokensIndex",
+            KeySchema: [
+              { AttributeName: "userId", KeyType: "HASH" }
+            ],
+            Projection: {
+              ProjectionType: "ALL"
+            }
+          }
+        ],
+        BillingMode: "PAY_PER_REQUEST"
+      };
+      
+      await createTable(refreshTokensTableConfig);
+      console.log(`✅ RefreshTokens table created successfully: ${refreshTokensTableName}`);
+      
+      // Verify the table was created
+      const verifyExists = await tableExists(refreshTokensTableName);
+      if (verifyExists) {
+        console.log(`✅ RefreshTokens table verified and ready!`);
+        return true;
+      } else {
+        console.error(`❌ RefreshTokens table verification failed!`);
+        return false;
+      }
+    } else {
+      console.log(`✅ RefreshTokens table already exists: ${refreshTokensTableName}`);
+      return true;
+    }
+  } catch (error) {
+    console.error(`❌ Error creating RefreshTokens table:`, error);
+    throw error;
+  }
+}
+
 async function initializeGlobalDatabase() {
-  console.log("Initializing Global Database...");
+  console.log("🚀 Initializing Global Database...");
+  console.log("📋 Environment:", process.env.NODE_ENV || 'production');
+  console.log("🏷️  Table Prefix:", process.env.TABLE_PREFIX || 'SharpCRM');
+  console.log("🌍 Region:", process.env.AWS_REGION || 'us-east-1');
+  
+  // First, ensure RefreshTokens table exists (this is critical for auth)
+  console.log("\n🔐 Ensuring RefreshTokens table exists...");
+  await ensureRefreshTokensTable();
+  
+  // Then create all other tables
+  console.log("\n📋 Creating all other tables...");
   for (const tableConfig of tables) {
     const tableName = tableConfig.TableName;
-    const exists = await tableExists(tableName);
-    if (!exists) {
-      await createTable(tableConfig);
-      console.log(`Table ${tableName} created successfully.`);
-    } else {
-      console.log(`Table ${tableName} already exists.`);
+    
+    // Skip RefreshTokens as it's already handled
+    if (tableName.includes('RefreshTokens')) {
+      console.log(`⏭️  Skipping RefreshTokens table (already handled): ${tableName}`);
+      continue;
+    }
+    
+    console.log(`\n🔍 Checking table: ${tableName}`);
+    
+    try {
+      const exists = await tableExists(tableName);
+      if (!exists) {
+        console.log(`🔄 Creating table: ${tableName}`);
+        await createTable(tableConfig);
+        console.log(`✅ Table ${tableName} created successfully.`);
+      } else {
+        console.log(`✅ Table ${tableName} already exists.`);
+      }
+    } catch (error) {
+      console.error(`❌ Error with table ${tableName}:`, error);
+      throw error;
     }
   }
 
   const usersTableName = getTableName("Users");
+  console.log(`\n👤 Creating Super Admin in table: ${usersTableName}`);
   await createSuperAdmin(usersTableName);
-  console.log("Global Database Initialization complete.");
+  console.log("🎉 Global Database Initialization complete.");
 }
 
 if (require.main === module) {

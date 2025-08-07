@@ -189,12 +189,6 @@ const createLead: RequestHandler = async (req: any, res) => {
       return;
     }
 
-    // Validate visibleTo array if provided
-    if (req.body.visibleTo && !Array.isArray(req.body.visibleTo)) {
-      res.status(400).json({ error: "visibleTo must be an array of user IDs" });
-      return;
-    }
-
     // Validate relatedProductIds array if provided
     if (req.body.relatedProductIds && !Array.isArray(req.body.relatedProductIds)) {
       res.status(400).json({ error: "relatedProductIds must be an array of product IDs" });
@@ -219,8 +213,8 @@ const createLead: RequestHandler = async (req: any, res) => {
       zipCode: req.body.zipCode,
       description: req.body.description,
       value: req.body.value,
-      relatedProductIds: req.body.relatedProductIds || [],
-      visibleTo: req.body.visibleTo || []
+      notes: req.body.notes,
+      relatedProductIds: req.body.relatedProductIds
     };
 
     console.log('🔍 [createLead] Lead input being sent to service:', leadInput);
@@ -264,9 +258,9 @@ const updateLead: RequestHandler = async (req: any, res) => {
       return;
     }
 
-    // Validate visibleTo array if provided
-    if (req.body.visibleTo && !Array.isArray(req.body.visibleTo)) {
-      res.status(400).json({ error: "visibleTo must be an array of user IDs" });
+    // Validate relatedProductIds array if provided
+    if (req.body.relatedProductIds && !Array.isArray(req.body.relatedProductIds)) {
+      res.status(400).json({ error: "relatedProductIds must be an array of product IDs" });
       return;
     }
 
@@ -276,7 +270,7 @@ const updateLead: RequestHandler = async (req: any, res) => {
     const updateableFields = [
       'leadOwner', 'firstName', 'lastName', 'company', 'email', 'leadSource', 'leadStatus',
       'phone', 'title', 'street', 'area', 'city', 'state', 'country', 'zipCode', 'description', 'value',
-      'notes', 'relatedProductIds', 'visibleTo'
+      'notes', 'relatedProductIds'
     ];
 
     console.log('🔍 [updateLead] Request body:', req.body);

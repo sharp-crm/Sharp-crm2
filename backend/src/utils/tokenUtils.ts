@@ -59,6 +59,13 @@ export const generateRefreshToken = async (payload: TokenPayload, refreshTokensT
 
   // Store refresh token in DynamoDB
   try {
+    console.log('🔄 Storing refresh token in database:', {
+      tableName: refreshTokensTable,
+      jti,
+      userId: payload.userId,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    });
+
     await docClient.send(new PutCommand({
       TableName: refreshTokensTable,
       Item: {
@@ -69,9 +76,25 @@ export const generateRefreshToken = async (payload: TokenPayload, refreshTokensT
         createdAt: new Date().toISOString()
       }
     }));
+
+    console.log('✅ Refresh token stored successfully in database');
   } catch (dbError) {
-    console.error('Database error during refresh token storage:', dbError);
-    throw new Error('Failed to store refresh token');
+    console.error('❌ Database error during refresh token storage:', {
+      error: dbError,
+      tableName: refreshTokensTable,
+      jti,
+      userId: payload.userId
+    });
+    
+    // Check if it's a table not found error
+    if (dbError instanceof Error && dbError.message.includes('Table not found')) {
+      console.error('❌ RefreshTokens table not found. Please ensure the table exists:', refreshTokensTable);
+      throw new Error(`RefreshTokens table not found: ${refreshTokensTable}`);
+    }
+    
+    // If it's a different error, we might want to continue without storing the token
+    // This is a fallback to ensure the login still works
+    console.warn('⚠️ Continuing without storing refresh token in database (non-critical error)');
   }
 
   return refreshToken;
@@ -81,19 +104,36 @@ export const generateRefreshToken = async (payload: TokenPayload, refreshTokensT
  * Generate both access and refresh tokens as a pair
  */
 export const generateTokenPair = async (payload: TokenPayload, refreshTokensTable: string): Promise<TokenPair> => {
-  const accessToken = generateAccessToken(payload);
-  const refreshToken = await generateRefreshToken(payload, refreshTokensTable);
-  
-  // Calculate expiry times
-  const accessTokenDecoded = jwt.decode(accessToken) as any;
-  const refreshTokenDecoded = jwt.decode(refreshToken) as any;
-  
-  return {
-    accessToken,
-    refreshToken,
-    accessTokenExpiry: accessTokenDecoded.exp * 1000, // Convert to milliseconds
-    refreshTokenExpiry: refreshTokenDecoded.exp * 1000
-  };
+  try {
+    console.log('🔍 Generating token pair for user:', payload.userId);
+    
+    const accessToken = generateAccessToken(payload);
+    console.log('✅ Access token generated');
+    
+    const refreshToken = await generateRefreshToken(payload, refreshTokensTable);
+    console.log('✅ Refresh token generated');
+    
+    // Calculate expiry times
+    const accessTokenDecoded = jwt.decode(accessToken) as any;
+    const refreshTokenDecoded = jwt.decode(refreshToken) as any;
+    
+    if (!accessTokenDecoded || !refreshTokenDecoded) {
+      throw new Error('Failed to decode generated tokens');
+    }
+    
+    const tokenPair = {
+      accessToken,
+      refreshToken,
+      accessTokenExpiry: accessTokenDecoded.exp * 1000, // Convert to milliseconds
+      refreshTokenExpiry: refreshTokenDecoded.exp * 1000
+    };
+    
+    console.log('✅ Token pair generated successfully');
+    return tokenPair;
+  } catch (error) {
+    console.error('❌ Error generating token pair:', error);
+    throw error;
+  }
 };
 
 /**
@@ -135,21 +175,53 @@ export const verifyRefreshToken = async (token: string, refreshTokensTable: stri
   // Check if token exists in database
   let result;
   try {
+    console.log('🔄 Verifying refresh token in database:', {
+      tableName: refreshTokensTable,
+      jti: decoded.jti,
+      userId: decoded.userId
+    });
+
     result = await docClient.send(new GetCommand({
       TableName: refreshTokensTable,
       Key: { jti: decoded.jti }
     }));
+
+    console.log('🔄 Database query result:', {
+      found: !!result.Item,
+      item: result.Item ? 'exists' : 'not found'
+    });
   } catch (dbError) {
-    console.error('Database error during refresh token verification:', dbError);
+    console.error('❌ Database error during refresh token verification:', {
+      error: dbError,
+      tableName: refreshTokensTable,
+      jti: decoded.jti
+    });
+    
+    // Check if it's a table not found error
+    if (dbError instanceof Error && dbError.message.includes('Table not found')) {
+      console.error('❌ RefreshTokens table not found. Please ensure the table exists:', refreshTokensTable);
+      throw new Error(`RefreshTokens table not found: ${refreshTokensTable}`);
+    }
+    
     throw new Error('Database connection error');
   }
 
   if (!result.Item) {
+    console.error('❌ Refresh token not found in database:', {
+      jti: decoded.jti,
+      tableName: refreshTokensTable
+    });
     throw new Error('Refresh token not found');
   }
 
   // Check if token is expired
   if (new Date(result.Item.expiresAt) < new Date()) {
+    console.log('❌ Refresh token expired:', {
+      jti: decoded.jti,
+      expiresAt: result.Item.expiresAt,
+      currentTime: new Date().toISOString()
+    });
+    
     try {
       await invalidateRefreshToken(decoded.jti, refreshTokensTable);
     } catch (error) {
@@ -172,6 +244,7 @@ export const verifyRefreshToken = async (token: string, refreshTokensTable: stri
     // Don't throw here - token verification succeeded
   }
 
+  console.log('✅ Refresh token verified successfully');
   return decoded;
 };
 
@@ -211,6 +284,109 @@ export const invalidateAllUserRefreshTokens = async (userId: string, refreshToke
   } catch (error) {
     console.error(`Error invalidating refresh tokens for user ${userId}:`, error);
     throw error;
+  }
+};
+
+/**
+ * Check if RefreshTokens table exists
+ * @param refreshTokensTable - The table name to check
+ * @returns Promise<boolean> indicating if table exists
+ */
+export const checkRefreshTokensTableExists = async (refreshTokensTable: string): Promise<boolean> => {
+  try {
+    console.log('🔍 Checking if RefreshTokens table exists:', refreshTokensTable);
+    
+    // Import DynamoDB client
+    const { DynamoDBClient, DescribeTableCommand } = await import('@aws-sdk/client-dynamodb');
+    const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
+    
+    console.log('🔍 DynamoDB client configured with region:', process.env.AWS_REGION || 'us-east-1');
+    
+    // Try to describe the table
+    await client.send(new DescribeTableCommand({
+      TableName: refreshTokensTable
+    }));
+    
+    console.log('✅ RefreshTokens table exists:', refreshTokensTable);
+    return true;
+  } catch (error) {
+    console.error('❌ RefreshTokens table does not exist or is not accessible:', {
+      tableName: refreshTokensTable,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    return false;
+  }
+};
+
+/**
+ * Create RefreshTokens table if it doesn't exist
+ * @param refreshTokensTable - The table name to create
+ * @returns Promise<boolean> indicating if table was created or already exists
+ */
+export const createRefreshTokensTableIfNotExists = async (refreshTokensTable: string): Promise<boolean> => {
+  try {
+    console.log('🔍 Checking if RefreshTokens table exists:', refreshTokensTable);
+    
+    // Check if table exists
+    const tableExists = await checkRefreshTokensTableExists(refreshTokensTable);
+    if (tableExists) {
+      console.log('✅ RefreshTokens table already exists:', refreshTokensTable);
+      return true;
+    }
+
+    console.log('🔄 Creating RefreshTokens table:', refreshTokensTable);
+    
+    // Import DynamoDB client
+    const { DynamoDBClient, CreateTableCommand } = await import('@aws-sdk/client-dynamodb');
+    const client = new DynamoDBClient({ region: process.env.AWS_REGION || 'us-east-1' });
+
+    // Create table
+    await client.send(new CreateTableCommand({
+      TableName: refreshTokensTable,
+      KeySchema: [
+        { AttributeName: "jti", KeyType: "HASH" }
+      ],
+      AttributeDefinitions: [
+        { AttributeName: "jti", AttributeType: "S" },
+        { AttributeName: "userId", AttributeType: "S" }
+      ],
+      GlobalSecondaryIndexes: [
+        {
+          IndexName: "UserTokensIndex",
+          KeySchema: [
+            { AttributeName: "userId", KeyType: "HASH" }
+          ],
+          Projection: {
+            ProjectionType: "ALL"
+          }
+        }
+      ],
+      BillingMode: "PAY_PER_REQUEST"
+    }));
+
+    console.log('✅ RefreshTokens table created successfully:', refreshTokensTable);
+    
+    // Wait a moment for the table to be fully created
+    console.log('⏳ Waiting for table to be fully created...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Verify the table was created
+    const verifyExists = await checkRefreshTokensTableExists(refreshTokensTable);
+    if (!verifyExists) {
+      console.error('❌ Table creation verification failed:', refreshTokensTable);
+      return false;
+    }
+    
+    console.log('✅ RefreshTokens table verified and ready:', refreshTokensTable);
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to create RefreshTokens table:', {
+      tableName: refreshTokensTable,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    return false;
   }
 };
 
@@ -328,14 +504,23 @@ export const validateTokenStructure = (token: string): { valid: boolean; expired
  */
 export const setRefreshTokenCookie = (res: Response, refreshToken: string): void => {
   const isProduction = process.env.NODE_ENV === 'production';
+  const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true';
   
-  res.cookie('refreshToken', refreshToken, {
+  const cookieOptions: any = {
     httpOnly: true, // Prevents XSS attacks
-    secure: true, // Always use HTTPS for cross-origin cookies
-    sameSite: 'none', // Allow cross-origin cookies (CloudFront -> API Gateway)
+    secure: isSecure, // Use HTTPS in production
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    path: '/api/auth' // Restrict to auth routes only
-  });
+    path: '/' // Use root path to allow access from all routes
+  };
+  
+  // Handle sameSite for cross-origin requests
+  if (isSecure) {
+    cookieOptions.sameSite = 'none'; // Allow cross-origin cookies (CloudFront -> API Gateway)
+  } else {
+    cookieOptions.sameSite = 'lax'; // More permissive for development
+  }
+  
+  res.cookie('refreshToken', refreshToken, cookieOptions);
 };
 
 /**
@@ -343,12 +528,22 @@ export const setRefreshTokenCookie = (res: Response, refreshToken: string): void
  * Why: Ensures proper logout and prevents token reuse
  */
 export const clearRefreshTokenCookie = (res: Response): void => {
-  res.clearCookie('refreshToken', {
+  const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true';
+  
+  const cookieOptions: any = {
     httpOnly: true,
-    secure: true, // Always use HTTPS for cross-origin cookies
-    sameSite: 'none', // Allow cross-origin cookies (CloudFront -> API Gateway)
-    path: '/api/auth'
-  });
+    secure: isSecure, // Use HTTPS in production
+    path: '/'
+  };
+  
+  // Handle sameSite for cross-origin requests
+  if (isSecure) {
+    cookieOptions.sameSite = 'none'; // Allow cross-origin cookies (CloudFront -> API Gateway)
+  } else {
+    cookieOptions.sameSite = 'lax'; // More permissive for development
+  }
+  
+  res.clearCookie('refreshToken', cookieOptions);
 };
 
 /**

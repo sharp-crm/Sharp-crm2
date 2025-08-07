@@ -174,24 +174,46 @@ const LineItemsInput: React.FC<LineItemsInputProps> = ({ value, onChange, classN
 
   return (
     <div className={`space-y-4 ${className}`}>
-      <div className="bg-gray-50 p-4 rounded-lg">
-        <div className="grid grid-cols-9 gap-2 text-sm font-medium text-gray-700 mb-2">
-          <div className="col-span-1">S.NO</div>
-          <div className="col-span-2">Product Name</div>
-          <div className="col-span-1">Quantity</div>
-          <div className="col-span-1">List Price($)</div>
-          <div className="col-span-1">Amount($)</div>
-          <div className="col-span-1">Discount(%)</div>
-          <div className="col-span-1">Tax($)</div>
-          <div className="col-span-1">Actions</div>
+      {/* Header */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="grid grid-cols-9 gap-4 p-4 bg-gray-50 border-b border-gray-200">
+          <div className="col-span-1">
+            <span className="text-sm font-semibold text-gray-700">S.NO</span>
+          </div>
+          <div className="col-span-2">
+            <span className="text-sm font-semibold text-gray-700">Product Name</span>
+          </div>
+          <div className="col-span-1">
+            <span className="text-sm font-semibold text-gray-700">Quantity</span>
+          </div>
+          <div className="col-span-1">
+            <span className="text-sm font-semibold text-gray-700">List Price($)</span>
+          </div>
+          <div className="col-span-1">
+            <span className="text-sm font-semibold text-gray-700">Amount($)</span>
+          </div>
+          <div className="col-span-1">
+            <span className="text-sm font-semibold text-gray-700">Discount(%)</span>
+          </div>
+          <div className="col-span-1">
+            <span className="text-sm font-semibold text-gray-700">Tax($)</span>
+          </div>
+          <div className="col-span-1">
+            <span className="text-sm font-semibold text-gray-700">Actions</span>
+          </div>
         </div>
         
+        {/* Line Items */}
         {lineItems.map((item, index) => (
-          <div key={item.id} className="grid grid-cols-9 gap-2 mb-4">
+          <div key={item.id} className="grid grid-cols-9 gap-4 p-4 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors">
+            {/* S.NO */}
             <div className="col-span-1 flex items-center justify-center">
-              <span className="text-sm font-medium">{index + 1}</span>
+              <span className="text-sm font-medium text-gray-900 bg-gray-100 rounded-full w-6 h-6 flex items-center justify-center">
+                {index + 1}
+              </span>
             </div>
             
+            {/* Product Name */}
             <div className="col-span-2 space-y-2">
               <div className="relative">
                 <select
@@ -203,7 +225,7 @@ const LineItemsInput: React.FC<LineItemsInputProps> = ({ value, onChange, classN
                       handleProductSelect(item.id, e.target.value);
                     }
                   }}
-                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                 >
                   <option value="">Select Product</option>
                   {products.map(product => (
@@ -219,22 +241,24 @@ const LineItemsInput: React.FC<LineItemsInputProps> = ({ value, onChange, classN
               <textarea
                 value={item.description}
                 onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
-                placeholder="Description"
+                placeholder="Description (optional)"
                 rows={2}
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none bg-white"
               />
             </div>
             
+            {/* Quantity */}
             <div className="col-span-1">
               <input
                 type="number"
                 value={item.quantity}
                 onChange={(e) => updateLineItem(item.id, 'quantity', parseInt(e.target.value) || 0)}
                 min="1"
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
               />
             </div>
             
+            {/* List Price */}
             <div className="col-span-1">
               <input
                 type="number"
@@ -242,19 +266,21 @@ const LineItemsInput: React.FC<LineItemsInputProps> = ({ value, onChange, classN
                 onChange={(e) => updateLineItem(item.id, 'listPrice', parseFloat(e.target.value) || 0)}
                 min="0"
                 step="0.01"
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
               />
             </div>
             
+            {/* Amount */}
             <div className="col-span-1">
               <input
                 type="number"
                 value={item.amount}
                 readOnly
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded bg-gray-50"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-700"
               />
             </div>
             
+            {/* Discount */}
             <div className="col-span-1">
               <input
                 type="number"
@@ -263,11 +289,12 @@ const LineItemsInput: React.FC<LineItemsInputProps> = ({ value, onChange, classN
                 min="0"
                 max="100"
                 step="0.01"
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                 placeholder="0-100%"
               />
             </div>
             
+            {/* Tax */}
             <div className="col-span-1">
               <input
                 type="number"
@@ -275,77 +302,58 @@ const LineItemsInput: React.FC<LineItemsInputProps> = ({ value, onChange, classN
                 onChange={(e) => updateLineItem(item.id, 'tax', parseFloat(e.target.value) || 0)}
                 min="0"
                 step="0.01"
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
               />
             </div>
             
-            <div className="col-span-1 flex items-center justify-center space-x-1">
+            {/* Actions */}
+            <div className="col-span-1 flex items-center justify-center">
               {lineItems.length > 1 && (
                 <button
                   type="button"
                   onClick={() => removeLineItem(item.id)}
-                  className="p-1 text-red-400 hover:text-red-600 transition-colors"
+                  className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                   title="Remove row"
                 >
                   <Icons.Trash2 className="w-4 h-4" />
                 </button>
               )}
               {lineItems.length === 1 && (
-                <div className="w-4 h-4"></div> // Spacer to maintain layout
+                <div className="w-8 h-8"></div>
               )}
             </div>
           </div>
         ))}
-        
-        <button
-          type="button"
-          onClick={addLineItem}
-          className="flex items-center px-3 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-        >
-          <Icons.Plus className="w-4 h-4 mr-1" />
-          Add row
-        </button>
       </div>
-
-      {/* Pricing Summary Section */}
-      <div className="bg-white p-4 rounded-lg border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Pricing Summary</h3>
-        <div className="grid grid-cols-2 gap-4">
+      
+      {/* Add Row Button */}
+      <button
+        type="button"
+        onClick={addLineItem}
+        className="flex items-center justify-center w-full py-3 px-4 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+      >
+        <Icons.Plus className="w-4 h-4 mr-2" />
+        Add Row
+      </button>
+      
+      {/* Totals Section */}
+      <div className="bg-gray-50 rounded-lg p-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Sub Total ($)</label>
-            <input
-              type="number"
-              value={subtotal.toFixed(2)}
-              readOnly
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-            />
+            <span className="text-sm font-medium text-gray-600">Subtotal:</span>
+            <div className="text-lg font-semibold text-gray-900">${subtotal.toFixed(2)}</div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Discount ($)</label>
-            <input
-              type="number"
-              value={totalDiscount.toFixed(2)}
-              readOnly
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-            />
+            <span className="text-sm font-medium text-gray-600">Discount:</span>
+            <div className="text-lg font-semibold text-gray-900">${totalDiscount.toFixed(2)}</div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tax ($)</label>
-            <input
-              type="number"
-              value={totalTax.toFixed(2)}
-              readOnly
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
-            />
+            <span className="text-sm font-medium text-gray-600">Tax:</span>
+            <div className="text-lg font-semibold text-gray-900">${totalTax.toFixed(2)}</div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Grand Total ($)</label>
-            <input
-              type="number"
-              value={grandTotal.toFixed(2)}
-              readOnly
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-blue-50 font-semibold"
-            />
+            <span className="text-sm font-medium text-gray-600">Total:</span>
+            <div className="text-lg font-bold text-blue-600">${grandTotal.toFixed(2)}</div>
           </div>
         </div>
       </div>

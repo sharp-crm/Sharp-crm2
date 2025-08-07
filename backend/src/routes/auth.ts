@@ -15,12 +15,34 @@ import {
   validateTokenStructure,
   setRefreshTokenCookie,
   clearRefreshTokenCookie,
-  getRefreshTokenFromCookie
+  getRefreshTokenFromCookie,
+  checkRefreshTokensTableExists,
+  createRefreshTokensTableIfNotExists
 } from '../utils/tokenUtils';
 import { docClient, TABLES } from '../services/dynamoClient';
 import { authenticate } from '../middlewares/authenticate';
 
 const router = Router();
+
+// Helper function to check if RefreshTokens table exists and create if needed
+const ensureRefreshTokensTableExists = async () => {
+  console.log('🔍 Ensuring RefreshTokens table exists:', TABLES.REFRESH_TOKENS);
+  
+  try {
+    // Try to create the table if it doesn't exist
+    const tableReady = await createRefreshTokensTableIfNotExists(TABLES.REFRESH_TOKENS);
+    if (!tableReady) {
+      console.error('❌ Failed to ensure RefreshTokens table exists:', TABLES.REFRESH_TOKENS);
+      throw new Error(`Failed to ensure RefreshTokens table exists: ${TABLES.REFRESH_TOKENS}`);
+    }
+    
+    console.log('✅ RefreshTokens table is ready:', TABLES.REFRESH_TOKENS);
+    return true;
+  } catch (error) {
+    console.error('❌ Error ensuring RefreshTokens table exists:', error);
+    throw error;
+  }
+};
 
 // Register new user
 const register: RequestHandler = async (req, res, next) => {
@@ -183,16 +205,53 @@ const login: RequestHandler = async (req, res, next) => {
     // Generate new token pair
     let tokens;
     try {
+      // Ensure RefreshTokens table exists before generating tokens
+      console.log('🔍 Ensuring RefreshTokens table exists before login...');
+      await ensureRefreshTokensTableExists();
+      
+      console.log('🔍 Generating token pair...');
       tokens = await generateTokenPair({ 
         userId: user.userId, 
-        email: user.email, 
+        email: user.email,
         role: user.role,
         tenantId: user.tenantId
       }, TABLES.REFRESH_TOKENS);
+      
+      console.log('✅ Token pair generated successfully');
     } catch (tokenError) {
-      console.error('Token generation error:', tokenError);
-      res.status(500).json({ message: "Failed to generate authentication tokens" });
-      return;
+      console.error('❌ Token generation error:', tokenError);
+      
+      // If it's a table issue, try to create the table
+      if (tokenError instanceof Error && tokenError.message.includes('RefreshTokens table not found')) {
+        console.log('🔄 Attempting to create RefreshTokens table...');
+        try {
+          const tableCreated = await createRefreshTokensTableIfNotExists(TABLES.REFRESH_TOKENS);
+          if (tableCreated) {
+            console.log('✅ RefreshTokens table created, retrying token generation...');
+            tokens = await generateTokenPair({ 
+              userId: user.userId, 
+              email: user.email,
+              role: user.role,
+              tenantId: user.tenantId
+            }, TABLES.REFRESH_TOKENS);
+          } else {
+            throw new Error('Failed to create RefreshTokens table');
+          }
+        } catch (retryError) {
+          console.error('❌ Failed to create RefreshTokens table:', retryError);
+          res.status(500).json({ 
+            message: "Failed to generate authentication tokens - table creation failed",
+            error: process.env.NODE_ENV === 'development' ? (retryError instanceof Error ? retryError.message : 'Unknown error') : undefined
+          });
+          return;
+        }
+      } else {
+        res.status(500).json({ 
+          message: "Failed to generate authentication tokens",
+          error: process.env.NODE_ENV === 'development' ? (tokenError instanceof Error ? tokenError.message : 'Unknown error') : undefined
+        });
+        return;
+      }
     }
 
     // Set secure HTTP-only cookie for refresh token
@@ -234,6 +293,9 @@ const refresh: RequestHandler = async (req, res, next) => {
     }
 
     try {
+      // Ensure RefreshTokens table exists before verifying tokens
+      await ensureRefreshTokensTableExists();
+      
       const decoded = await verifyRefreshToken(refreshToken, TABLES.REFRESH_TOKENS);
 
       // Verify user still exists and is not soft deleted

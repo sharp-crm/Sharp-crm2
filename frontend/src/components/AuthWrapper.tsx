@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { isTokenExpired, clearAllTokens } from '../utils/auth';
 import { isTokenValid } from '../utils/token';
+import authService from '../services/authService';
 
 const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { initialize, accessToken, user, logout } = useAuthStore((s) => ({
@@ -96,6 +97,25 @@ const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       navigate('/', { replace: true });
     }
   }, [hydrated, accessToken, user, location.pathname, navigate, initialize, logout]);
+
+  // Initialize auth service when user is authenticated
+  useEffect(() => {
+    if (hydrated && accessToken && user) {
+      // Initialize auth service for automatic token refresh and inactivity tracking
+      authService.initialize();
+      console.log('🔐 Auth service initialized for authenticated user');
+    } else if (hydrated && (!accessToken || !user)) {
+      // Clean up auth service if user is not authenticated
+      authService.cleanup();
+    }
+  }, [hydrated, accessToken, user]);
+
+  // Cleanup auth service on unmount
+  useEffect(() => {
+    return () => {
+      authService.cleanup();
+    };
+  }, []);
 
   // Show loading spinner while initializing
   if (!hydrated) {

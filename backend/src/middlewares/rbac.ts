@@ -14,23 +14,26 @@ export interface RBACRequest extends AuthenticatedRequest {
  * RBAC middleware factory - creates middleware for specific resource types and actions
  */
 export function requirePermission(action: Action, resourceType?: ResourceType) {
-  return async (req: RBACRequest, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const user = req.user as User;
+      const user = (req as any).user as User;
       
       if (!user) {
-        return res.status(401).json({ error: 'User not authenticated' });
+        res.status(401).json({ error: 'User not authenticated' });
+        return;
       }
 
       // If resourceType is provided, check permission for the resource type
       if (resourceType) {
         const hasPermission = await checkPermission(user, action, resourceType);
         if (!hasPermission) {
-          return res.status(403).json({ 
+          res.status(403).json({ 
             error: `Access denied. ${action} permission required for ${resourceType}.` 
           });
+          return;
         }
-        return next();
+        next();
+        return;
       }
 
       // If resource is provided in request body or params, check permission for specific resource
@@ -49,12 +52,14 @@ export function requirePermission(action: Action, resourceType?: ResourceType) {
         if (inferredType) {
           const hasPermission = await checkPermission(user, action, inferredType);
           if (!hasPermission) {
-            return res.status(403).json({ 
+            res.status(403).json({ 
               error: `Access denied. ${action} permission required for ${inferredType}.` 
             });
+            return;
           }
         }
-        return next();
+        next();
+        return;
       }
 
       // If no specific resource, check permission for resource type
@@ -62,16 +67,17 @@ export function requirePermission(action: Action, resourceType?: ResourceType) {
       if (inferredType) {
         const hasPermission = await checkPermission(user, action, inferredType);
         if (!hasPermission) {
-          return res.status(403).json({ 
+          res.status(403).json({ 
             error: `Access denied. ${action} permission required for ${inferredType}.` 
           });
+          return;
         }
       }
 
       next();
     } catch (error) {
       console.error('RBAC middleware error:', error);
-      return res.status(500).json({ error: 'Internal server error during permission check' });
+      res.status(500).json({ error: 'Internal server error during permission check' });
     }
   };
 }
