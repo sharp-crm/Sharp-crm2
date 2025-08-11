@@ -122,36 +122,109 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
   // Fetch related data for task and deal forms
   useEffect(() => {
     console.log('🔍 DEBUG: Task/Deal data useEffect - isOpen:', isOpen, 'selectedType:', selectedType);
-    if (isOpen && (selectedType === 'task' || selectedType === 'deal')) {
+    
+    // Only proceed if modal is open and we have a specific type selected
+    if (!isOpen || !selectedType) {
+      // Clear data when not needed to prevent memory leaks
+      setContacts([]);
+      setLeads([]);
+      setProducts([]);
+      setQuotes([]);
+      return;
+    }
+    
+    // Only fetch data for specific form types that actually need it
+    if (selectedType === 'task' || selectedType === 'deal') {
       console.log('🔍 DEBUG: Fetching task/deal related data triggered');
       const fetchRelatedData = async () => {
         try {
           setIsLoadingContacts(true);
           console.log('🔍 DEBUG: Fetching task/deal related data...');
-          // Fetch contacts, leads, deals, products, and quotes for dropdowns
-          const [contactsRes, leadsRes, dealsRes, productsRes, quotesRes] = await Promise.all([
-            contactsApi.getAll(),
-            leadsApi.getAll(),
-            dealsApi.getAll(),
-            productsApi.getAll(),
-            quotesApi.getAll()
-          ]);
           
-          console.log('🔍 DEBUG: Fetched leads:', leadsRes);
-          console.log('🔍 DEBUG: Fetched contacts:', contactsRes);
+          // Only fetch data that's actually needed for the current form type
+          const fetchPromises = [];
           
-          setContacts(contactsRes);
-          setLeads(leadsRes);
-          setDeals(dealsRes);
-          setProducts(productsRes);
-          setQuotes(quotesRes);
+          if (selectedType === 'task') {
+            // For tasks, we need contacts and leads for the dropdowns
+            // But only fetch if the user actually opens the task form
+            fetchPromises.push(
+              contactsApi.getAll().catch(err => {
+                console.warn('Failed to fetch contacts for task form:', err);
+                // Return empty array instead of throwing
+                return [];
+              }),
+              leadsApi.getAll().catch(err => {
+                console.warn('Failed to fetch leads for task form:', err);
+                // Return empty array instead of throwing
+                return [];
+              })
+            );
+          } else if (selectedType === 'deal') {
+            // For deals, we need contacts for the contact dropdown
+            fetchPromises.push(
+              contactsApi.getAll().catch(err => {
+                console.warn('Failed to fetch contacts for deal form:', err);
+                // Return empty array instead of throwing
+                return [];
+              })
+            );
+          }
+          
+          // Fetch products and quotes for both task and deal forms
+          fetchPromises.push(
+            productsApi.getAll().catch(err => {
+              console.warn('Failed to fetch products:', err);
+              // Return empty array instead of throwing
+              return [];
+            }),
+            quotesApi.getAll().catch(err => {
+              console.warn('Failed to fetch quotes:', err);
+              // Return empty array instead of throwing
+              return [];
+            })
+          );
+          
+          const results = await Promise.all(fetchPromises);
+          
+          // Set the data based on what was fetched
+          let resultIndex = 0;
+          
+          if (selectedType === 'task') {
+            setContacts(results[resultIndex++] || []);
+            setLeads(results[resultIndex++] || []);
+          } else if (selectedType === 'deal') {
+            setContacts(results[resultIndex++] || []);
+          }
+          
+          setProducts(results[resultIndex++] || []);
+          setQuotes(results[resultIndex++] || []);
+          
+          console.log('🔍 DEBUG: Successfully fetched related data');
         } catch (error) {
           console.error('Failed to fetch task/deal related data:', error);
+          // Set empty arrays to prevent undefined errors
+          setContacts([]);
+          setLeads([]);
+          setProducts([]);
+          setQuotes([]);
+          
+          // Show a user-friendly error message
+          addToast({
+            type: 'warning',
+            title: 'Data Loading Warning',
+            message: 'Some form data could not be loaded. You can still create the record with basic information.'
+          });
         } finally {
           setIsLoadingContacts(false);
         }
       };
+      
+      // Add a small delay to prevent rapid API calls
+      const timeoutId = setTimeout(() => {
       fetchRelatedData();
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [isOpen, selectedType]);
 
@@ -351,13 +424,13 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
   };
 
   const handleBackToSelection = () => {
-    setSelectedType('');
+    setSelectedType(undefined);
     setFormData({});
   };
 
   const handleMainModalClose = () => {
     // Reset everything and close
-    setSelectedType('');
+    setSelectedType(undefined);
     setFormData({});
     setError(null);
     setLoading(false);
@@ -1502,6 +1575,122 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
       );
     });
   };
+
+  // Don't render the modal content if no type is selected
+  if (!selectedType) {
+    return (
+      <Dialog open={isOpen} onClose={handleMainModalClose} className="relative z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50" aria-hidden="true" />
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-200 rounded-t-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Icons.Plus className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900">Add New Record</h2>
+                    <p className="text-sm text-gray-600">Select a record type to get started</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleMainModalClose}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <Icons.X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {/* Record Type Selection */}
+              <div className="space-y-6">
+                <div className="text-center mb-8">
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Choose Record Type</h3>
+                  <p className="text-sm text-gray-600">Select the type of record you want to create</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {recordTypes.map((type) => (
+                    <button
+                      key={type.id}
+                      onClick={() => handleTypeSelection(type.id)}
+                      className="group relative bg-white border-2 border-gray-200 rounded-xl p-6 text-left hover:border-blue-300 hover:shadow-lg transition-all duration-200 hover:scale-105"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                          {(() => {
+                            const IconComponent = Icons[type.icon as keyof typeof Icons] as any;
+                            return IconComponent ? <IconComponent className="w-6 h-6 text-blue-600" /> : <Icons.Plus className="w-6 h-6 text-blue-600" />;
+                          })()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                            {type.name}
+                          </h4>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {type.description}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="absolute inset-0 rounded-xl border-2 border-transparent group-hover:border-blue-300 transition-colors pointer-events-none" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Dialog>
+    );
+  }
+
+  // Don't render form fields if we're still loading data for forms that need it
+  if ((selectedType === 'task' || selectedType === 'deal') && isLoadingContacts) {
+    return (
+      <Dialog open={isOpen} onClose={handleMainModalClose} className="relative z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50" aria-hidden="true" />
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-200 rounded-t-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Icons.Plus className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900">Add New {selectedType.charAt(0).toUpperCase() + selectedType.slice(1)}</h2>
+                    <p className="text-sm text-gray-600">Loading form data...</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleMainModalClose}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <Icons.X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Icons.Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                </div>
+                <p className="text-gray-600">Loading form data...</p>
+                <p className="text-sm text-gray-500 mt-2">Please wait while we prepare the form</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Dialog>
+    );
+  }
 
   return (
       <Dialog open={isOpen} onClose={handleMainModalClose} className="relative z-50">

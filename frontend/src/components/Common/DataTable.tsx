@@ -98,7 +98,7 @@ const DataTable: React.FC<DataTableProps> = ({ columns, data, onRowClick, action
   }, [data]);
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
+    <div className="bg-white rounded-lg shadow overflow-hidden w-full">
       {/* Top horizontal scrollbar */}
       <div 
         ref={topScrollRef}
@@ -112,15 +112,15 @@ const DataTable: React.FC<DataTableProps> = ({ columns, data, onRowClick, action
       {/* Main table container */}
       <div 
         ref={tableScrollRef}
-        className="overflow-x-scroll overflow-y-auto table-scroll-container max-h-[60vh] lg:max-h-[calc(100vh-350px)]"
+        className="overflow-x-auto overflow-y-auto table-scroll-container max-h-[60vh] lg:max-h-[calc(100vh-350px)] w-full"
       >
-        <table ref={tableRef} className="min-w-full divide-y divide-gray-200">
+        <table ref={tableRef} className="w-full divide-y divide-gray-200">
           <thead className="bg-gray-50 sticky top-0 z-10">
             <tr>
               {columns.map((column) => (
                 <th
                   key={column.key}
-                  className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
+                  className={`px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
                     column.sortable ? 'cursor-pointer hover:bg-gray-100' : ''
                   }`}
                   onClick={() => column.sortable && handleSort(column.key)}
@@ -149,7 +149,7 @@ const DataTable: React.FC<DataTableProps> = ({ columns, data, onRowClick, action
                 </th>
               ))}
               {actions && (
-                <th key="actions" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th key="actions" className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               )}
@@ -160,19 +160,19 @@ const DataTable: React.FC<DataTableProps> = ({ columns, data, onRowClick, action
               <tr
                 key={rowIndex}
                 className={`${
-                  onRowClick ? 'cursor-pointer hover:bg-gray-50' : ''
+                  onRowClick ? 'cursor-pointer hover:bg-gray-50 group' : ''
                 } transition-colors`}
                 onClick={() => onRowClick && onRowClick(row)}
               >
                 {columns.map((column) => (
-                  <td key={column.key} className="px-6 py-4 whitespace-nowrap">
+                  <td key={column.key} className="px-4 lg:px-6 py-4 whitespace-nowrap">
                     {column.render ? column.render(row[column.key], row) : (
                       <div className="text-sm text-gray-900">{row[column.key]}</div>
                     )}
                   </td>
                 ))}
                 {actions && (
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     {actions(row)}
                   </td>
                 )}

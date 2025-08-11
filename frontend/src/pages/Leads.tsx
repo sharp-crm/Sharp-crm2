@@ -419,8 +419,8 @@ const Leads: React.FC = () => {
   }
 
   return (
-    <div className="p-6 lg:p-8">
-      <div className="flex flex-col gap-4">
+    <div className="w-full h-full p-4 lg:p-6 xl:p-8">
+      <div className="flex flex-col gap-4 h-full">
         {/* Page Header */}
         <PageHeader
           title="Leads"
@@ -612,46 +612,46 @@ const Leads: React.FC = () => {
           )}
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white shadow-sm rounded-xl p-5 border border-gray-200">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8 w-full">
+            <div className="bg-white shadow-sm rounded-xl p-4 lg:p-5 border border-gray-200">
               <div className="flex items-center">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3 flex-shrink-0">
                   <Icons.Users className="w-5 h-5 text-blue-600" />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-sm text-gray-500">Total Leads</p>
                   <p className="text-xl font-semibold text-gray-900">{statusCounts.total}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white shadow-sm rounded-xl p-5 border border-gray-200">
+            <div className="bg-white shadow-sm rounded-xl p-4 lg:p-5 border border-gray-200">
               <div className="flex items-center">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3 flex-shrink-0">
                   <Icons.UserCheck className="w-5 h-5 text-green-600" />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-sm text-gray-500">Qualified</p>
                   <p className="text-xl font-semibold text-gray-900">{statusCounts.qualified}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white shadow-sm rounded-xl p-5 border border-gray-200">
+            <div className="bg-white shadow-sm rounded-xl p-4 lg:p-5 border border-gray-200">
               <div className="flex items-center">
-                <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center mr-3">
+                <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center mr-3 flex-shrink-0">
                   <Icons.UserPlus className="w-5 h-5 text-yellow-600" />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-sm text-gray-500">New Leads</p>
                   <p className="text-xl font-semibold text-gray-900">{statusCounts.new}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-white shadow-sm rounded-xl p-5 border border-gray-200">
+            <div className="bg-white shadow-sm rounded-xl p-4 lg:p-5 border border-gray-200">
               <div className="flex items-center">
-                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3 flex-shrink-0">
                   <Icons.DollarSign className="w-5 h-5 text-purple-600" />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-sm text-gray-500">Total Value</p>
                   <p className="text-xl font-semibold text-gray-900">${totalValue.toLocaleString()}</p>
                 </div>
@@ -661,7 +661,7 @@ const Leads: React.FC = () => {
 
           {/* Data Table or Kanban View */}
           {(filteredLeads.length === 0 && (Object.values(filters).some(f => f) || phoneSearch.length >= 2)) ? (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 lg:p-12 text-center w-full">
               <Icons.Search className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No leads match your filters</h3>
               <p className="text-gray-500 mb-6">Try adjusting your filter criteria.</p>
@@ -673,7 +673,7 @@ const Leads: React.FC = () => {
               </button>
             </div>
           ) : leads.length === 0 ? (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 lg:p-12 text-center w-full">
               <Icons.Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No leads found</h3>
               <p className="text-gray-500 mb-6">Get started by creating your first lead.</p>

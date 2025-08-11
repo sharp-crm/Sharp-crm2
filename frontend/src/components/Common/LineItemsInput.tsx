@@ -325,17 +325,17 @@ const LineItemsInput: React.FC<LineItemsInputProps> = ({ value, onChange, classN
           </div>
         ))}
       </div>
-      
+        
       {/* Add Row Button */}
-      <button
-        type="button"
-        onClick={addLineItem}
+        <button
+          type="button"
+          onClick={addLineItem}
         className="flex items-center justify-center w-full py-3 px-4 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-      >
+        >
         <Icons.Plus className="w-4 h-4 mr-2" />
         Add Row
-      </button>
-      
+        </button>
+
       {/* Totals Section */}
       <div className="bg-gray-50 rounded-lg p-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -31,25 +31,12 @@ const ConvertLeadModal: React.FC<ConvertLeadModalProps> = ({
     amount: '',
     phone: '',
     email: '',
-    leadSource: '',
-    stage: 'Prospecting',
+    stage: '',
     closeDate: '',
     probability: '',
     description: '',
     visibleTo: [] as string[]
   });
-
-  // Lead source options
-  const leadSourceOptions = [
-    { value: 'Email', label: 'Email' },
-    { value: 'Website', label: 'Website' },
-    { value: 'Cold Call', label: 'Cold Call' },
-    { value: 'Social Media', label: 'Social Media' },
-    { value: 'LinkedIn', label: 'LinkedIn' },
-    { value: 'Referral', label: 'Referral' },
-    { value: 'Trade Show', label: 'Trade Show' },
-    { value: 'Other', label: 'Other' }
-  ];
 
   // Deal stage options
   const dealStageOptions = DEAL_STAGES.map(stage => ({ value: stage, label: stage }));
@@ -68,8 +55,7 @@ const ConvertLeadModal: React.FC<ConvertLeadModalProps> = ({
         amount: lead.value ? lead.value.toString() : '',
         phone: formattedPhone,
         email: lead.email || '',
-        leadSource: lead.leadSource || 'Other',
-        stage: 'Prospecting',
+        stage: '',
         closeDate: '',
         probability: '',
         description: '',
@@ -118,7 +104,7 @@ const ConvertLeadModal: React.FC<ConvertLeadModalProps> = ({
         lastName: lead.lastName || '',
         companyName: lead.company,
         email: lead.email,
-        leadSource: lead.leadSource,
+        leadSource: lead.leadSource || 'Not specified',
         phone: lead.phone,
         title: lead.title,
         description: lead.description,
@@ -142,7 +128,7 @@ const ConvertLeadModal: React.FC<ConvertLeadModalProps> = ({
           amount: dealAmount,
           phone: dealFormData.phone,
           email: dealFormData.email,
-          leadSource: dealFormData.leadSource,
+          leadSource: lead.leadSource || 'Not specified',
           stage: dealFormData.stage,
           closeDate: dealFormData.closeDate,
           probability: dealFormData.probability ? parseFloat(dealFormData.probability) : 0,
@@ -325,10 +311,15 @@ const ConvertLeadModal: React.FC<ConvertLeadModalProps> = ({
                             type="text"
                             value={dealFormData.dealName}
                             onChange={(e) => handleDealFormChange('dealName', e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                            className={`w-full border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors ${
+                              dealFormData.dealName ? 'border-gray-300' : 'border-red-300 bg-red-50'
+                            }`}
                             placeholder="Enter deal name"
                             required
                           />
+                          {!dealFormData.dealName && (
+                            <p className="mt-1 text-sm text-red-600">Please enter a deal name</p>
+                          )}
                         </div>
 
                         <div>
@@ -342,9 +333,14 @@ const ConvertLeadModal: React.FC<ConvertLeadModalProps> = ({
                             placeholder="Enter deal amount"
                             min="0"
                             step="0.01"
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                            className={`w-full border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors ${
+                              dealFormData.amount ? 'border-gray-300' : 'border-red-300 bg-red-50'
+                            }`}
                             required
                           />
+                          {!dealFormData.amount && (
+                            <p className="mt-1 text-sm text-red-600">Please enter a deal amount</p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -389,17 +385,16 @@ const ConvertLeadModal: React.FC<ConvertLeadModalProps> = ({
                           <label className="block text-sm font-medium text-gray-700 mb-2">
                             Lead Source
                           </label>
-                          <select
-                            value={dealFormData.leadSource}
-                            onChange={(e) => handleDealFormChange('leadSource', e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
-                          >
-                            {leadSourceOptions.map(option => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
+                          <input
+                            type="text"
+                            value={lead.leadSource || 'Not specified'}
+                            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm bg-gray-50 text-gray-700 cursor-not-allowed"
+                            readOnly
+                            disabled
+                          />
+                          <p className="mt-1 text-sm text-gray-500">
+                            Lead source is preserved from the original lead
+                          </p>
                         </div>
 
                         <div>
@@ -409,15 +404,21 @@ const ConvertLeadModal: React.FC<ConvertLeadModalProps> = ({
                           <select
                             value={dealFormData.stage}
                             onChange={(e) => handleDealFormChange('stage', e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                            className={`w-full border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors ${
+                              dealFormData.stage ? 'border-gray-300' : 'border-red-300 bg-red-50'
+                            }`}
                             required
                           >
+                            <option value="">Select Stage</option>
                             {dealStageOptions.map(option => (
                               <option key={option.value} value={option.value}>
                                 {option.label}
                               </option>
                             ))}
                           </select>
+                          {!dealFormData.stage && (
+                            <p className="mt-1 text-sm text-red-600">Please select a deal stage</p>
+                          )}
                         </div>
 
                         <div>

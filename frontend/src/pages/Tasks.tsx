@@ -101,12 +101,10 @@ const Tasks: React.FC = () => {
           <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
             <Icons.CheckSquare className="w-4 h-4 text-blue-600" />
           </div>
-          <div>
-            <div 
-              className="font-medium text-gray-900 hover:text-blue-600 cursor-pointer hover:underline"
-              onClick={() => navigate(`/tasks/${row.id}`)}
-            >
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-gray-900 flex items-center">
               {value}
+              <Icons.ArrowRight className="w-4 h-4 ml-2 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
             <div className="text-sm text-gray-500 line-clamp-1">{row.description}</div>
           </div>
@@ -188,15 +186,19 @@ const Tasks: React.FC = () => {
   const actions = (row: Task) => (
     <div className="flex items-center space-x-2">
       <button 
-        className="p-1 text-gray-400 hover:text-gray-600"
-        onClick={() => navigate(`/tasks/${row.id}`)}
+        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-200"
+        onClick={(e) => {
+          e.stopPropagation();
+          navigate(`/tasks/${row.id}`);
+        }}
         title="View Details"
       >
         <Icons.Eye className="w-4 h-4" />
       </button>
       <button 
-        className="p-1 text-gray-400 hover:text-gray-600"
-        onClick={() => {
+        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-200"
+        onClick={(e) => {
+          e.stopPropagation();
           setSelectedTask(row);
           setIsEditModalOpen(true);
         }}
@@ -205,15 +207,21 @@ const Tasks: React.FC = () => {
         <Icons.Edit2 className="w-4 h-4" />
       </button>
       <button 
-        className="p-1 text-gray-400 hover:text-green-600"
-        onClick={() => handleUpdateTask(row.id, { status: 'Completed' })}
+        className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all duration-200"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleUpdateTask(row.id, { status: 'Completed' });
+        }}
         title="Mark Complete"
       >
         <Icons.Check className="w-4 h-4" />
       </button>
       <button 
-        className="p-1 text-gray-400 hover:text-red-600"
-        onClick={() => handleDelete(row.id)}
+        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleDelete(row.id);
+        }}
         title="Delete Task"
       >
         <Icons.Trash2 className="w-4 h-4" />
@@ -328,12 +336,17 @@ const Tasks: React.FC = () => {
   const renderContent = () => {
     switch (currentView) {
       case 'kanban':
-        return <KanbanView data={filteredTasks} onItemMove={handleTaskMove} type="tasks" getUserName={getUserName} />;
+        return <KanbanView 
+          data={filteredTasks} 
+          onItemMove={handleTaskMove} 
+          type="tasks" 
+          getUserName={getUserName}
+          onItemClick={(task) => navigate(`/tasks/${task.id}`)}
+        />;
       case 'grid':
         return <GridView data={filteredTasks} type="tasks" onItemClick={(item) => {
           if ('title' in item) { // This is a Task
-            setSelectedTask(item);
-            setIsViewModalOpen(true);
+            navigate(`/tasks/${item.id}`);
           }
         }} />;
       case 'timeline':
@@ -346,6 +359,7 @@ const Tasks: React.FC = () => {
             data={filteredTasks}
             columns={columns}
             actions={actions}
+            onRowClick={(task) => navigate(`/tasks/${task.id}`)}
           />
         );
     }
@@ -582,14 +596,30 @@ const Tasks: React.FC = () => {
             New Task
           </button>
         </div>
-      ) : currentView === 'kanban' ? (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          {renderContent()}
-        </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          {renderContent()}
-        </div>
+        <>
+          {/* Instruction text for interactive rows */}
+          {currentView === 'list' && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <div className="flex items-center text-blue-800">
+                <Icons.Info className="w-5 h-5 mr-2" />
+                <p className="text-sm">
+                  <span className="font-medium">Tip:</span> Click on any task row to view full details. Use the action buttons on the right for quick actions.
+                </p>
+              </div>
+            </div>
+          )}
+          
+          {currentView === 'kanban' ? (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              {renderContent()}
+            </div>
+          ) : (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              {renderContent()}
+            </div>
+          )}
+        </>
       )}
       
       {selectedTask && (

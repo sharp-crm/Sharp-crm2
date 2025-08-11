@@ -8,13 +8,13 @@ import { isSuperAdmin } from '../utils/roleAccess';
 
 
 const StatCard = ({ label, value, icon: Icon }: { label: string; value: string | number; icon: React.ElementType }) => (
-  <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 flex items-center space-x-5 hover:shadow-lg transition-shadow duration-200 min-w-[220px] hover:bg-gray-50">
-    <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center">
-      <Icon className="w-6 h-6 text-blue-600" />
+  <div className="bg-white p-4 lg:p-6 rounded-xl shadow-md border border-gray-200 flex items-center space-x-3 lg:space-x-5 hover:shadow-lg transition-shadow duration-200 w-full hover:bg-gray-50">
+    <div className="w-10 h-10 lg:w-12 lg:h-12 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+      <Icon className="w-5 h-5 lg:w-6 lg:h-6 text-blue-600" />
     </div>
-    <div>
-      <p className="text-sm font-medium text-gray-600">{label}</p>
-      <p className="text-2xl font-semibold text-gray-900 mt-1">{value}</p>
+    <div className="flex-1 min-w-0">
+      <p className="text-sm lg:text-sm font-medium text-gray-600">{label}</p>
+      <p className="text-xl lg:text-2xl font-semibold text-gray-900 mt-1">{value}</p>
     </div>
   </div>
 );
@@ -188,15 +188,15 @@ const Home: React.FC = () => {
   };
 
   return (
-    <div className="p-6 lg:p-8 space-y-10 max-w-screen-xl mx-auto">
+    <div className="w-full h-full p-4 lg:p-6 xl:p-8 space-y-6 lg:space-y-8">
       {/* ✅ Personalized Hero Section */}
-      <div className="bg-gradient-to-r from-blue-50 to-white p-6 rounded-xl shadow-md border border-gray-200">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+      <div className="bg-gradient-to-r from-blue-50 to-white p-4 lg:p-6 rounded-xl shadow-md border border-gray-200 w-full">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 lg:gap-6">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">
                               Welcome, {`${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'User'}
             </h1>
-            <p className="text-md text-gray-600 mt-2">
+            <p className="text-sm lg:text-md text-gray-600 mt-2">
               Today is {today.toLocaleDateString("en-US", {
                 weekday: "long",
                 day: "numeric",
@@ -205,16 +205,16 @@ const Home: React.FC = () => {
               })}, {today.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })} IST
             </p>
           </div>
-          <div className="flex space-x-4">
+          <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
             <button
               onClick={() => navigate('/leads')}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors w-full sm:w-auto"
             >
               <Icons.Users className="w-5 h-5 inline mr-2" /> View Leads
             </button>
             <button
               onClick={() => navigate('/deals')}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors w-full sm:w-auto"
             >
               <Icons.Target className="w-5 h-5 inline mr-2" /> View Deals
             </button>
@@ -223,16 +223,16 @@ const Home: React.FC = () => {
       </div>
 
       {/* Stats Section */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6 w-full">
         {loading ? (
           // Loading skeleton
           Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="bg-white p-6 rounded-xl shadow-md border border-gray-200 animate-pulse">
-              <div className="flex items-center space-x-5">
-                <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
-                <div className="space-y-2">
-                  <div className="h-4 bg-gray-200 rounded w-24"></div>
-                  <div className="h-6 bg-gray-200 rounded w-16"></div>
+            <div key={index} className="bg-white p-4 lg:p-6 rounded-xl shadow-md border border-gray-200 animate-pulse">
+              <div className="flex items-center space-x-3 lg:space-x-5">
+                <div className="w-10 h-10 lg:w-12 lg:h-12 bg-gray-200 rounded-lg flex-shrink-0"></div>
+                <div className="space-y-2 flex-1 min-w-0">
+                  <div className="h-4 bg-gray-200 rounded w-20 lg:w-24"></div>
+                  <div className="h-6 bg-gray-200 rounded w-14 lg:w-16"></div>
                 </div>
               </div>
             </div>
