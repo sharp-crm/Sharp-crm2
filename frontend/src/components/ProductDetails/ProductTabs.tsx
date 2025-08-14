@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
-import { Product, Task, tasksApi, usersApi, Lead, leadsApi, Contact, contactsApi } from '../../api/services';
+import { Product, Task, tasksApi, usersApi, Lead, leadsApi, Contact, contactsApi, Deal, dealsApi } from '../../api/services';
 import { productsApi } from '../../api/services';
 import { useToastStore } from '../../store/useToastStore';
 import AddNewModal from '../Common/AddNewModal';
@@ -34,6 +34,7 @@ interface ProductTabsProps {
   getUserDisplayName: (userId: string) => string;
   onProductUpdate?: (updatedProduct: Product) => void;
   onTasksUpdate?: (tasks: Task[]) => void;
+  onDealsUpdate?: (deals: Deal[]) => void;
 }
 
 const ProductTabs: React.FC<ProductTabsProps> = ({
@@ -42,7 +43,8 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
   product,
   getUserDisplayName,
   onProductUpdate,
-  onTasksUpdate
+  onTasksUpdate,
+  onDealsUpdate
 }) => {
   const { addToast } = useToastStore();
   const navigate = useNavigate();
@@ -64,6 +66,9 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
   const [relatedContacts, setRelatedContacts] = useState<Contact[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [isCreateContactModalOpen, setIsCreateContactModalOpen] = useState(false);
+  const [relatedDeals, setRelatedDeals] = useState<Deal[]>([]);
+  const [loadingDeals, setLoadingDeals] = useState(false);
+  const [isCreateDealModalOpen, setIsCreateDealModalOpen] = useState(false);
   
   // Note management state
   const [newNote, setNewNote] = useState('');
@@ -318,6 +323,202 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
     fetchRelatedContacts();
   }, [product.relatedContactIds]);
 
+  // Fetch related deals
+  useEffect(() => {
+    const fetchRelatedDeals = async () => {
+      setLoadingDeals(true);
+      try {
+        // First, check if we have any deals that reference this product
+        const allDeals = await dealsApi.getAll();
+        const dealsWithThisProduct = allDeals.filter(deal => 
+          deal.relatedProductIds && deal.relatedProductIds.includes(product.id)
+        );
+        
+        console.log('🔍 [fetchRelatedDeals] Found deals with this product:', dealsWithThisProduct.length);
+        
+        // If we have deals that reference this product but they're not in our relatedDealIds,
+        // we need to update the product to include them
+        if (dealsWithThisProduct.length > 0) {
+          const currentDealIds = product.relatedDealIds || [];
+          const newDealIds = dealsWithThisProduct.map(deal => deal.id);
+          const allDealIds = [...new Set([...currentDealIds, ...newDealIds])];
+          
+          if (allDealIds.length !== currentDealIds.length) {
+            console.log('🔍 [fetchRelatedDeals] Updating product with missing deal IDs:', allDealIds);
+            
+            // Update the product with the complete list of deal IDs
+            const updatedProduct = await productsApi.update(product.id, { 
+              relatedDealIds: allDealIds 
+            });
+            
+            // Update the parent component
+            if (onProductUpdate && updatedProduct) {
+              onProductUpdate(updatedProduct);
+            }
+            
+            // Set the deals for display
+            setRelatedDeals(dealsWithThisProduct);
+            
+            // Notify parent about deals update
+            if (onDealsUpdate) {
+              onDealsUpdate(dealsWithThisProduct);
+            }
+          } else {
+            // Just fetch the deals we already know about
+            if (product.relatedDealIds && product.relatedDealIds.length > 0) {
+              const deals = await Promise.all(
+                product.relatedDealIds.map(id => dealsApi.getById(id))
+              );
+              const validDeals = deals.filter(Boolean) as Deal[];
+              setRelatedDeals(validDeals);
+              
+              // Notify parent about deals update
+              if (onDealsUpdate) {
+                onDealsUpdate(validDeals);
+              }
+            } else {
+              setRelatedDeals([]);
+              if (onDealsUpdate) {
+                onDealsUpdate([]);
+              }
+            }
+          }
+        } else {
+          // No deals found with this product
+          setRelatedDeals([]);
+          if (onDealsUpdate) {
+            onDealsUpdate([]);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching related deals:', error);
+        addToast({
+          type: 'error',
+          title: 'Error',
+          message: 'Failed to fetch related deals.'
+        });
+      } finally {
+        setLoadingDeals(false);
+      }
+    };
+
+    fetchRelatedDeals();
+  }, [product.relatedDealIds, onDealsUpdate, product.id, onProductUpdate]);
+
+  // Additional useEffect to refetch deals when product data changes
+  useEffect(() => {
+    // Only fetch if we have a product and it has related IDs
+    if (product && product.relatedDealIds) {
+      console.log('🔍 [useEffect] Product data changed, refetching deals');
+      refreshDeals();
+    }
+  }, [product.relatedDealIds]);
+
+  // Additional useEffect to refetch leads and contacts when product data changes
+  useEffect(() => {
+    // Only fetch if we have a product and it has related IDs
+    if (product && (product?.relatedLeadIds || product?.relatedContactIds)) {
+      console.log('🔍 [useEffect] Product data changed, refetching leads and contacts');
+      
+      // Refresh leads
+      if (product?.relatedLeadIds) {
+        const fetchRelatedLeads = async () => {
+          try {
+            const leads = await Promise.all(
+              product.relatedLeadIds!.map(id => leadsApi.getById(id))
+            );
+            const validLeads = leads.filter(Boolean) as Lead[];
+            setRelatedLeads(validLeads);
+          } catch (error) {
+            console.error('Error refreshing leads:', error);
+          }
+        };
+        fetchRelatedLeads();
+      }
+      
+      // Refresh contacts
+      if (product?.relatedContactIds) {
+        const fetchRelatedContacts = async () => {
+          try {
+            const contacts = await Promise.all(
+              product.relatedContactIds!.map(id => contactsApi.getById(id))
+            );
+            const validContacts = contacts.filter(Boolean) as Contact[];
+            setRelatedContacts(validContacts);
+          } catch (error) {
+            console.error('Error refreshing contacts:', error);
+          }
+        };
+        fetchRelatedContacts();
+      }
+    }
+  }, [product?.relatedLeadIds, product?.relatedContactIds]);
+
+  // Helper function to refresh deals
+  const refreshDeals = async () => {
+    try {
+      console.log('🔍 [refreshDeals] Refreshing deals...');
+      if (product.relatedDealIds && product.relatedDealIds.length > 0) {
+        const deals = await Promise.all(
+          product.relatedDealIds.map(id => dealsApi.getById(id))
+        );
+        const validDeals = deals.filter(Boolean) as Deal[];
+        setRelatedDeals(validDeals);
+        
+        // Notify parent about deals update
+        if (onDealsUpdate) {
+          onDealsUpdate(validDeals);
+        }
+        console.log('🔍 [refreshDeals] Deals refreshed successfully');
+      } else {
+        setRelatedDeals([]);
+        if (onDealsUpdate) {
+          onDealsUpdate([]);
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing deals:', error);
+    }
+  };
+
+  // Helper function to refresh leads
+  const refreshLeads = async () => {
+    try {
+      console.log('🔍 [refreshLeads] Refreshing leads...');
+      if (product?.relatedLeadIds && product.relatedLeadIds.length > 0) {
+        const leads = await Promise.all(
+          product.relatedLeadIds.map(id => leadsApi.getById(id))
+        );
+        const validLeads = leads.filter(Boolean) as Lead[];
+        setRelatedLeads(validLeads);
+        console.log('🔍 [refreshLeads] Leads refreshed successfully');
+      } else {
+        setRelatedLeads([]);
+      }
+    } catch (error) {
+      console.error('Error refreshing leads:', error);
+    }
+  };
+
+  // Helper function to refresh contacts
+  const refreshContacts = async () => {
+    try {
+      console.log('🔍 [refreshContacts] Refreshing contacts...');
+      if (product?.relatedContactIds && product.relatedContactIds.length > 0) {
+        const contacts = await Promise.all(
+          product.relatedContactIds.map(id => contactsApi.getById(id))
+        );
+        const validContacts = contacts.filter(Boolean) as Contact[];
+        setRelatedContacts(validContacts);
+        console.log('🔍 [refreshContacts] Contacts refreshed successfully');
+      } else {
+        setRelatedContacts([]);
+      }
+    } catch (error) {
+      console.error('Error refreshing contacts:', error);
+    }
+  };
+
   const handleCreateLead = async () => {
     try {
       // The AddNewModal will handle the lead creation with the prefillData
@@ -337,6 +538,9 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
           onProductUpdate(refreshedProduct);
         }
       }
+
+      // Refresh leads to show the new lead immediately
+      refreshLeads();
 
       // Close the modal
       setIsCreateLeadModalOpen(false);
@@ -384,6 +588,9 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
       if (onProductUpdate && updatedProduct) {
         onProductUpdate(updatedProduct);
       }
+
+      // Refresh leads to show the updated list immediately
+      refreshLeads();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to remove lead';
       addToast({
@@ -415,6 +622,9 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
         }
       }
 
+      // Refresh contacts to show the new contact immediately
+      refreshContacts();
+
       // Close the modal
       setIsCreateContactModalOpen(false);
     } catch (error) {
@@ -423,6 +633,96 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
         type: 'error',
         title: 'Error',
         message: errorMessage
+      });
+    }
+  };
+
+  // Deal management functions
+  const handleCreateDeal = async () => {
+    try {
+      console.log('🔍 [handleCreateDeal] Deal created successfully, establishing bidirectional relationship...');
+      
+      // The AddNewModal will handle the deal creation with the prefillData
+      // We need to find the most recently created deal and establish the bidirectional relationship
+      
+      // Get all deals and find the most recent one created by the current user
+      const allDeals = await dealsApi.getAll();
+      const currentUserId = product.createdBy || ''; // Use product creator as fallback
+      
+      console.log('🔍 [handleCreateDeal] Looking for deals created by user:', currentUserId);
+      console.log('🔍 [handleCreateDeal] Total deals found:', allDeals.length);
+      
+      if (!currentUserId) {
+        throw new Error('Current user ID not available');
+      }
+      
+      // Find deals created by the current user within the last 5 minutes
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const recentDeals = allDeals
+        .filter(deal => {
+          const createdTime = new Date(deal.createdAt);
+          const isRecent = createdTime > fiveMinutesAgo;
+          const isCreatedByUser = deal.createdBy === currentUserId;
+          
+          console.log(`🔍 [handleCreateDeal] Deal ${deal.id}: createdBy=${deal.createdBy}, createdAt=${deal.createdAt}, isRecent=${isRecent}, isCreatedByUser=${isCreatedByUser}`);
+          
+          return isRecent && isCreatedByUser;
+        })
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      
+      console.log('🔍 [handleCreateDeal] Recent deals by current user:', recentDeals.length);
+      
+      if (recentDeals.length > 0) {
+        const newestDeal = recentDeals[0];
+        console.log('🔍 [handleCreateDeal] Newest deal found:', newestDeal.id, newestDeal.dealName);
+        
+        // Check if this deal is already associated with the product
+        const currentDealIds = product.relatedDealIds || [];
+        if (!currentDealIds.includes(newestDeal.id)) {
+          console.log('🔍 [handleCreateDeal] Adding deal to product:', newestDeal.id);
+          
+          // Add the deal to the product's relatedDealIds
+          const updatedDealIds = [...currentDealIds, newestDeal.id];
+          const updatedProduct = await productsApi.update(product.id, { 
+            relatedDealIds: updatedDealIds 
+          });
+          
+          console.log('🔍 [handleCreateDeal] Product updated successfully:', updatedProduct?.id);
+          
+          // Update the parent component
+          if (onProductUpdate && updatedProduct) {
+            onProductUpdate(updatedProduct);
+          }
+          
+          // Refresh deals to show the new deal immediately
+          refreshDeals();
+          
+          addToast({
+            type: 'success',
+            title: 'Deal Created',
+            message: `New deal has been created successfully and associated with this product.`
+          });
+        } else {
+          console.log('🔍 [handleCreateDeal] Deal already associated with product');
+          addToast({
+            type: 'success',
+            title: 'Deal Created',
+            message: `New deal has been created successfully and is already associated with this product.`
+          });
+        }
+      } else {
+        console.log('🔍 [handleCreateDeal] No recent deals found by current user');
+        throw new Error('No recent deals found to associate with product');
+      }
+      
+      // Close the modal
+      setIsCreateDealModalOpen(false);
+    } catch (error) {
+      console.error('🔍 [handleCreateDeal] Error:', error);
+      addToast({
+        type: 'warning',
+        title: 'Warning',
+        message: 'Deal created but relationship with product could not be established. Please manually associate the deal.'
       });
     }
   };
@@ -461,6 +761,9 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
       if (onProductUpdate && updatedProduct) {
         onProductUpdate(updatedProduct);
       }
+
+      // Refresh contacts to show the updated list immediately
+      refreshContacts();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to remove contact';
       addToast({
@@ -600,6 +903,63 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
       });
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleRemoveDeal = async (dealId: string) => {
+    if (!confirm('Are you sure you want to remove this deal from the product?')) {
+      return;
+    }
+
+    try {
+      console.log('🔍 [handleRemoveDeal] Removing deal:', dealId, 'from product:', product.id);
+      
+      const currentDealIds = product.relatedDealIds || [];
+      const updatedDealIds = currentDealIds.filter(id => id !== dealId);
+      
+      console.log('🔍 [handleRemoveDeal] Current deal IDs:', currentDealIds);
+      console.log('🔍 [handleRemoveDeal] Updated deal IDs:', updatedDealIds);
+
+      // Update the product
+      const updatedProduct = await productsApi.update(product.id, { 
+        relatedDealIds: updatedDealIds 
+      });
+      
+      console.log('🔍 [handleRemoveDeal] Product updated successfully:', updatedProduct?.id);
+
+      // Update the deal to remove this product from its relatedProductIds
+      const deal = await dealsApi.getById(dealId);
+      if (deal) {
+        const currentProductIds = deal.relatedProductIds || [];
+        const updatedProductIds = currentProductIds.filter(id => id !== product.id);
+        await dealsApi.update(dealId, { 
+          relatedProductIds: updatedProductIds 
+        });
+        console.log('🔍 [handleRemoveDeal] Deal updated successfully:', dealId);
+      }
+
+      addToast({
+        type: 'success',
+        title: 'Deal Removed',
+        message: 'Deal has been successfully removed from the product.'
+      });
+
+      // Update the parent component
+      if (onProductUpdate && updatedProduct) {
+        onProductUpdate(updatedProduct);
+      }
+
+      // Refresh deals to show the updated list immediately
+      console.log('🔍 [handleRemoveDeal] Refreshing deals...');
+      refreshDeals();
+    } catch (error) {
+      console.error('🔍 [handleRemoveDeal] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to remove deal';
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: errorMessage
+      });
     }
   };
 
@@ -888,6 +1248,152 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
                 </div>
               </div>
 
+              {/* Deals Section */}
+              <div id="section-deals" className="bg-white rounded-lg border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Deals</h3>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button 
+                      onClick={async () => {
+                        try {
+                          // Sync existing deals that might not be properly linked
+                          const allDeals = await dealsApi.getAll();
+                          const dealsWithThisProduct = allDeals.filter(deal => 
+                            deal.relatedProductIds && deal.relatedProductIds.includes(product.id)
+                          );
+                          
+                          if (dealsWithThisProduct.length > 0) {
+                            const currentDealIds = product.relatedDealIds || [];
+                            const newDealIds = dealsWithThisProduct.map(deal => deal.id);
+                            const allDealIds = [...new Set([...currentDealIds, ...newDealIds])];
+                            
+                            if (allDealIds.length !== currentDealIds.length) {
+                              const updatedProduct = await productsApi.update(product.id, { 
+                                relatedDealIds: allDealIds 
+                              });
+                              
+                              if (onProductUpdate && updatedProduct) {
+                                onProductUpdate(updatedProduct);
+                              }
+                              
+                              addToast({
+                                type: 'success',
+                                title: 'Deals Synced',
+                                message: `Found and linked ${dealsWithThisProduct.length} existing deals to this product.`
+                              });
+                            }
+                          }
+                        } catch (error) {
+                          console.error('Error syncing deals:', error);
+                        }
+                      }}
+                      className="text-gray-600 hover:text-gray-800 text-sm font-medium flex items-center"
+                      title="Sync existing deals"
+                    >
+                      <Icons.RefreshCw className="w-4 h-4 mr-1" />
+                      Sync
+                    </button>
+                    <button 
+                      onClick={() => setIsCreateDealModalOpen(true)}
+                      className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
+                    >
+                      <Icons.Plus className="w-4 h-4 mr-1" />
+                      Create Deal for Product
+                    </button>
+                  </div>
+                </div>
+                
+                {loadingDeals ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                    <p className="text-sm text-gray-500">Loading deals...</p>
+                  </div>
+                ) : relatedDeals.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Deal
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Stage
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Amount
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Close Date
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Owner
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {relatedDeals.map((deal) => (
+                          <tr key={deal.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="flex-shrink-0 h-8 w-8">
+                                  <Icons.Target className="h-6 w-6 text-blue-600" />
+                                </div>
+                                <div className="ml-4">
+                                  <button
+                                    onClick={() => navigate(`/deals/${deal.id}`)}
+                                    className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors text-left"
+                                  >
+                                    {deal.dealName}
+                                  </button>
+                                  <div className="text-sm text-gray-500">{deal.leadSource || '—'}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                deal.stage === 'Closed Won' ? 'bg-green-100 text-green-800' :
+                                deal.stage === 'Closed Lost' || deal.stage === 'Closed Lost to Competition' ? 'bg-red-100 text-red-800' :
+                                'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {deal.stage}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                              ${(deal.amount || deal.value || 0).toLocaleString()}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {deal.closeDate ? new Date(deal.closeDate).toLocaleDateString() : '—'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {getUserDisplayName(deal.dealOwner || deal.owner || '')}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <button
+                                onClick={() => handleRemoveDeal(deal.id)}
+                                className="text-red-600 hover:text-red-900 transition-colors"
+                                title="Remove Deal"
+                              >
+                                <Icons.X className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Icons.Target className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">No deals associated yet</p>
+                  </div>
+                )}
+              </div>
+
               {/* Open Activities Section */}
               <div id="section-open-activities" className="bg-white rounded-lg border border-gray-200 p-6">
                 <div className="flex items-center justify-between mb-4">
@@ -914,7 +1420,14 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
                           <div className="flex-1">
                             <div className="flex items-center space-x-2 mb-2">
                               <Icons.CheckSquare className="w-4 h-4 text-blue-600" />
-                              <h4 className="text-sm font-medium text-gray-900">{task.title}</h4>
+                              <h4 className="text-sm font-medium text-gray-900">
+                                <button
+                                  onClick={() => navigate(`/tasks/${task.id}`)}
+                                  className="text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors"
+                                >
+                                  {task.title}
+                                </button>
+                              </h4>
                               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                 task.priority === 'High' ? 'bg-red-100 text-red-800' :
                                 task.priority === 'Normal' ? 'bg-yellow-100 text-yellow-800' :
@@ -1013,7 +1526,14 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
                           <div className="flex-1">
                             <div className="flex items-center space-x-2 mb-2">
                               <Icons.CheckSquare className="w-4 h-4 text-green-600" />
-                              <h4 className="text-sm font-medium text-gray-900">{task.title}</h4>
+                              <h4 className="text-sm font-medium text-gray-900">
+                                <button
+                                  onClick={() => navigate(`/tasks/${task.id}`)}
+                                  className="text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors"
+                                >
+                                  {task.title}
+                                </button>
+                              </h4>
                               <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                 Completed
                               </span>
@@ -1342,6 +1862,19 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
         }}
       />
 
+      {/* Create Deal Modal */}
+      <AddNewModal
+        isOpen={isCreateDealModalOpen}
+        onClose={() => setIsCreateDealModalOpen(false)}
+        defaultType="deal"
+        onSuccess={handleCreateDeal}
+        prefillData={{
+          relatedProductIds: [product.id],
+          productName: product.name,
+          productCode: product.productCode
+        }}
+      />
+
       {/* Delete Confirmation Dialog */}
       {showDeleteConfirm && taskToDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1374,829 +1907,6 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
           </div>
         </div>
       )}
-    </div>
-  );
-};
-
-// Overview Tab Component - Simplified without leads section
-const OverviewTab: React.FC<{ 
-  product: Product; 
-  getUserDisplayName: (userId: string) => string;
-  onProductUpdate?: (updatedProduct: Product) => void;
-  tasks: Task[];
-  loadingTasks: boolean;
-  onAddTask: () => void;
-  onTaskCreated: () => void;
-  onCompleteTask: (taskId: string) => void;
-  onDeleteTask: (task: Task) => void;
-  onEditTask: (task: Task) => void;
-  isUpdatingTask: boolean;
-  isDeletingTask: boolean;
-}> = ({
-  product,
-  getUserDisplayName,
-  onProductUpdate,
-  tasks,
-  loadingTasks,
-  onAddTask,
-  onTaskCreated,
-  onCompleteTask,
-  onDeleteTask,
-  onEditTask,
-  isUpdatingTask,
-  isDeletingTask
-}) => {
-  const navigate = useNavigate();
-  const { addToast } = useToastStore();
-  const [newNote, setNewNote] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
-  const [editingNoteContent, setEditingNoteContent] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  const handleAddNote = async () => {
-    if (!newNote.trim()) {
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: 'Please enter a note before saving.'
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      // Combine existing notes with new note
-      const existingNotes = product.notes || '';
-      const updatedNotes = existingNotes 
-        ? `${existingNotes}\n\n${new Date().toLocaleString()}: ${newNote}`
-        : `${new Date().toLocaleString()}: ${newNote}`;
-
-      // Update the product in the database
-      const updatedProduct = await productsApi.update(product.id, { notes: updatedNotes });
-      
-      addToast({
-        type: 'success',
-        title: 'Note Added',
-        message: 'Note has been successfully added to the product.'
-      });
-      
-      setNewNote('');
-      
-      // Update the parent component with the new product data
-      if (onProductUpdate && updatedProduct) {
-        onProductUpdate(updatedProduct);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to add note';
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: errorMessage
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleEditNote = async (noteIndex: number) => {
-    if (!editingNoteContent.trim()) {
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: 'Please enter a note before saving.'
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const notesArray = product.notes ? product.notes.split('\n\n') : [];
-      const noteParts = notesArray[noteIndex].split(': ');
-      const timestamp = noteParts[0];
-      
-      // Update the specific note
-      notesArray[noteIndex] = `${timestamp}: ${editingNoteContent}`;
-      const updatedNotes = notesArray.join('\n\n');
-
-      // Update the product in the database
-      const updatedProduct = await productsApi.update(product.id, { notes: updatedNotes });
-      
-      addToast({
-        type: 'success',
-        title: 'Note Updated',
-        message: 'Note has been successfully updated.'
-      });
-      
-      setEditingNoteIndex(null);
-      setEditingNoteContent('');
-      
-      // Update the parent component with the new product data
-      if (onProductUpdate && updatedProduct) {
-        onProductUpdate(updatedProduct);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update note';
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: errorMessage
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDeleteNote = async (noteIndex: number) => {
-    if (!confirm('Are you sure you want to delete this note? This action cannot be undone.')) {
-      return;
-    }
-
-    setIsDeleting(true);
-    try {
-      const notesArray = product.notes ? product.notes.split('\n\n') : [];
-      
-      // Remove the specific note
-      notesArray.splice(noteIndex, 1);
-      const updatedNotes = notesArray.join('\n\n');
-
-      // Update the product in the database
-      const updatedProduct = await productsApi.update(product.id, { notes: updatedNotes });
-      
-      addToast({
-        type: 'success',
-        title: 'Note Deleted',
-        message: 'Note has been successfully deleted.'
-      });
-      
-      // Update the parent component with the new product data
-      if (onProductUpdate && updatedProduct) {
-        onProductUpdate(updatedProduct);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to delete note';
-      addToast({
-        type: 'error',
-        title: 'Error',
-        message: errorMessage
-      });
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  return (
-    <div className="p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Product Information */}
-        <div id="section-product-information" className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Product Information</h3>
-          <div className="space-y-6">
-            {/* Basic Product Details */}
-            <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-3">Basic Details</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Product Name</label>
-                  <p className="text-gray-900">{product.name}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Product Code</label>
-                  <p className="text-gray-900">{product.productCode}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Product Owner</label>
-                  <p className="text-gray-900">{getUserDisplayName(product.productOwner)}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Active Status</label>
-                  <p className="text-gray-900">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      product.activeStatus 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {product.activeStatus ? 'Active' : 'Inactive'}
-                    </span>
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Usage Unit</label>
-                  <p className="text-gray-900">{product.usageUnit}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Created By</label>
-                  <p className="text-gray-900">{getUserDisplayName(product.createdBy)}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Pricing Information */}
-            <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-3">Pricing Information</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Unit Price</label>
-                  <p className="text-gray-900 font-medium">${product.unitPrice.toLocaleString()}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Tax Percentage</label>
-                  <p className="text-gray-900">{product.taxPercentage}%</p>
-                </div>
-                {product.commissionRate && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-600">Commission Rate</label>
-                    <p className="text-gray-900">{product.commissionRate}%</p>
-                  </div>
-                )}
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Total Price (with Tax)</label>
-                  <p className="text-gray-900 font-medium text-green-600">
-                    ${(product.unitPrice * (1 + product.taxPercentage / 100)).toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Inventory Information */}
-            <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-3">Inventory Information</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Current Stock</label>
-                  <p className={`font-medium ${product.quantityInStock && product.quantityInStock > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {product.quantityInStock || 0} {product.usageUnit}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-600">Demand</label>
-                  <p className="text-gray-900">{product.quantityInDemand || 0} {product.usageUnit}</p>
-                </div>
-                {product.reorderLevel && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-600">Reorder Level</label>
-                    <p className="text-gray-900">{product.reorderLevel} {product.usageUnit}</p>
-                  </div>
-                )}
-                <div>
-                  <label className="text-sm font-medium text-gray-600">On Order</label>
-                  <p className="text-gray-900">{product.quantityOrdered || 0} {product.usageUnit}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Product Description */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Description</h3>
-          <p className="text-gray-900">{product.description || 'No description provided'}</p>
-        </div>
-
-        {/* Notes Section */}
-        <div id="section-notes" className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-semibold text-gray-900">Notes</h3>
-          </div>
-          
-          {product.notes ? (
-            <div className="space-y-4">
-              {product.notes.split('\n\n').map((note, index) => {
-                const noteParts = note.split(': ');
-                const timestamp = noteParts[0];
-                const noteContent = noteParts.slice(1).join(': ');
-                
-                return (
-                  <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-                    {editingNoteIndex === index ? (
-                      <div className="space-y-3">
-                        <textarea
-                          value={editingNoteContent}
-                          onChange={(e) => setEditingNoteContent(e.target.value)}
-                          rows={3}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                          placeholder="Edit your note..."
-                        />
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2 text-xs text-gray-500">
-                            <span>Product - {product.name}</span>
-                            <span className="text-gray-300">•</span>
-                            <div className="flex items-center space-x-1">
-                              <Icons.Clock className="w-3 h-3" />
-                              <span>{timestamp}</span>
-                              <span>by</span>
-                              <span className="font-medium">{getUserDisplayName(product.createdBy)}</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() => {
-                                setEditingNoteIndex(null);
-                                setEditingNoteContent('');
-                              }}
-                              className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 transition-colors"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => handleEditNote(index)}
-                              disabled={isSubmitting}
-                              className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {isSubmitting ? 'Saving...' : 'Save'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-sm font-medium text-gray-900">
-                            {noteContent}
-                          </h4>
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() => {
-                                setEditingNoteIndex(index);
-                                setEditingNoteContent(noteContent);
-                              }}
-                              className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteNote(index)}
-                              disabled={isDeleting}
-                              className="text-red-600 hover:text-red-800 text-xs font-medium disabled:opacity-50"
-                            >
-                              {isDeleting ? 'Deleting...' : 'Delete'}
-                            </button>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center space-x-2 text-xs text-gray-500">
-                          <span>Product - {product.name}</span>
-                          <span className="text-gray-300">•</span>
-                          <div className="flex items-center space-x-1">
-                            <Icons.Clock className="w-3 h-3" />
-                            <span>{timestamp}</span>
-                            <span>by</span>
-                            <span className="font-medium">{getUserDisplayName(product.createdBy)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <Icons.FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No notes yet</p>
-            </div>
-          )}
-          
-          {/* Add Note Input */}
-          <div className="mt-5">
-            <div className="border border-gray-300 rounded-lg p-4">
-              <textarea
-                id="add-note-textarea"
-                placeholder="Add a note"
-                rows={3}
-                className="w-full border-none resize-none focus:ring-0 focus:outline-none text-sm text-gray-900 placeholder-gray-500"
-                value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleAddNote();
-                  }
-                }}
-              />
-              <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
-                <div className="flex items-center space-x-2 text-xs text-gray-500">
-                  <span>Press Enter to save</span>
-                </div>
-                <button
-                  onClick={handleAddNote}
-                  disabled={!newNote.trim() || isSubmitting}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Icons.Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Adding...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Icons.Plus className="w-4 h-4" />
-                      <span>Add Note</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Open Activities Section */}
-        <div id="section-open-activities" className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Open Activities</h3>
-            <button 
-              onClick={onAddTask}
-              className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
-            >
-              <Icons.Plus className="w-4 h-4 mr-1" />
-              Add Activity
-            </button>
-          </div>
-          
-          {loadingTasks ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-              <p className="text-sm text-gray-500">Loading activities...</p>
-            </div>
-          ) : tasks.filter(task => task.status !== 'Completed').length > 0 ? (
-            <div className="space-y-3">
-              {tasks.filter(task => task.status !== 'Completed').map((task) => (
-                <div key={task.id} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <Icons.CheckSquare className="w-4 h-4 text-blue-600" />
-                        <h4 className="text-sm font-medium text-gray-900">{task.title}</h4>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          task.priority === 'High' ? 'bg-red-100 text-red-800' :
-                          task.priority === 'Normal' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-green-100 text-green-800'
-                        }`}>
-                          {task.priority}
-                        </span>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          task.status === 'Completed' ? 'bg-green-100 text-green-800' :
-                          task.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {task.status}
-                        </span>
-                      </div>
-                      {task.description && (
-                        <p className="text-sm text-gray-600 mb-2">{task.description}</p>
-                      )}
-                      <div className="flex items-center space-x-4 text-xs text-gray-500">
-                        <div className="flex items-center space-x-1">
-                          <Icons.User className="w-3 h-3" />
-                          <span>{getUserDisplayName(task.assignee)}</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Icons.Calendar className="w-3 h-3" />
-                          <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Icons.Clock className="w-3 h-3" />
-                          <span>{new Date(task.createdAt).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2 ml-4">
-                      <button
-                        onClick={() => onCompleteTask(task.id)}
-                        disabled={isUpdatingTask}
-                        className="px-3 py-1 text-sm text-green-600 hover:text-green-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
-                        title="Mark as Complete"
-                      >
-                        <Icons.Check className="w-3 h-3" />
-                        <span>{isUpdatingTask ? 'Completing...' : 'Complete'}</span>
-                      </button>
-                      <button
-                        onClick={() => onEditTask(task)}
-                        className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800 transition-colors flex items-center space-x-1"
-                        title="Edit Task"
-                      >
-                        <Icons.Edit className="w-3 h-3" />
-                        <span>Edit</span>
-                      </button>
-                      <button
-                        onClick={() => onDeleteTask(task)}
-                        disabled={isDeletingTask}
-                        className="px-3 py-1 text-sm text-red-600 hover:text-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
-                        title="Delete Task"
-                      >
-                        <Icons.Trash2 className="w-3 h-3" />
-                        <span>{isDeletingTask ? 'Deleting...' : 'Delete'}</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <Icons.Activity className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No open activities yet</p>
-            </div>
-          )}
-        </div>
-
-        {/* Closed Activities Section */}
-        <div id="section-closed-activities" className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Closed Activities</h3>
-            <button 
-              onClick={() => navigate('/tasks')}
-              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-            >
-              View All
-            </button>
-          </div>
-          
-          {loadingTasks ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-              <p className="text-sm text-gray-500">Loading activities...</p>
-            </div>
-          ) : tasks.filter(task => task.status === 'Completed').length > 0 ? (
-            <div className="space-y-3">
-              {tasks.filter(task => task.status === 'Completed').map((task) => (
-                <div key={task.id} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <Icons.CheckSquare className="w-4 h-4 text-green-600" />
-                        <h4 className="text-sm font-medium text-gray-900">{task.title}</h4>
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Completed
-                        </span>
-                      </div>
-                      {task.description && (
-                        <p className="text-sm text-gray-600 mb-2">{task.description}</p>
-                      )}
-                      <div className="flex items-center space-x-4 text-xs text-gray-500">
-                        <div className="flex items-center space-x-1">
-                          <Icons.User className="w-3 h-3" />
-                          <span>{getUserDisplayName(task.assignee)}</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Icons.Calendar className="w-3 h-3" />
-                          <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Icons.Clock className="w-3 h-3" />
-                          <span>{new Date(task.createdAt).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2 ml-4">
-                      <button
-                        onClick={() => onEditTask(task)}
-                        className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800 transition-colors flex items-center space-x-1"
-                        title="Edit Task"
-                      >
-                        <Icons.Edit className="w-3 h-3" />
-                        <span>Edit</span>
-                      </button>
-                      <button
-                        onClick={() => onDeleteTask(task)}
-                        disabled={isDeletingTask}
-                        className="px-3 py-1 text-sm text-red-600 hover:text-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
-                        title="Delete Task"
-                      >
-                        <Icons.Trash2 className="w-3 h-3" />
-                        <span>{isDeletingTask ? 'Deleting...' : 'Delete'}</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <Icons.CheckCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No closed activities yet</p>
-            </div>
-          )}
-        </div>
-
-        {/* Contacts Section */}
-        <div id="section-contacts" className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Contacts</h3>
-            <button 
-              onClick={() => setIsCreateContactModalOpen(true)}
-              className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
-            >
-              <Icons.Plus className="w-4 h-4 mr-1" />
-              Create Contact for Product
-            </button>
-          </div>
-          
-          {loadingContacts ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-              <p className="text-sm text-gray-500">Loading contacts...</p>
-            </div>
-          ) : relatedContacts.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contact
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Company
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contact Info
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Owner
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {relatedContacts.map((contact) => (
-                    <tr key={contact.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-8 w-8">
-                            <Icons.User className="h-6 w-6 text-blue-600" />
-                          </div>
-                          <div className="ml-4">
-                            <button
-                              onClick={() => navigate(`/contacts/${contact.id}`)}
-                              className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors text-left"
-                            >
-                              {contact.firstName} {contact.lastName}
-                            </button>
-                            <div className="text-sm text-gray-500">{contact.title || '—'}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {contact.companyName}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{contact.email || '—'}</div>
-                        <div className="text-sm text-gray-500">{contact.phone || '—'}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {getUserDisplayName(contact.contactOwner)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => handleRemoveContact(contact.id)}
-                          className="text-red-600 hover:text-red-900 transition-colors"
-                          title="Remove Contact"
-                        >
-                          <Icons.X className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <Icons.Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No contacts associated yet</p>
-            </div>
-          )}
-        </div>
-
-        {/* Leads Section */}
-        <div id="section-leads" className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Leads</h3>
-            <button 
-              onClick={() => setIsCreateLeadModalOpen(true)}
-              className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
-            >
-              <Icons.Plus className="w-4 h-4 mr-1" />
-              Create Lead for Product
-            </button>
-          </div>
-          
-          {loadingLeads ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-              <p className="text-sm text-gray-500">Loading leads...</p>
-            </div>
-          ) : relatedLeads.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Lead
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Company
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contact
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Owner
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {relatedLeads.map((lead) => (
-                    <tr key={lead.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-8 w-8">
-                            <Icons.User className="h-6 w-6 text-blue-600" />
-                          </div>
-                          <div className="ml-4">
-                            <button
-                              onClick={() => navigate(`/leads/${lead.id}`)}
-                              className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors text-left"
-                            >
-                              {lead.firstName} {lead.lastName}
-                            </button>
-                            <div className="text-sm text-gray-500">{lead.title || '—'}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          lead.leadStatus === 'New' ? 'bg-blue-100 text-blue-800' :
-                          lead.leadStatus === 'Qualified' ? 'bg-green-100 text-green-800' :
-                          lead.leadStatus === 'Contacted' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {lead.leadStatus}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {lead.company}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{lead.email || '—'}</div>
-                        <div className="text-sm text-gray-500">{lead.phone || '—'}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {getUserDisplayName(lead.leadOwner)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => handleRemoveLead(lead.id)}
-                          className="text-red-600 hover:text-red-900 transition-colors"
-                          title="Remove Lead"
-                        >
-                          <Icons.X className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <Icons.UserPlus className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No leads associated yet</p>
-            </div>
-          )}
-        </div>
-
-        {/* Audit Information */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Audit Information</h3>
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Created:</span>
-              <span className="text-gray-900">{new Date(product.createdAt || '').toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Created By:</span>
-              <span className="text-gray-900">{product.createdBy ? getUserDisplayName(product.createdBy) : 'Unknown User'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Updated:</span>
-              <span className="text-gray-900">{product.updatedAt ? new Date(product.updatedAt).toLocaleString() : 'Not updated'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Updated By:</span>
-              <span className="text-gray-900">{product.updatedBy ? getUserDisplayName(product.updatedBy) : 'Unknown User'}</span>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };

@@ -10,7 +10,14 @@ interface QuoteSidebarProps {
 const QuoteSidebar: React.FC<QuoteSidebarProps> = ({ quote, tasks = [] }) => {
   // Calculate counts based on quote data
   const getNotesCount = () => {
-    return quote.notes ? 1 : 0;
+    if (!quote.notes || quote.notes.trim() === '') {
+      return 0;
+    }
+    
+    // Notes are stored as timestamp: content separated by \n\n
+    // Count the number of note entries
+    const noteEntries = quote.notes.split('\n\n').filter(entry => entry.trim() !== '');
+    return noteEntries.length;
   };
 
   const getOpenActivitiesCount = () => {

@@ -1,26 +1,57 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import * as Icons from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
+import { usersApi } from '../api/services';
 
 const SuperAdminHome: React.FC = () => {
   const today = new Date();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const [adminUsersCount, setAdminUsersCount] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAdminUsersCount = async () => {
+      try {
+        setLoading(true);
+        let users;
+        try {
+          users = await usersApi.getAllUsers();
+        } catch (error) {
+          users = await usersApi.getAll();
+        }
+        
+        // Count only admin users
+        const adminCount = users.filter(user => 
+          user.role?.toUpperCase() === 'ADMIN' || 
+          user.originalRole?.toUpperCase() === 'ADMIN'
+        ).length;
+        
+        setAdminUsersCount(adminCount);
+      } catch (error) {
+        console.error('Failed to fetch admin users count:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchAdminUsersCount();
+  }, []);
 
   const quickActions = [
     {
-      title: 'Organisation Tree',
-      description: 'View and manage the organisational hierarchy',
+      title: 'SuperAdmin Org Tree',
+      description: 'View SuperAdmin and Admin organizational hierarchy',
       icon: Icons.Network,
-      path: '/settings/org-tree',
+      path: '/settings/super-admin-org-tree',
       color: 'bg-blue-500 hover:bg-blue-600'
     },
     {
-      title: 'Access Control',
-      description: 'Manage user roles and permissions',
+                  title: 'Admin Access Control',
+      description: 'Manage Super Admin and Admin user access',
       icon: Icons.Users,
-      path: '/settings/access-control',
+      path: '/settings/super-admin-access-control',
       color: 'bg-green-500 hover:bg-green-600'
     },
     {
@@ -74,6 +105,12 @@ const SuperAdminHome: React.FC = () => {
             <Icons.Shield className="w-5 h-5 text-purple-600" />
             <span className="text-sm font-medium text-gray-700">Super Admin Access</span>
           </div>
+        <div className="flex items-center gap-3 bg-blue-100 px-4 py-2 rounded-lg">
+          <Icons.Users className="w-5 h-5 text-blue-600" />
+          <span className="text-sm font-medium text-blue-800">
+            {loading ? 'Loading...' : `Total Admins: ${adminUsersCount}`}
+          </span>
+        </div>
         </div>
       </div>
 

@@ -5,9 +5,10 @@ import { Contact, Task } from '../../api/services';
 interface ContactSidebarProps {
   contact?: Contact;
   tasks?: Task[];
+  dealsCount?: number;
 }
 
-const ContactSidebar: React.FC<ContactSidebarProps> = ({ contact, tasks = [] }) => {
+const ContactSidebar: React.FC<ContactSidebarProps> = ({ contact, tasks = [], dealsCount }) => {
   const getOpenActivitiesCount = () => {
     return tasks.filter(task => task.status !== 'Completed').length;
   };
@@ -18,6 +19,7 @@ const ContactSidebar: React.FC<ContactSidebarProps> = ({ contact, tasks = [] }) 
 
   const sidebarItems = [
     { id: 'notes', label: 'Notes', icon: Icons.FileText, count: contact?.notes ? contact.notes.split('\n\n').length : 0 },
+    { id: 'deals', label: 'Deals', icon: Icons.Target, count: dealsCount || 0 },
     { id: 'openActivities', label: 'Open Activities', icon: Icons.Activity, count: getOpenActivitiesCount() },
     { id: 'closedActivities', label: 'Closed Activities', icon: Icons.CheckCircle, count: getClosedActivitiesCount() },
     { id: 'products', label: 'Products', icon: Icons.Package, count: contact?.relatedProductIds?.length || 0 },

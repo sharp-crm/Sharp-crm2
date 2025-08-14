@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { Deal, dealsApi, Product, productsApi, Task, tasksApi, usersApi, Quote, quotesApi, Contact, contactsApi } from '../../api/services';
 import { useToastStore } from '../../store/useToastStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import AddNewModal from '../Common/AddNewModal';
 import EditTaskModal from '../EditTaskModal';
 import ProductSelectionModal from '../ContactDetails/ProductSelectionModal';
@@ -85,6 +86,7 @@ const OverviewTab: React.FC<{
   onTasksUpdate
 }) => {
   const { addToast } = useToastStore();
+  const { user } = useAuthStore();
   const navigate = useNavigate();
   const [newNote, setNewNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -106,6 +108,7 @@ const OverviewTab: React.FC<{
   const [loadingQuotes, setLoadingQuotes] = useState(false);
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
   const [isAddQuoteModalOpen, setIsAddQuoteModalOpen] = useState(false);
+  const [isCreateQuoteModalOpen, setIsCreateQuoteModalOpen] = useState(false);
   const [relatedContacts, setRelatedContacts] = useState<Contact[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false);
@@ -255,81 +258,6 @@ const OverviewTab: React.FC<{
         }
       };
 
-      const fetchRelatedProducts = async () => {
-        try {
-          setLoadingProducts(true);
-          if (deal.relatedProductIds && deal.relatedProductIds.length > 0) {
-            const products = await Promise.all(
-              deal.relatedProductIds.map(async (productId) => {
-                try {
-                  return await productsApi.getById(productId);
-                } catch (error) {
-                  console.error(`Error fetching product ${productId}:`, error);
-                  return null;
-                }
-              })
-            );
-            setRelatedProducts(products.filter(Boolean) as Product[]);
-          } else {
-            setRelatedProducts([]);
-          }
-        } catch (error) {
-          console.error('Error fetching related products:', error);
-        } finally {
-          setLoadingProducts(false);
-        }
-      };
-
-      const fetchRelatedQuotes = async () => {
-        try {
-          setLoadingQuotes(true);
-          if (deal.relatedQuoteIds && deal.relatedQuoteIds.length > 0) {
-            const quotes = await Promise.all(
-              deal.relatedQuoteIds.map(async (quoteId) => {
-                try {
-                  return await quotesApi.getById(quoteId);
-                } catch (error) {
-                  console.error(`Error fetching quote ${quoteId}:`, error);
-                  return null;
-                }
-              })
-            );
-            setRelatedQuotes(quotes.filter(Boolean) as Quote[]);
-          } else {
-            setRelatedQuotes([]);
-          }
-        } catch (error) {
-          console.error('Error fetching related quotes:', error);
-        } finally {
-          setLoadingQuotes(false);
-        }
-      };
-
-      const fetchRelatedContacts = async () => {
-        try {
-          setLoadingContacts(true);
-          if (deal.relatedContactIds && deal.relatedContactIds.length > 0) {
-            const contacts = await Promise.all(
-              deal.relatedContactIds.map(async (contactId) => {
-                try {
-                  return await contactsApi.getById(contactId);
-                } catch (error) {
-                  console.error(`Error fetching contact ${contactId}:`, error);
-                  return null;
-                }
-              })
-            );
-            setRelatedContacts(contacts.filter(Boolean) as Contact[]);
-          } else {
-            setRelatedContacts([]);
-          }
-        } catch (error) {
-          console.error('Error fetching related contacts:', error);
-        } finally {
-          setLoadingContacts(false);
-        }
-      };
-
       fetchUsers();
       fetchDealTasks();
       fetchRelatedProducts();
@@ -340,73 +268,14 @@ const OverviewTab: React.FC<{
 
   // Additional useEffect to refetch related data when deal data changes
   useEffect(() => {
-    const fetchRelatedProducts = async () => {
-      try {
-        console.log('🔍 [fetchRelatedProducts] Starting with deal.relatedProductIds:', deal.relatedProductIds);
-        setLoadingProducts(true);
-        if (deal.relatedProductIds && deal.relatedProductIds.length > 0) {
-          const products = await Promise.all(
-            deal.relatedProductIds.map(async (productId) => {
-              try {
-                console.log('🔍 [fetchRelatedProducts] Fetching product:', productId);
-                return await productsApi.getById(productId);
-              } catch (error) {
-                console.error(`Error fetching product ${productId}:`, error);
-                return null;
-              }
-            })
-          );
-          const filteredProducts = products.filter(Boolean) as Product[];
-          console.log('🔍 [fetchRelatedProducts] Fetched products:', filteredProducts);
-          setRelatedProducts(filteredProducts);
-        } else {
-          console.log('🔍 [fetchRelatedProducts] No related product IDs, setting empty array');
-          setRelatedProducts([]);
-        }
-      } catch (error) {
-        console.error('Error fetching related products:', error);
-      } finally {
-        setLoadingProducts(false);
-      }
-    };
-
-    const fetchRelatedQuotes = async () => {
-      try {
-        console.log('🔍 [fetchRelatedQuotes] Starting with deal.relatedQuoteIds:', deal.relatedQuoteIds);
-        setLoadingQuotes(true);
-        if (deal.relatedQuoteIds && deal.relatedQuoteIds.length > 0) {
-          const quotes = await Promise.all(
-            deal.relatedQuoteIds.map(async (quoteId) => {
-              try {
-                console.log('🔍 [fetchRelatedQuotes] Fetching quote:', quoteId);
-                return await quotesApi.getById(quoteId);
-              } catch (error) {
-                console.error(`Error fetching quote ${quoteId}:`, error);
-                return null;
-              }
-            })
-          );
-          const filteredQuotes = quotes.filter(Boolean) as Quote[];
-          console.log('🔍 [fetchRelatedQuotes] Fetched quotes:', filteredQuotes);
-          setRelatedQuotes(filteredQuotes);
-        } else {
-          console.log('🔍 [fetchRelatedQuotes] No related quote IDs, setting empty array');
-          setRelatedQuotes([]);
-        }
-      } catch (error) {
-        console.error('Error fetching related quotes:', error);
-      } finally {
-        setLoadingQuotes(false);
-      }
-    };
-
     // Only fetch if we have a deal and it has related IDs
-    if (deal && (deal.relatedProductIds || deal.relatedQuoteIds)) {
+    if (deal && (deal.relatedProductIds || deal.relatedQuoteIds || deal.relatedContactIds)) {
       console.log('🔍 [useEffect] Deal data changed, refetching related data');
       fetchRelatedProducts();
       fetchRelatedQuotes();
+      fetchRelatedContacts();
     }
-  }, [deal.relatedProductIds, deal.relatedQuoteIds]);
+  }, [deal.relatedProductIds, deal.relatedQuoteIds, deal.relatedContactIds]);
 
   const handleTaskCreated = async () => {
     try {
@@ -577,6 +446,9 @@ const OverviewTab: React.FC<{
         onDealUpdate(updatedDeal);
       }
       
+      // Refresh products to show the new product immediately
+      refreshProducts();
+      
       setIsAddProductModalOpen(false);
       addToast({
         type: 'success',
@@ -606,6 +478,9 @@ const OverviewTab: React.FC<{
         onDealUpdate(updatedDeal);
       }
       
+      // Refresh products to show the updated list immediately
+      refreshProducts();
+      
       addToast({
         type: 'success',
         title: 'Success',
@@ -620,40 +495,36 @@ const OverviewTab: React.FC<{
     }
   };
 
+  // Quote management functions
   const handleAddQuote = async (quoteId: string) => {
     try {
-      console.log('🔍 [handleAddQuote] Starting with quoteId:', quoteId);
-      console.log('🔍 [handleAddQuote] Current deal:', deal);
-      
       const currentQuoteIds = deal.relatedQuoteIds || [];
       const updatedQuoteIds = [...currentQuoteIds, quoteId];
-      
-      console.log('🔍 [handleAddQuote] Current quote IDs:', currentQuoteIds);
-      console.log('🔍 [handleAddQuote] Updated quote IDs:', updatedQuoteIds);
-      
-      const updateData = { relatedQuoteIds: updatedQuoteIds };
-      console.log('🔍 [handleAddQuote] Sending update data:', updateData);
-      
-      const updatedDeal = await dealsApi.update(deal.id, updateData);
-      
-      console.log('🔍 [handleAddQuote] Response from backend:', updatedDeal);
-      
-      if (onDealUpdate) {
-        onDealUpdate(updatedDeal);
-      }
-      
-      setIsAddQuoteModalOpen(false);
+
+      // Update the deal with the new quote
+      const updatedDeal = await dealsApi.update(deal.id, { 
+        relatedQuoteIds: updatedQuoteIds 
+      });
+
       addToast({
         type: 'success',
-        title: 'Success',
-        message: 'Quote added successfully'
+        title: 'Quote Added',
+        message: 'Quote has been successfully added to the deal.'
       });
+
+      // Update the parent component
+      if (onDealUpdate && updatedDeal) {
+        onDealUpdate(updatedDeal);
+      }
+
+      // Refresh quotes to show the new quote immediately
+      refreshQuotes();
     } catch (error) {
-      console.error('🔍 [handleAddQuote] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add quote to deal.';
       addToast({
         type: 'error',
         title: 'Error',
-        message: 'Failed to add quote'
+        message: errorMessage
       });
     }
   };
@@ -662,41 +533,169 @@ const OverviewTab: React.FC<{
     try {
       const currentQuoteIds = deal.relatedQuoteIds || [];
       const updatedQuoteIds = currentQuoteIds.filter(id => id !== quoteId);
-      
+
+      // Update the deal by removing the quote
       const updatedDeal = await dealsApi.update(deal.id, { 
         relatedQuoteIds: updatedQuoteIds 
       });
-      
-      if (onDealUpdate) {
-        onDealUpdate(updatedDeal);
-      }
-      
+
       addToast({
         type: 'success',
-        title: 'Success',
-        message: 'Quote removed successfully'
+        title: 'Quote Removed',
+        message: 'Quote has been successfully removed from the deal.'
       });
+
+      // Update the parent component
+      if (onDealUpdate && updatedDeal) {
+        onDealUpdate(updatedDeal);
+      }
+
+      // Refresh quotes to show the updated list immediately
+      refreshQuotes();
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to remove quote from deal.';
       addToast({
         type: 'error',
         title: 'Error',
-        message: 'Failed to remove quote'
+        message: errorMessage
       });
+    }
+  };
+
+  // Helper function to refresh quotes
+  const refreshQuotes = async () => {
+    try {
+      console.log('🔍 [refreshQuotes] Refreshing quotes...');
+      await fetchRelatedQuotes();
+      console.log('🔍 [refreshQuotes] Quotes refreshed successfully');
+    } catch (error) {
+      console.error('Error refreshing quotes:', error);
+    }
+  };
+
+  // Helper function to refresh contacts
+  const refreshContacts = async () => {
+    try {
+      console.log('🔍 [refreshContacts] Refreshing contacts...');
+      await fetchRelatedContacts();
+      console.log('🔍 [refreshContacts] Contacts refreshed successfully');
+    } catch (error) {
+      console.error('Error refreshing contacts:', error);
+    }
+  };
+
+  // Helper function to refresh products
+  const refreshProducts = async () => {
+    try {
+      console.log('🔍 [refreshProducts] Refreshing products...');
+      await fetchRelatedProducts();
+      console.log('🔍 [refreshProducts] Products refreshed successfully');
+    } catch (error) {
+      console.error('Error refreshing products:', error);
+    }
+  };
+
+  // Fetch related quotes function
+  const fetchRelatedQuotes = async () => {
+    try {
+      setLoadingQuotes(true);
+      if (deal.relatedQuoteIds && deal.relatedQuoteIds.length > 0) {
+        const quotes = await Promise.all(
+          deal.relatedQuoteIds.map(async (quoteId) => {
+            try {
+              return await quotesApi.getById(quoteId);
+            } catch (error) {
+              console.error(`Error fetching quote ${quoteId}:`, error);
+              return null;
+            }
+          })
+        );
+        setRelatedQuotes(quotes.filter(Boolean) as Quote[]);
+      } else {
+        setRelatedQuotes([]);
+      }
+    } catch (error) {
+      console.error('Error fetching related quotes:', error);
+    } finally {
+      setLoadingQuotes(false);
+    }
+  };
+
+  // Fetch related products function
+  const fetchRelatedProducts = async () => {
+    try {
+      setLoadingProducts(true);
+      if (deal.relatedProductIds && deal.relatedProductIds.length > 0) {
+        const products = await Promise.all(
+          deal.relatedProductIds.map(async (productId) => {
+            try {
+              return await productsApi.getById(productId);
+            } catch (error) {
+              console.error(`Error fetching product ${productId}:`, error);
+              return null;
+            }
+          })
+        );
+        setRelatedProducts(products.filter(Boolean) as Product[]);
+      } else {
+        setRelatedProducts([]);
+      }
+    } catch (error) {
+      console.error('Error fetching related products:', error);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
+  // Fetch related contacts function
+  const fetchRelatedContacts = async () => {
+    try {
+      setLoadingContacts(true);
+      if (deal.relatedContactIds && deal.relatedContactIds.length > 0) {
+        const contacts = await Promise.all(
+          deal.relatedContactIds.map(async (contactId) => {
+            try {
+              return await contactsApi.getById(contactId);
+            } catch (error) {
+              console.error(`Error fetching contact ${contactId}:`, error);
+              return null;
+            }
+          })
+        );
+        setRelatedContacts(contacts.filter(Boolean) as Contact[]);
+      } else {
+        setRelatedContacts([]);
+      }
+    } catch (error) {
+      console.error('Error fetching related contacts:', error);
+    } finally {
+      setLoadingContacts(false);
     }
   };
 
   const handleAddContact = async (contactId: string) => {
     try {
+      console.log('🔍 [handleAddContact] Adding contact:', contactId, 'to deal:', deal.id);
+      
       const currentContactIds = deal.relatedContactIds || [];
       const updatedContactIds = [...currentContactIds, contactId];
+      
+      console.log('🔍 [handleAddContact] Current contact IDs:', currentContactIds);
+      console.log('🔍 [handleAddContact] Updated contact IDs:', updatedContactIds);
       
       const updatedDeal = await dealsApi.update(deal.id, { 
         relatedContactIds: updatedContactIds 
       });
       
+      console.log('🔍 [handleAddContact] Deal updated successfully:', updatedDeal?.id);
+      
       if (onDealUpdate) {
         onDealUpdate(updatedDeal);
       }
+      
+      // Refresh contacts to show the new contact immediately
+      console.log('🔍 [handleAddContact] Refreshing contacts...');
+      refreshContacts();
       
       setIsAddContactModalOpen(false);
       addToast({
@@ -705,6 +704,7 @@ const OverviewTab: React.FC<{
         message: 'Contact added successfully'
       });
     } catch (error) {
+      console.error('🔍 [handleAddContact] Error:', error);
       addToast({
         type: 'error',
         title: 'Error',
@@ -715,16 +715,27 @@ const OverviewTab: React.FC<{
 
   const handleRemoveContact = async (contactId: string) => {
     try {
+      console.log('🔍 [handleRemoveContact] Removing contact:', contactId, 'from deal:', deal.id);
+      
       const currentContactIds = deal.relatedContactIds || [];
       const updatedContactIds = currentContactIds.filter(id => id !== contactId);
+      
+      console.log('🔍 [handleRemoveContact] Current contact IDs:', currentContactIds);
+      console.log('🔍 [handleRemoveContact] Updated contact IDs:', updatedContactIds);
       
       const updatedDeal = await dealsApi.update(deal.id, { 
         relatedContactIds: updatedContactIds 
       });
       
+      console.log('🔍 [handleRemoveContact] Deal updated successfully:', updatedDeal?.id);
+      
       if (onDealUpdate) {
         onDealUpdate(updatedDeal);
       }
+      
+      // Refresh contacts to show the updated list immediately
+      console.log('🔍 [handleRemoveContact] Refreshing contacts...');
+      refreshContacts();
       
       addToast({
         type: 'success',
@@ -732,6 +743,7 @@ const OverviewTab: React.FC<{
         message: 'Contact removed successfully'
       });
     } catch (error) {
+      console.error('🔍 [handleRemoveContact] Error:', error);
       addToast({
         type: 'error',
         title: 'Error',
@@ -963,7 +975,14 @@ const OverviewTab: React.FC<{
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-2">
-                      <h4 className="font-medium text-gray-900">{task.title}</h4>
+                      <h4 className="font-medium text-gray-900">
+                        <button
+                          onClick={() => navigate(`/tasks/${task.id}`)}
+                          className="text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors"
+                        >
+                          {task.title}
+                        </button>
+                      </h4>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
                         {task.priority}
                       </span>
@@ -1025,7 +1044,14 @@ const OverviewTab: React.FC<{
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-2">
-                      <h4 className="font-medium text-gray-900">{task.title}</h4>
+                      <h4 className="font-medium text-gray-900">
+                        <button
+                          onClick={() => navigate(`/tasks/${task.id}`)}
+                          className="text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors"
+                        >
+                          {task.title}
+                        </button>
+                      </h4>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
                         {task.priority}
                       </span>
@@ -1163,13 +1189,22 @@ const OverviewTab: React.FC<{
       <div id="section-quotes" className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold text-gray-900">Quotes</h3>
-          <button
-            onClick={() => setIsAddQuoteModalOpen(true)}
-            className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
-          >
-            <Icons.Plus className="w-4 h-4 mr-1" />
-            Add Quote
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setIsAddQuoteModalOpen(true)}
+              className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
+            >
+              <Icons.Plus className="w-4 h-4 mr-1" />
+              Assign
+            </button>
+            <button
+              onClick={() => setIsCreateQuoteModalOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-2 rounded-lg flex items-center transition-colors"
+            >
+              <Icons.Plus className="w-4 h-4 mr-1" />
+              New
+            </button>
+          </div>
         </div>
 
         {loadingQuotes ? (
@@ -1457,6 +1492,106 @@ const OverviewTab: React.FC<{
         onClose={() => setIsAddContactModalOpen(false)}
         onContactSelect={handleAddContact}
         existingContactIds={deal.relatedContactIds || []}
+      />
+
+      {/* Create New Quote Modal */}
+      <AddNewModal
+        isOpen={isCreateQuoteModalOpen}
+        onClose={() => setIsCreateQuoteModalOpen(false)}
+        defaultType="quote"
+        onSuccess={async () => {
+          setIsCreateQuoteModalOpen(false);
+          
+          // Since the AddNewModal doesn't automatically establish the relationship,
+          // we need to find the most recently created quote and associate it with this deal
+          try {
+            // Get all quotes and find the most recent one created by the current user
+            const allQuotes = await quotesApi.getAll();
+            const currentUserId = user?.userId || '';
+            
+            console.log('🔍 [Create Quote] Looking for quotes created by user:', currentUserId);
+            console.log('🔍 [Create Quote] Total quotes found:', allQuotes.length);
+            
+            if (!currentUserId) {
+              throw new Error('Current user ID not available');
+            }
+            
+            // Find quotes created by the current user within the last 5 minutes
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+            const recentQuotes = allQuotes
+              .filter(quote => {
+                const createdTime = new Date(quote.createdAt);
+                const isRecent = createdTime > fiveMinutesAgo;
+                const isCreatedByUser = quote.createdBy === currentUserId;
+                
+                console.log(`🔍 [Create Quote] Quote ${quote.id}: createdBy=${quote.createdBy}, createdAt=${quote.createdAt}, isRecent=${isRecent}, isCreatedByUser=${isCreatedByUser}`);
+                
+                return isRecent && isCreatedByUser;
+              })
+              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            
+            console.log('🔍 [Create Quote] Recent quotes by current user:', recentQuotes.length);
+            
+            if (recentQuotes.length > 0) {
+              const newestQuote = recentQuotes[0];
+              console.log('🔍 [Create Quote] Newest quote found:', newestQuote.id, newestQuote.quoteName);
+              
+              // Check if this quote is already associated with the deal
+              const currentQuoteIds = deal.relatedQuoteIds || [];
+              if (!currentQuoteIds.includes(newestQuote.id)) {
+                console.log('🔍 [Create Quote] Adding quote to deal:', newestQuote.id);
+                
+                // Add the quote to the deal's relatedQuoteIds
+                const updatedQuoteIds = [...currentQuoteIds, newestQuote.id];
+                const updatedDeal = await dealsApi.update(deal.id, { 
+                  relatedQuoteIds: updatedQuoteIds 
+                });
+                
+                console.log('🔍 [Create Quote] Deal updated successfully:', updatedDeal?.id);
+                
+                // Update the parent component
+                if (onDealUpdate && updatedDeal) {
+                  onDealUpdate(updatedDeal);
+                }
+                
+                // Refresh quotes to show the new quote immediately
+                refreshQuotes();
+                
+                addToast({
+                  type: 'success',
+                  title: 'Quote Created',
+                  message: 'New quote has been created successfully and associated with this deal.'
+                });
+              } else {
+                console.log('🔍 [Create Quote] Quote already associated with deal');
+                addToast({
+                  type: 'success',
+                  title: 'Quote Created',
+                  message: 'New quote has been created successfully and is already associated with this deal.'
+                });
+              }
+            } else {
+              console.log('🔍 [Create Quote] No recent quotes found by current user');
+              throw new Error('No recent quotes found to associate with deal');
+            }
+          } catch (error) {
+            console.error('Error establishing quote-deal relationship:', error);
+            addToast({
+              type: 'warning',
+              title: 'Warning',
+              message: 'Quote created but relationship with deal could not be established. Please manually assign the quote.'
+            });
+          }
+        }}
+        prefillData={{
+          relatedRecordType: 'deal',
+          relatedRecordId: deal?.id,
+          currentDeal: {
+            id: deal?.id,
+            dealName: deal?.dealName || deal?.name
+          }
+        }}
+        key={`create-quote-modal-${deal?.id}`}
       />
     </div>
   );

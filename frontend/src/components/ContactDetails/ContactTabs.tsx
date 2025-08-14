@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
-import { Contact, contactsApi, Product, productsApi, Task, tasksApi, usersApi, Quote, quotesApi } from '../../api/services';
+import { Contact, contactsApi, Product, productsApi, Task, tasksApi, usersApi, Quote, quotesApi, Deal, dealsApi } from '../../api/services';
 import { useToastStore } from '../../store/useToastStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import AddNewModal from '../Common/AddNewModal';
 import EditTaskModal from '../EditTaskModal';
 import ProductSelectionModal from './ProductSelectionModal';
@@ -15,6 +16,7 @@ interface ContactTabsProps {
   getUserDisplayName: (userId: string) => string;
   onContactUpdate?: (updatedContact: Contact) => void;
   onTasksUpdate?: (tasks: Task[]) => void;
+  onDealsUpdate?: (deals: Deal[]) => void;
 }
 
 const ContactTabs: React.FC<ContactTabsProps> = ({
@@ -23,7 +25,8 @@ const ContactTabs: React.FC<ContactTabsProps> = ({
   contact,
   getUserDisplayName,
   onContactUpdate,
-  onTasksUpdate
+  onTasksUpdate,
+  onDealsUpdate
 }) => {
   return (
     <div className="h-full flex flex-col">
@@ -61,6 +64,7 @@ const ContactTabs: React.FC<ContactTabsProps> = ({
             getUserDisplayName={getUserDisplayName}
             onContactUpdate={onContactUpdate}
             onTasksUpdate={onTasksUpdate}
+            onDealsUpdate={onDealsUpdate}
           />
         ) : (
           <TimelineTab contact={contact} getUserDisplayName={getUserDisplayName} />
@@ -76,11 +80,13 @@ const OverviewTab: React.FC<{
   getUserDisplayName: (userId: string) => string;
   onContactUpdate?: (updatedContact: Contact) => void;
   onTasksUpdate?: (tasks: Task[]) => void;
+  onDealsUpdate?: (deals: Deal[]) => void;
 }> = ({
   contact,
   getUserDisplayName,
   onContactUpdate,
-  onTasksUpdate
+  onTasksUpdate,
+  onDealsUpdate
 }) => {
   const { addToast } = useToastStore();
   const [newNote, setNewNote] = useState('');
@@ -106,7 +112,12 @@ const OverviewTab: React.FC<{
   const [relatedQuotes, setRelatedQuotes] = useState<Quote[]>([]);
   const [loadingQuotes, setLoadingQuotes] = useState(false);
   const [isAddQuoteModalOpen, setIsAddQuoteModalOpen] = useState(false);
+  const [isCreateQuoteModalOpen, setIsCreateQuoteModalOpen] = useState(false);
+  const [relatedDeals, setRelatedDeals] = useState<Deal[]>([]);
+  const [loadingDeals, setLoadingDeals] = useState(false);
+  const [isAddDealModalOpen, setIsAddDealModalOpen] = useState(false);
   const navigate = useNavigate();
+  const { user } = useAuthStore();
 
   const handleAddNote = async () => {
     if (!newNote.trim()) {
@@ -323,6 +334,7 @@ const OverviewTab: React.FC<{
     const fetchRelatedQuotes = async () => {
       if (!contact.relatedQuoteIds || contact.relatedQuoteIds.length === 0) {
         setRelatedQuotes([]);
+        setLoadingQuotes(false);
         return;
       }
 
@@ -346,6 +358,46 @@ const OverviewTab: React.FC<{
 
     fetchRelatedQuotes();
   }, [contact.relatedQuoteIds]);
+
+  // Fetch related deals
+  useEffect(() => {
+    const fetchRelatedDeals = async () => {
+      setLoadingDeals(true);
+      try {
+        // Get all deals and filter for those that have this contact in their relatedContactIds
+        const allDeals = await dealsApi.getAll();
+        const dealsWithContact = allDeals.filter(deal => 
+          deal.relatedContactIds && deal.relatedContactIds.includes(contact.id)
+        );
+        setRelatedDeals(dealsWithContact);
+        
+        // Update parent component with deals count
+        if (onDealsUpdate) {
+          onDealsUpdate(dealsWithContact);
+        }
+      } catch (error) {
+        console.error('Error fetching related deals:', error);
+        addToast({
+          type: 'error',
+          title: 'Error',
+          message: 'Failed to fetch related deals.'
+        });
+      } finally {
+        setLoadingDeals(false);
+      }
+    };
+
+    fetchRelatedDeals();
+  }, [contact.id, onDealsUpdate]);
+
+  // Refresh deals when contact changes
+  useEffect(() => {
+    if (contact.id) {
+      // Only fetch if we have a contact
+      console.log('🔍 [useEffect] Contact changed, refetching deals');
+      refreshDeals();
+    }
+  }, [contact.id]);
 
   const handleTaskCreated = async () => {
     if (contact?.id) {
@@ -630,6 +682,91 @@ const OverviewTab: React.FC<{
     }
   };
 
+  const handleRemoveDeal = async (dealId: string) => {
+    if (!confirm('Are you sure you want to remove this deal from the contact?')) {
+      return;
+    }
+
+    try {
+      // Get the deal and remove this contact from its relatedContactIds
+      const deal = await dealsApi.getById(dealId);
+      if (deal && deal.relatedContactIds) {
+        const updatedContactIds = deal.relatedContactIds.filter(id => id !== contact.id);
+        await dealsApi.update(dealId, { 
+          relatedContactIds: updatedContactIds 
+        });
+      }
+
+      addToast({
+        type: 'success',
+        title: 'Deal Removed',
+        message: 'Deal has been successfully removed from the contact.'
+      });
+
+      // Refresh deals to update the UI
+      refreshDeals();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to remove deal';
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: errorMessage
+      });
+    }
+  };
+
+  const refreshQuotes = async () => {
+    try {
+      const refreshedContact = await contactsApi.getById(contact.id);
+      if (refreshedContact && onContactUpdate) {
+        onContactUpdate(refreshedContact);
+      }
+      
+      // Also refresh the local quotes state
+      if (refreshedContact?.relatedQuoteIds && refreshedContact.relatedQuoteIds.length > 0) {
+        const quotes = await Promise.all(
+          refreshedContact.relatedQuoteIds.map(id => quotesApi.getById(id))
+        );
+        setRelatedQuotes(quotes.filter(Boolean) as Quote[]);
+      } else {
+        setRelatedQuotes([]);
+      }
+      
+      return refreshedContact;
+    } catch (error) {
+      console.error('Error refreshing quotes:', error);
+      return null;
+    }
+  };
+
+  const refreshDeals = async () => {
+    try {
+      console.log('🔍 [refreshDeals] Refreshing deals...');
+      
+      // Get all deals and filter for those that have this contact in their relatedContactIds
+      const allDeals = await dealsApi.getAll();
+      const dealsWithContact = allDeals.filter(deal => 
+        deal.relatedContactIds && deal.relatedContactIds.includes(contact.id)
+      );
+      
+      console.log('🔍 [refreshDeals] Found deals with this contact:', dealsWithContact.length);
+      
+      // Update local state
+      setRelatedDeals(dealsWithContact);
+      
+      // Update parent component with deals count
+      if (onDealsUpdate) {
+        onDealsUpdate(dealsWithContact);
+      }
+      
+      console.log('🔍 [refreshDeals] Deals refreshed successfully');
+      return dealsWithContact;
+    } catch (error) {
+      console.error('Error refreshing deals:', error);
+      return [];
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -838,6 +975,164 @@ const OverviewTab: React.FC<{
           </div>
         </div>
 
+        {/* Deals Section */}
+        <div id="section-deals" className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Deals</h3>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button 
+                onClick={async () => {
+                  try {
+                    // Sync existing deals that might not be properly linked
+                    const allDeals = await dealsApi.getAll();
+                    const dealsWithThisContact = allDeals.filter(deal => 
+                      deal.relatedContactIds && deal.relatedContactIds.includes(contact.id)
+                    );
+                    
+                    if (dealsWithThisContact.length > 0) {
+                      addToast({
+                        type: 'success',
+                        title: 'Deals Synced',
+                        message: `Found and linked ${dealsWithThisContact.length} existing deals to this contact.`
+                      });
+                      
+                      // Refresh deals to show the synced deals immediately
+                      await refreshDeals();
+                    } else {
+                      addToast({
+                        type: 'info',
+                        title: 'No Deals Found',
+                        message: 'No existing deals were found to sync with this contact.'
+                      });
+                    }
+                  } catch (error) {
+                    console.error('Error syncing deals:', error);
+                    addToast({
+                      type: 'error',
+                      title: 'Error',
+                      message: 'Failed to sync deals. Please try again.'
+                    });
+                  }
+                }}
+                className="text-gray-600 hover:text-gray-800 text-sm font-medium flex items-center"
+                title="Sync existing deals"
+              >
+                <Icons.RefreshCw className="w-4 h-4 mr-1" />
+                Sync
+              </button>
+              <button 
+                onClick={() => setIsAddDealModalOpen(true)}
+                className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
+              >
+                <Icons.Plus className="w-4 h-4 mr-1" />
+                Add Deal
+              </button>
+            </div>
+          </div>
+          
+          {loadingDeals ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+              <p className="text-sm text-gray-500">Loading deals...</p>
+            </div>
+          ) : relatedDeals.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Deal
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Stage
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Owner
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Amount
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Close Date
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {relatedDeals.map((deal) => (
+                    <tr key={deal.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-8 w-8">
+                            <Icons.Target className="h-6 w-6 text-blue-600" />
+                          </div>
+                          <div className="ml-4">
+                            <button
+                              onClick={() => navigate(`/deals/${deal.id}`)}
+                              className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors text-left"
+                            >
+                              {deal.dealName || deal.name}
+                            </button>
+                            <div className="text-sm text-gray-500">{deal.id}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          deal.stage === 'Closed Won' ? 'bg-green-100 text-green-800' :
+                          deal.stage === 'Closed Lost' ? 'bg-red-100 text-red-800' :
+                          deal.stage === 'Closed Lost to Competition' ? 'bg-red-100 text-red-800' :
+                          deal.stage === 'Needs Analysis' ? 'bg-blue-100 text-blue-800' :
+                          deal.stage === 'Value Proposition' ? 'bg-yellow-100 text-yellow-800' :
+                          deal.stage === 'Identify Decision Makers' ? 'bg-purple-100 text-purple-800' :
+                          deal.stage === 'Negotiation/Review' ? 'bg-orange-100 text-orange-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {deal.stage || 'Unknown'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {getUserDisplayName(deal.dealOwner || deal.owner || '')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                        ${deal.amount?.toLocaleString() || '0'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {deal.closeDate ? new Date(deal.closeDate).toLocaleDateString() : '—'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button
+                          onClick={() => navigate(`/deals/${deal.id}`)}
+                          className="text-blue-600 hover:text-blue-800 transition-colors mr-2"
+                          title="View Deal"
+                        >
+                          <Icons.Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleRemoveDeal(deal.id)}
+                          className="text-red-600 hover:text-red-900 transition-colors"
+                          title="Remove Deal"
+                        >
+                          <Icons.X className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <Icons.Target className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">No deals associated yet</p>
+            </div>
+          )}
+        </div>
+
         {/* Open Activities Section */}
         <div id="section-openActivities" className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
@@ -864,7 +1159,14 @@ const OverviewTab: React.FC<{
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-2">
                         <Icons.CheckSquare className="w-4 h-4 text-blue-600" />
-                        <h4 className="text-sm font-medium text-gray-900">{task.title}</h4>
+                        <h4 className="text-sm font-medium text-gray-900">
+                          <button
+                            onClick={() => navigate(`/tasks/${task.id}`)}
+                            className="text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors"
+                          >
+                            {task.title}
+                          </button>
+                        </h4>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           task.priority === 'High' ? 'bg-red-100 text-red-800' :
                           task.priority === 'Normal' ? 'bg-yellow-100 text-yellow-800' :
@@ -963,7 +1265,14 @@ const OverviewTab: React.FC<{
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-2">
                         <Icons.CheckSquare className="w-4 h-4 text-green-600" />
-                        <h4 className="text-sm font-medium text-gray-900">{task.title}</h4>
+                        <h4 className="text-sm font-medium text-gray-900">
+                          <button
+                            onClick={() => navigate(`/tasks/${task.id}`)}
+                            className="text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors"
+                          >
+                            {task.title}
+                          </button>
+                        </h4>
                         <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                           Completed
                         </span>
@@ -1123,13 +1432,22 @@ const OverviewTab: React.FC<{
         <div id="section-quotes" className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Quotes</h3>
-            <button 
-              onClick={() => setIsAddQuoteModalOpen(true)}
-              className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
-            >
-              <Icons.Plus className="w-4 h-4 mr-1" />
-              Add Quote
-            </button>
+            <div className="flex items-center space-x-2">
+              <button 
+                onClick={() => setIsAddQuoteModalOpen(true)}
+                className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
+              >
+                <Icons.Plus className="w-4 h-4 mr-1" />
+                Assign
+              </button>
+              <button 
+                onClick={() => setIsCreateQuoteModalOpen(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-1 rounded-lg flex items-center"
+              >
+                <Icons.Plus className="w-4 h-4 mr-1" />
+                New
+              </button>
+            </div>
           </div>
           
           {loadingQuotes ? (
@@ -1308,6 +1626,231 @@ const OverviewTab: React.FC<{
         onClose={() => setIsAddQuoteModalOpen(false)}
         onQuoteSelect={handleAddQuote}
         existingQuoteIds={contact.relatedQuoteIds || []}
+      />
+
+      {/* Create New Quote Modal */}
+      <AddNewModal
+        isOpen={isCreateQuoteModalOpen}
+        onClose={() => setIsCreateQuoteModalOpen(false)}
+        defaultType="quote"
+        onSuccess={async () => {
+          setIsCreateQuoteModalOpen(false);
+          
+          try {
+            console.log('🔍 [handleCreateQuote] Quote created successfully, establishing relationship...');
+            
+            // Show loading state
+            setLoadingQuotes(true);
+            
+            // Get all quotes and find the most recent one created by the current user
+            const allQuotes = await quotesApi.getAll();
+            const currentUserId = user?.userId || '';
+            
+            console.log('🔍 [handleCreateQuote] Looking for quotes created by user:', currentUserId);
+            console.log('🔍 [handleCreateQuote] Total quotes found:', allQuotes.length);
+            
+            if (!currentUserId) {
+              throw new Error('Current user ID not available');
+            }
+            
+            // Find quotes created by the current user within the last 5 minutes
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+            const recentQuotes = allQuotes
+              .filter(quote => {
+                const createdTime = new Date(quote.createdAt);
+                const isRecent = createdTime > fiveMinutesAgo;
+                const isCreatedByUser = quote.createdBy === currentUserId;
+                
+                console.log(`🔍 [handleCreateQuote] Quote ${quote.id}: createdBy=${quote.createdBy}, createdAt=${quote.createdAt}, isRecent=${isRecent}, isCreatedByUser=${isCreatedByUser}`);
+                
+                return isRecent && isCreatedByUser;
+              })
+              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            
+            console.log('🔍 [handleCreateQuote] Recent quotes by current user:', recentQuotes.length);
+            
+            if (recentQuotes.length > 0) {
+              const newestQuote = recentQuotes[0];
+              console.log('🔍 [handleCreateQuote] Newest quote found:', newestQuote.id, newestQuote.quoteName);
+              
+              // Check if this quote is already associated with the contact
+              const currentQuoteIds = contact.relatedQuoteIds || [];
+              if (!currentQuoteIds.includes(newestQuote.id)) {
+                console.log('🔍 [handleCreateQuote] Adding quote to contact:', newestQuote.id);
+                
+                // Update the contact to include this quote in relatedQuoteIds
+                const updatedQuoteIds = [...currentQuoteIds, newestQuote.id];
+                const updatedContact = await contactsApi.update(contact.id, {
+                  relatedQuoteIds: updatedQuoteIds
+                });
+                
+                console.log('🔍 [handleCreateQuote] Contact updated successfully:', updatedContact?.id);
+                
+                if (updatedContact && onContactUpdate) {
+                  onContactUpdate(updatedContact);
+                }
+                
+                // Refresh quotes to show the new quote immediately
+                await refreshQuotes();
+                
+                addToast({
+                  type: 'success',
+                  title: 'Quote Created',
+                  message: 'New quote has been created successfully and associated with this contact.'
+                });
+              } else {
+                console.log('🔍 [handleCreateQuote] Quote already associated with contact');
+                addToast({
+                  type: 'success',
+                  title: 'Quote Created',
+                  message: 'New quote has been created successfully and is already associated with this contact.'
+                });
+              }
+            } else {
+              console.log('🔍 [handleCreateQuote] No recent quotes found by current user');
+              throw new Error('No recent quotes found to associate with contact');
+            }
+          } catch (error) {
+            console.error('🔍 [handleCreateQuote] Error:', error);
+            addToast({
+              type: 'warning',
+              title: 'Warning',
+              message: 'Quote created but relationship with contact could not be established. Please manually associate the quote.'
+            });
+          } finally {
+            setLoadingQuotes(false);
+          }
+        }}
+        prefillData={{
+          relatedRecordType: 'contact',
+          relatedRecordId: contact?.id,
+          contactLeadType: 'contact',
+          contactLeadId: contact?.id,
+          currentContact: {
+            id: contact?.id,
+            firstName: contact?.firstName,
+            lastName: contact?.lastName
+          }
+        }}
+        key={`create-quote-modal-${contact?.id}`}
+      />
+
+      {/* Add Deal Modal */}
+      <AddNewModal
+        isOpen={isAddDealModalOpen}
+        onClose={() => setIsAddDealModalOpen(false)}
+        defaultType="deal"
+        onSuccess={async () => {
+          setIsAddDealModalOpen(false);
+          
+          try {
+            console.log('🔍 [handleCreateDeal] Deal created successfully, establishing bidirectional relationship...');
+            
+            // Show loading state
+            setLoadingDeals(true);
+            
+            // Get all deals and find the most recent one created by the current user
+            const allDeals = await dealsApi.getAll();
+            const currentUserId = user?.userId || '';
+            
+            console.log('🔍 [handleCreateDeal] Looking for deals created by user:', currentUserId);
+            console.log('🔍 [handleCreateDeal] Total deals found:', allDeals.length);
+            
+            if (!currentUserId) {
+              throw new Error('Current user ID not available');
+            }
+            
+            // Find deals created by the current user within the last 5 minutes
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+            const recentDeals = allDeals
+              .filter(deal => {
+                const createdTime = new Date(deal.createdAt);
+                const isRecent = createdTime > fiveMinutesAgo;
+                const isCreatedByUser = deal.createdBy === currentUserId;
+                
+                console.log(`🔍 [handleCreateDeal] Deal ${deal.id}: createdBy=${deal.createdBy}, createdAt=${deal.createdAt}, isRecent=${isRecent}, isCreatedByUser=${isCreatedByUser}`);
+                
+                return isRecent && isCreatedByUser;
+              })
+              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            
+            console.log('🔍 [handleCreateDeal] Recent deals by current user:', recentDeals.length);
+            
+            if (recentDeals.length > 0) {
+              const newestDeal = recentDeals[0];
+              console.log('🔍 [handleCreateDeal] Newest deal found:', newestDeal.id, newestDeal.dealName);
+              
+              // Check if this deal is already associated with the contact
+              const currentContactIds = newestDeal.relatedContactIds || [];
+              if (!currentContactIds.includes(contact.id)) {
+                console.log('🔍 [handleCreateDeal] Adding contact to deal:', contact.id);
+                
+                // Add the contact to the deal's relatedContactIds
+                const updatedContactIds = [...currentContactIds, contact.id];
+                const updatedDeal = await dealsApi.update(newestDeal.id, { 
+                  relatedContactIds: updatedContactIds 
+                });
+                
+                console.log('🔍 [handleCreateDeal] Deal updated successfully:', updatedDeal?.id);
+                
+                // Refresh deals to show the new deal immediately
+                await refreshDeals();
+                
+                addToast({
+                  type: 'success',
+                  title: 'Deal Created',
+                  message: 'New deal has been created successfully and associated with this contact.'
+                });
+              } else {
+                console.log('🔍 [handleCreateDeal] Contact already associated with deal');
+                addToast({
+                  type: 'success',
+                  title: 'Deal Created',
+                  message: 'New deal has been created successfully and is already associated with this contact.'
+                });
+              }
+            } else {
+              console.log('🔍 [handleCreateDeal] No recent deals found by current user');
+              throw new Error('No recent deals found to associate with contact');
+            }
+          } catch (error) {
+            console.error('🔍 [handleCreateDeal] Error:', error);
+            addToast({
+              type: 'warning',
+              title: 'Warning',
+              message: 'Deal created but relationship with contact could not be established. Please manually associate the deal.'
+            });
+          } finally {
+            setLoadingDeals(false);
+          }
+        }}
+        prefillData={{
+          // Prefill with current contact information
+          contactLeadType: 'contact',
+          contactLeadId: contact?.id,
+          contactId: contact?.id, // This will disable contact fields in the deal form
+          currentContact: {
+            id: contact?.id,
+            firstName: contact?.firstName,
+            lastName: contact?.lastName,
+            companyName: contact?.companyName,
+            email: contact?.email,
+            phone: contact?.phone
+          },
+          // Make contact fields read-only by setting them as pre-filled and disabled
+          dealName: `Deal for ${contact?.firstName} ${contact?.lastName}`,
+          leadSource: contact?.leadSource || 'Contact',
+          // Pre-populate with contact's company information
+          companyName: contact?.companyName,
+          // Use the correct field names that the deal form expects
+          email: contact?.email || '',
+          phone: contact?.phone || '',
+          // Pre-populate deal owner with current user
+          dealOwner: user?.userId || '',
+          // Set default stage
+          stage: 'Needs Analysis'
+        }}
+        key={`create-deal-modal-${contact?.id}`}
       />
 
       {/* Delete Confirmation Dialog */}

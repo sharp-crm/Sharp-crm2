@@ -914,7 +914,12 @@ const OverviewTab: React.FC<{
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-2">
                         <Icons.CheckSquare className="w-4 h-4 text-blue-600" />
-                        <h4 className="text-sm font-medium text-gray-900">{task.title}</h4>
+                        <button
+                          onClick={() => navigate(`/tasks/${task.id}`)}
+                          className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors text-left"
+                        >
+                          {task.title}
+                        </button>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           task.priority === 'High' ? 'bg-red-100 text-red-800' :
                           task.priority === 'Normal' ? 'bg-yellow-100 text-yellow-800' :
@@ -1013,7 +1018,12 @@ const OverviewTab: React.FC<{
                     <div className="flex-1">
                       <div className="flex items-center space-x-2 mb-2">
                         <Icons.CheckSquare className="w-4 h-4 text-green-600" />
-                        <h4 className="text-sm font-medium text-gray-900">{task.title}</h4>
+                        <button
+                          onClick={() => navigate(`/tasks/${task.id}`)}
+                          className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline transition-colors text-left"
+                        >
+                          {task.title}
+                        </button>
                         <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                           Completed
                         </span>

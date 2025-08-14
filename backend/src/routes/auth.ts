@@ -270,6 +270,7 @@ const login: RequestHandler = async (req, res, next) => {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        originalRole: user.role, // Keep the original role for display
         tenantId: user.tenantId,
         createdBy: user.createdBy,
         phoneNumber: user.phoneNumber
@@ -351,6 +352,7 @@ const refresh: RequestHandler = async (req, res, next) => {
           firstName: user.firstName,
           lastName: user.lastName,
           role: user.role,
+          originalRole: user.role, // Keep the original role for display
           tenantId: user.tenantId
         }
       });
@@ -535,6 +537,7 @@ const getProfile: RequestHandler = async (req, res, next) => {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        originalRole: user.role, // Keep the original role for display
         phoneNumber: user.phoneNumber,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt

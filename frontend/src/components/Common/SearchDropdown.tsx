@@ -34,6 +34,10 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({
         return <Icons.Building2 className="w-4 h-4 text-indigo-500" />;
       case 'dealer':
         return <Icons.Store className="w-4 h-4 text-red-500" />;
+      case 'product':
+        return <Icons.Package className="w-4 h-4 text-teal-500" />;
+      case 'quote':
+        return <Icons.FileText className="w-4 h-4 text-amber-500" />;
       default:
         return <Icons.Search className="w-4 h-4 text-gray-500" />;
     }
@@ -75,24 +79,29 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({
             <button
               key={`${result.type}-${result.id}`}
               onClick={() => handleResultClick(result)}
-              className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-50 last:border-b-0 transition-colors"
+              className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-50 last:border-b-0 transition-colors group"
+              title={`Click to view ${result.type} details`}
             >
-              <div className="flex items-start space-x-3">
-                {getIcon(result.type)}
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900 truncate">
-                    {result.title}
-                  </div>
-                  {result.subtitle && (
-                    <div className="text-sm text-gray-600 truncate">
-                      {result.subtitle}
+                              <div className="flex items-start space-x-3">
+                  {getIcon(result.type)}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                      {result.title}
                     </div>
-                  )}
-                  <div className="text-xs text-gray-500 truncate">
-                    {result.description}
+                    {result.subtitle && (
+                      <div className="text-sm text-gray-600 truncate group-hover:text-blue-500 transition-colors">
+                        {result.subtitle}
+                      </div>
+                    )}
+                    <div className="text-xs text-gray-500 truncate">
+                      {result.description}
+                    </div>
+                  </div>
+                  {/* Navigation indicator */}
+                  <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Icons.ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-blue-500" />
                   </div>
                 </div>
-              </div>
             </button>
           ))}
         </div>
@@ -124,13 +133,18 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({
           <p className="text-xs text-gray-500 mt-1">
             Try searching with different keywords
           </p>
+          <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-xs text-blue-800">
+              <strong>Searchable items:</strong> Contacts, Leads, Deals, Tasks, Products, Quotes, Subsidiaries, Dealers
+            </p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
+    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto animate-in fade-in-0 slide-in-from-top-2 duration-200">
       <div className="px-4 py-2 border-b border-gray-100 bg-gray-50">
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium text-gray-700">
@@ -152,23 +166,10 @@ const SearchDropdown: React.FC<SearchDropdownProps> = ({
       {renderSection('Tasks', results.tasks, 'task', '/tasks')}
       {renderSection('Subsidiaries', results.subsidiaries, 'subsidiary', '/subsidiaries')}
       {renderSection('Dealers', results.dealers, 'dealer', '/dealers')}
+      {renderSection('Products', results.products, 'product', '/products')}
+      {renderSection('Quotes', results.quotes, 'quote', '/quotes')}
 
-      {/* Footer */}
-      <div className="px-4 py-2 bg-gray-50 border-t border-gray-100">
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-gray-500">
-            Press Enter to search in all modules
-          </p>
-          <div className="flex items-center space-x-2 text-xs text-gray-500">
-            <span>↑↓</span>
-            <span>Navigate</span>
-            <span>↵</span>
-            <span>Select</span>
-            <span>Esc</span>
-            <span>Close</span>
-          </div>
-        </div>
-      </div>
+      
     </div>
   );
 };

@@ -7,7 +7,7 @@ export interface User {
   email: string;
   firstName: string;
   lastName: string;
-  role: 'admin' | 'manager' | 'rep';
+  role: 'ADMIN' | 'SALES_MANAGER' | 'SALES_REP';
   tenantId: string;
   reportingTo?: string;
   createdBy?: string;
@@ -26,14 +26,14 @@ export type ResourceType = 'lead' | 'contact' | 'deal' | 'product' | 'quote' | '
 
 // Role hierarchy and permissions
 const ROLE_HIERARCHY = {
-  admin: 3,
-  manager: 2,
-  rep: 1
+  ADMIN: 3,
+  SALES_MANAGER: 2,
+  SALES_REP: 1
 };
 
 // Permission matrix - defines what each role can do
-const PERMISSIONS: Record<'admin' | 'manager' | 'rep', Record<ResourceType, Action[]>> = {
-  admin: {
+const PERMISSIONS: Record<'ADMIN' | 'SALES_MANAGER' | 'SALES_REP', Record<ResourceType, Action[]>> = {
+  ADMIN: {
     lead: ['view', 'edit', 'delete', 'create'],
     contact: ['view', 'edit', 'delete', 'create'],
     deal: ['view', 'edit', 'delete', 'create'],
@@ -44,7 +44,7 @@ const PERMISSIONS: Record<'admin' | 'manager' | 'rep', Record<ResourceType, Acti
     dealer: ['view', 'edit', 'delete', 'create'],
     user: ['view', 'edit', 'delete', 'create']
   },
-  manager: {
+  SALES_MANAGER: {
     lead: ['view', 'edit', 'delete', 'create'],
     contact: ['view', 'edit', 'delete', 'create'],
     deal: ['view', 'edit', 'delete', 'create'],
@@ -55,7 +55,7 @@ const PERMISSIONS: Record<'admin' | 'manager' | 'rep', Record<ResourceType, Acti
     dealer: ['view'], // Can only view dealers
     user: [] // Cannot manage users
   },
-  rep: {
+  SALES_REP: {
     lead: ['view', 'edit', 'delete', 'create'],
     contact: ['view', 'edit', 'delete', 'create'],
     deal: ['view', 'edit', 'delete', 'create'],
@@ -97,12 +97,12 @@ export async function checkPermission(
     }
 
     // Admin has full access to all resources in their tenant
-    if (userRole === 'admin') {
+    if (userRole === 'ADMIN') {
       return resourceObj.tenantId === user.tenantId;
     }
 
     // Manager can access their own resources and resources created by their reporting reps
-    if (userRole === 'manager') {
+    if (userRole === 'SALES_MANAGER') {
       // Own resources
       if (resourceObj.createdBy === user.userId) {
         return true;
@@ -118,7 +118,7 @@ export async function checkPermission(
     }
 
     // Rep can only access their own resources
-    if (userRole === 'rep') {
+    if (userRole === 'SALES_REP') {
       return resourceObj.createdBy === user.userId;
     }
 
@@ -143,7 +143,7 @@ async function getReportingReps(managerId: string): Promise<User[]> {
         },
         ExpressionAttributeValues: {
           ':managerId': managerId,
-          ':role': 'rep',
+          ':role': 'SALES_REP',
           ':isDeleted': false
         }
       })
@@ -170,12 +170,12 @@ async function getReportingReps(managerId: string): Promise<User[]> {
 /**
  * Normalize role string to our internal format
  */
-function normalizeRole(role: string): 'admin' | 'manager' | 'rep' {
-  const normalized = role.toLowerCase();
-  if (normalized === 'admin' || normalized === 'super_admin') return 'admin';
-  if (normalized === 'manager' || normalized === 'sales_manager') return 'manager';
-  if (normalized === 'rep' || normalized === 'sales_rep') return 'rep';
-  return 'rep'; // Default to rep
+function normalizeRole(role: string): 'ADMIN' | 'SALES_MANAGER' | 'SALES_REP' {
+  const normalized = role.toUpperCase();
+  if (normalized === 'ADMIN' || normalized === 'SUPER_ADMIN') return 'ADMIN';
+  if (normalized === 'SALES_MANAGER' || normalized === 'MANAGER') return 'SALES_MANAGER';
+  if (normalized === 'SALES_REP' || normalized === 'REP') return 'SALES_REP';
+  return 'SALES_REP'; // Default to SALES_REP
 }
 
 /**
@@ -230,19 +230,19 @@ export async function canDelete(user: User, resource: Resource, resourceType?: R
 export async function getAccessibleResources(user: User, resourceType: ResourceType): Promise<string[]> {
   const userRole = normalizeRole(user.role);
   
-  if (userRole === 'admin') {
+  if (userRole === 'ADMIN') {
     // Admin can access all resources in their tenant
     return ['*']; // Special marker for all resources
   }
   
-  if (userRole === 'manager') {
+  if (userRole === 'SALES_MANAGER') {
     // Manager can access their own resources and their reporting reps' resources
     const reportingReps = await getReportingReps(user.userId);
     const repIds = reportingReps.map(rep => rep.userId);
     return [user.userId, ...repIds];
   }
   
-  if (userRole === 'rep') {
+  if (userRole === 'SALES_REP') {
     // Rep can only access their own resources
     return [user.userId];
   }

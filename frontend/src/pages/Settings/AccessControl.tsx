@@ -18,14 +18,14 @@ const AccessControl: React.FC = () => {
       />
 
       {/* Add New Employee button (Admins only) */}
-      {(currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'Admin' || currentUser?.role === 'SuperAdmin') && (
+      {(currentUser?.role?.toUpperCase() === 'ADMIN' || currentUser?.originalRole?.toUpperCase() === 'SUPER_ADMIN') && (
         <div className="mt-4 mb-6">
           <button
             onClick={() => setShowModal(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
           >
             {/* Add New Employee/Client button (Admins only) */}
-            + {currentUser?.role === 'SuperAdmin' || currentUser?.role === 'SUPER_ADMIN' ? 'Add New Client' : 'Add New Employee'}
+            + {currentUser?.originalRole === 'SUPER_ADMIN' ? 'Add New Client' : 'Add New Employee'}
           </button>
         </div>
       )}

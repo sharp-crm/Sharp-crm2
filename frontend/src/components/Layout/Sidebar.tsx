@@ -103,7 +103,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
               to="/"
               className="ml-2 text-xl font-bold text-gray-900 hover:text-blue-600 transition-colors duration-200 cursor-pointer"
             >
-              <span className="ml-2 text-xl font-bold text-gray-900">SharpCRM</span>
+              <span className="ml-2 text-xl font-bold text-gray-900">SparkCRM</span>
 
             </Link>
           </div>

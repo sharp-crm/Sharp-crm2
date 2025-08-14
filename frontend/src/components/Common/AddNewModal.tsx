@@ -199,6 +199,21 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           setProducts(results[resultIndex++] || []);
           setQuotes(results[resultIndex++] || []);
           
+          // Handle contactId prefill for deals - auto-populate phone and email
+          // This runs after contacts are fetched, so contacts array is available
+          if (selectedType === 'deal' && prefillData?.contactId && results[0]) {
+            console.log('🔍 DEBUG: Handling contactId prefill for deal after contacts fetched, auto-populating phone and email');
+            const selectedContact = results[0].find((c: any) => c.id === prefillData.contactId);
+            if (selectedContact && 'phone' in selectedContact && 'email' in selectedContact) {
+              setFormData(prev => ({
+                ...prev,
+                phone: (selectedContact as any).phone || '',
+                email: (selectedContact as any).email || ''
+              }));
+              console.log('🔍 DEBUG: Auto-populated phone:', (selectedContact as any).phone, 'and email:', (selectedContact as any).email);
+            }
+          }
+          
           console.log('🔍 DEBUG: Successfully fetched related data');
         } catch (error) {
           console.error('Failed to fetch task/deal related data:', error);
@@ -226,7 +241,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
       
       return () => clearTimeout(timeoutId);
     }
-  }, [isOpen, selectedType]);
+  }, [isOpen, selectedType, prefillData]);
 
   // Force re-render of dropdowns when form data changes
   useEffect(() => {
@@ -612,7 +627,7 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
           { name: 'email', label: 'Email', type: 'email', required: true },
           { name: 'leadSource', label: 'Lead Source', type: 'select', options: leadSourceOptions, required: true },
           { name: 'leadStatus', label: 'Lead Status', type: 'select', options: leadStatusOptions, required: true },
-          { name: 'value', label: 'Lead Value', type: 'number', required: true },
+          { name: 'value', label: 'Lead Value', type: 'number', required: false },
           { name: 'street', label: 'Street', type: 'text', required: false, group: 'address' },
           { name: 'area', label: 'Area', type: 'text', required: false, group: 'address' },
           { name: 'city', label: 'City', type: 'text', required: false, group: 'address' },
@@ -1068,8 +1083,8 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             message: `Successfully created new contact: ${formData.firstName} ${formData.lastName}`
           });
           break;
-      case 'deal':
-          await dealsApi.create({
+              case 'deal':
+          const newDeal = await dealsApi.create({
             dealOwner: formData.dealOwner,
             dealName: formData.dealName,
             phone: formData.phone || '', // Required phone field
@@ -1082,6 +1097,25 @@ const AddNewModal: React.FC<AddNewModalProps> = ({ isOpen, onClose, defaultType,
             closeDate: formData.closeDate,
             relatedContactIds: formData.contactId ? [formData.contactId] : undefined // Add contact relationship
           });
+
+          // If this deal was created from a product, update the product's relatedDealIds
+          if (prefillData?.relatedProductIds && prefillData.relatedProductIds.length > 0) {
+            try {
+              for (const productId of prefillData.relatedProductIds) {
+                const product = await productsApi.getById(productId);
+                if (product) {
+                  const currentDealIds = product.relatedDealIds || [];
+                  const updatedDealIds = [...currentDealIds, newDeal.id];
+                  await productsApi.update(productId, { 
+                    relatedDealIds: updatedDealIds 
+                  });
+                }
+              }
+            } catch (error) {
+              console.error('Failed to update product associations:', error);
+            }
+          }
+
           addNotification({
             type: 'success',
             title: 'Deal Created',

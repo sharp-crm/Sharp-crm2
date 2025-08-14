@@ -43,8 +43,6 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
   const [deals, setDeals] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [quotes, setQuotes] = useState<any[]>([]);
-  const [showContactLeadSearch, setShowContactLeadSearch] = useState(false);
-  const [showRelatedRecordSearch, setShowRelatedRecordSearch] = useState(false);
 
   // Fetch related data for task form
   useEffect(() => {
@@ -93,26 +91,22 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
   }, [task, isOpen, users]);
 
   const handleInputChange = (name: string, value: string | string[]) => {
-    if (name === 'contactLeadType') {
-      // Reset contact/lead ID when type changes
-      setFormData(prev => ({ 
-        ...prev, 
-        [name]: value,
-        contactLeadId: '' // Reset the ID when type changes
-      }));
-    } else if (name === 'relatedRecordType') {
-      // Reset related record ID when type changes
-      setFormData(prev => ({ 
-        ...prev, 
-        [name]: value,
-        relatedRecordId: '' // Reset the ID when type changes
-      }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+    // Prevent changes to readonly fields
+    if (name === 'contactLeadType' || name === 'relatedRecordType' || 
+        name === 'contactLeadId' || name === 'relatedRecordId') {
+      return; // These fields are readonly and cannot be changed
     }
+    
+    // Ensure value is a string for string fields
+    const stringValue = Array.isArray(value) ? value[0] || '' : value;
+    
+    // All other fields can be updated
+    setFormData(prev => ({ ...prev, [name]: stringValue }));
   };
 
   // Get dynamic options for contact/lead dropdown
+  // Note: This function is no longer needed since contactLeadId is readonly,
+  // but keeping it for potential future use
   const getContactLeadOptions = (type: string): { value: string; label: string }[] => {
     if (type === 'contact') {
       return contacts.map(c => ({
@@ -129,6 +123,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
   };
 
   // Get display name for selected contact/lead
+  // Note: This function is still needed to display the readonly field values
   const getSelectedContactLeadName = () => {
     if (!formData.contactLeadId) return '';
     const type = formData.contactLeadType || 'contact';
@@ -138,6 +133,8 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
   };
 
   // Get dynamic options for related record dropdown
+  // Note: This function is no longer needed since relatedRecordId is readonly,
+  // but keeping it for potential future use
   const getRelatedRecordOptions = (type: string): { value: string; label: string }[] => {
     if (type === 'deal') {
       return deals.map(d => ({
@@ -159,6 +156,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
   };
 
   // Get display name for selected related record
+  // Note: This function is still needed to display the readonly field values
   const getSelectedRelatedRecordName = () => {
     if (!formData.relatedRecordId) return '';
     const type = formData.relatedRecordType || 'deal';
@@ -189,11 +187,9 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
       const newDueDate = new Date(formData.dueDate).toISOString();
       if (newDueDate !== task.dueDate) updates.dueDate = newDueDate;
 
-      // Add new fields for related records
-      if (formData.contactLeadType !== task.contactLeadType) updates.contactLeadType = formData.contactLeadType;
-      if (formData.contactLeadId !== task.contactLeadId) updates.contactLeadId = formData.contactLeadId;
-      if (formData.relatedRecordType !== task.relatedRecordType) updates.relatedRecordType = formData.relatedRecordType;
-      if (formData.relatedRecordId !== task.relatedRecordId) updates.relatedRecordId = formData.relatedRecordId;
+      // Add new fields for related records (only the IDs, not the types since they're readonly)
+      // Note: contactLeadId and relatedRecordId are also readonly and cannot be changed
+      // These fields are now readonly and will not be included in updates
 
       // Call the onSave callback with only the updates
       await onSave(updates);
@@ -249,6 +245,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
                 <Icons.CheckSquare className="w-5 h-5 mr-2 text-blue-600" />
                 Task Information
               </h3>
+         
               <div className="space-y-4">
                 {/* Task Owner */}
                 <div className="border-b border-gray-200 pb-4">
@@ -302,103 +299,73 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
                 {/* Contact/Lead Type and Contact/Lead in two columns */}
                 <div className="grid grid-cols-3 gap-4 border-b border-gray-200 pb-4">
                   <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Contact/Lead Type
+                    </label>
                     <div className="flex items-center">
-                      <select
-                        value={formData.contactLeadType || 'contact'}
-                        onChange={(e) => handleInputChange('contactLeadType', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                      >
-                        <option value="contact">Contact</option>
-                        <option value="lead">Lead</option>
-                      </select>
+                      <input
+                        type="text"
+                        value={formData.contactLeadType === 'contact' ? 'Contact' : 'Lead'}
+                        disabled
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
+                      />
+                      <Icons.Lock className="w-4 h-4 text-gray-400 ml-2" />
                     </div>
+                    <p className="mt-1 text-xs text-gray-500">Type cannot be changed after task creation</p>
                   </div>
                   <div className="col-span-2">
-                    <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
-                      <select
-                        key={`contact-lead-${formData.contactLeadId || 'empty'}`}
-                        value={formData.contactLeadId || ''}
-                        onChange={(e) => handleInputChange('contactLeadId', e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                      >
-                        <option value="">Select {formData.contactLeadType || 'contact'}</option>
-                        {getContactLeadOptions(formData.contactLeadType || 'contact').map(option => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                        {/* Show selected record if it's not in the options */}
-                        {formData.contactLeadId && !getContactLeadOptions(formData.contactLeadType || 'contact').find(opt => opt.value === formData.contactLeadId) && (
-                          <option value={formData.contactLeadId}>
-                            {getSelectedContactLeadName()}
-                          </option>
-                        )}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setShowContactLeadSearch(true);
-                        }}
-                        className="ml-2 p-2 text-gray-400 hover:text-gray-600 transition-colors"
-                        title={`Search ${formData.contactLeadType || 'contact'}s`}
-                      >
-                        <Icons.Search className="w-4 h-4" />
-                      </button>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {formData.contactLeadType === 'contact' ? 'Contact' : 'Lead'}
+                    </label>
+                    <div className="flex items-center">
+                      <input
+                        type="text"
+                        value={getSelectedContactLeadName() || 'No record selected'}
+                        disabled
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
+                      />
+                      <Icons.Lock className="w-4 h-4 text-gray-400 ml-2" />
                     </div>
+                    <p className="mt-1 text-xs text-gray-500">Record cannot be changed after task creation</p>
                   </div>
                 </div>
 
                 {/* Related Record Type and Related Record in two columns */}
                 <div className="grid grid-cols-3 gap-4 border-b border-gray-200 pb-4">
                   <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Related Record Type
+                    </label>
                     <div className="flex items-center">
-                      <select
-                        value={formData.relatedRecordType || 'deal'}
-                        onChange={(e) => handleInputChange('relatedRecordType', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                      >
-                        <option value="deal">Deal</option>
-                        <option value="product">Product</option>
-                        <option value="quote">Quote</option>
-                      </select>
+                      <input
+                        type="text"
+                        value={formData.relatedRecordType === 'deal' ? 'Deal' : 
+                               formData.relatedRecordType === 'product' ? 'Product' : 
+                               formData.relatedRecordType === 'quote' ? 'Quote' : 
+                               formData.relatedRecordType === 'lead' ? 'Lead' : 'Deal'}
+                        disabled
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
+                      />
+                      <Icons.Lock className="w-4 h-4 text-gray-400 ml-2" />
                     </div>
+                    <p className="mt-1 text-xs text-gray-500">Type cannot be changed after task creation</p>
                   </div>
                   <div className="col-span-2">
-                    <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
-                      <select
-                        key={`related-record-${formData.relatedRecordId || 'empty'}`}
-                        value={formData.relatedRecordId || ''}
-                        onChange={(e) => handleInputChange('relatedRecordId', e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                      >
-                        <option value="">Select {formData.relatedRecordType || 'deal'}</option>
-                        {getRelatedRecordOptions(formData.relatedRecordType || 'deal').map(option => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                        {/* Show selected record if it's not in the options */}
-                        {formData.relatedRecordId && !getRelatedRecordOptions(formData.relatedRecordType || 'deal').find(opt => opt.value === formData.relatedRecordId) && (
-                          <option value={formData.relatedRecordId}>
-                            {getSelectedRelatedRecordName()}
-                          </option>
-                        )}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setShowRelatedRecordSearch(true);
-                        }}
-                        className="ml-2 p-2 text-gray-400 hover:text-gray-600 transition-colors"
-                        title={`Search ${formData.relatedRecordType || 'deal'}s`}
-                      >
-                        <Icons.Search className="w-4 h-4" />
-                      </button>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {formData.relatedRecordType === 'deal' ? 'Deal' : 
+                       formData.relatedRecordType === 'quote' ? 'Quote' : 
+                       formData.relatedRecordType === 'lead' ? 'Lead' : 'Deal'}
+                    </label>
+                    <div className="flex items-center">
+                      <input
+                        type="text"
+                        value={getSelectedRelatedRecordName() || 'No record selected'}
+                        disabled
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
+                      />
+                      <Icons.Lock className="w-4 h-4 text-gray-400 ml-2" />
                     </div>
+                    <p className="mt-1 text-xs text-gray-500">Record cannot be changed after task creation</p>
                   </div>
                 </div>
 
@@ -497,277 +464,10 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
       </div>
 
       {/* Contact/Lead Search Overlay */}
-      {showContactLeadSearch && createPortal(
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" 
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-        >
-          <div 
-            className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[80vh] overflow-hidden" 
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-          >
-            <div className="overflow-x-auto">
-              <div className="sticky top-0 bg-white border-b border-gray-200 z-10 min-w-[800px]">
-                <div className="flex items-center justify-between p-6">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Search {formData.contactLeadType || 'contact'}s
-                  </h3>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowContactLeadSearch(false);
-                    }}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <Icons.X className="w-5 h-5 text-gray-500" />
-                  </button>
-                </div>
-              </div>
-              
-              <div className="overflow-y-auto max-h-[calc(80vh-80px)]">
-                <div className="bg-white min-w-[800px]">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          <div className="flex items-center">
-                            {formData.contactLeadType === 'contact' ? 'CONTACT' : 'LEAD'}
-                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
-                          </div>
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          <div className="flex items-center">
-                            OWNER
-                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
-                          </div>
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          <div className="flex items-center">
-                            EMAIL
-                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
-                          </div>
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          <div className="flex items-center">
-                            PHONE
-                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
-                          </div>
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          <div className="flex items-center">
-                            COMPANY
-                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
-                          </div>
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          <div className="flex items-center">
-                            STATUS
-                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
-                          </div>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {(formData.contactLeadType === 'contact' ? contacts : leads).map((record: any) => (
-                        <tr
-                          key={record.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setFormData(prev => ({
-                              ...prev,
-                              contactLeadId: record.id
-                            }));
-                            setShowContactLeadSearch(false);
-                          }}
-                          className="hover:bg-blue-50 cursor-pointer transition-colors"
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                                <Icons.User className="w-4 h-4 text-blue-600" />
-                              </div>
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  {record.firstName} {record.lastName}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  {record.id}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.contactOwner || record.leadOwner || 'Unknown'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.email || 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.phone || 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.companyName || record.company || 'N/A'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
-                              {record.status || 'Active'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      {/* This overlay is no longer needed as contactLeadId is readonly */}
 
       {/* Related Record Search Overlay */}
-      {showRelatedRecordSearch && createPortal(
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" 
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-        >
-          <div 
-            className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[80vh] overflow-hidden" 
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-          >
-            <div className="overflow-x-auto">
-              <div className="sticky top-0 bg-white border-b border-gray-200 z-10 min-w-[800px]">
-                <div className="flex items-center justify-between p-6">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Search {formData.relatedRecordType || 'deal'}s
-                  </h3>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowRelatedRecordSearch(false);
-                    }}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <Icons.X className="w-5 h-5 text-gray-500" />
-                  </button>
-                </div>
-              </div>
-              
-              <div className="overflow-y-auto max-h-[calc(80vh-80px)]">
-                <div className="bg-white min-w-[800px]">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          <div className="flex items-center">
-                            {formData.relatedRecordType === 'deal' ? 'DEAL' : 
-                             formData.relatedRecordType === 'product' ? 'PRODUCT' : 'QUOTE'}
-                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
-                          </div>
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          <div className="flex items-center">
-                            OWNER
-                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
-                          </div>
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          <div className="flex items-center">
-                            {formData.relatedRecordType === 'deal' ? 'AMOUNT' : 
-                             formData.relatedRecordType === 'product' ? 'UNIT PRICE' : 'TOTAL'}
-                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
-                          </div>
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          <div className="flex items-center">
-                            {formData.relatedRecordType === 'deal' ? 'STAGE' : 
-                             formData.relatedRecordType === 'product' ? 'STOCK' : 'STATUS'}
-                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
-                          </div>
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          <div className="flex items-center">
-                            STATUS
-                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
-                          </div>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {(formData.relatedRecordType === 'deal' ? deals : 
-                        formData.relatedRecordType === 'product' ? products : quotes).map((record: any) => (
-                        <tr
-                          key={record.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setFormData(prev => ({
-                              ...prev,
-                              relatedRecordId: record.id
-                            }));
-                            setShowRelatedRecordSearch(false);
-                          }}
-                          className="hover:bg-blue-50 cursor-pointer transition-colors"
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                                {formData.relatedRecordType === 'deal' ? (
-                                  <Icons.Target className="w-4 h-4 text-blue-600" />
-                                ) : formData.relatedRecordType === 'product' ? (
-                                  <Icons.Package className="w-4 h-4 text-blue-600" />
-                                ) : (
-                                  <Icons.FileText className="w-4 h-4 text-blue-600" />
-                                )}
-                              </div>
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  {record.dealName || record.name || record.quoteName}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  {record.id}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {record.dealOwner || record.productOwner || record.quoteOwner || 'Unknown'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formData.relatedRecordType === 'deal' ? `$${record.amount?.toLocaleString() || '0'}` :
-                             formData.relatedRecordType === 'product' ? `$${record.unitPrice?.toLocaleString() || '0'}` :
-                             `$${record.totalAmount?.toLocaleString() || '0'}`}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formData.relatedRecordType === 'deal' ? record.stage :
-                             formData.relatedRecordType === 'product' ? record.quantityInStock || '0' :
-                             record.status}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
-                              {formData.relatedRecordType === 'product' ? 
-                                (record.activeStatus ? 'Active' : 'Inactive') :
-                                record.status || 'Active'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      {/* This overlay is no longer needed as relatedRecordId is readonly */}
     </Dialog>
   );
 };

@@ -14,8 +14,9 @@ interface AddNewUserModalProps {
 
 const AddNewUserModal: React.FC<AddNewUserModalProps> = ({ isOpen, onClose, onUserAdded }) => {
   const currentUser = useAuthStore((s) => s.user);
-  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
-  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'Admin' || currentUser?.role === 'SuperAdmin';
+  const isSuperAdmin = currentUser?.role?.toUpperCase() === 'SUPER_ADMIN' || currentUser?.originalRole?.toUpperCase() === 'SUPER_ADMIN';
+  const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN' || currentUser?.role?.toUpperCase() === 'SUPER_ADMIN' || 
+                 currentUser?.originalRole?.toUpperCase() === 'ADMIN' || currentUser?.originalRole?.toUpperCase() === 'SUPER_ADMIN';
   
   const getInitialFormData = () => ({
     firstName: '',
@@ -50,14 +51,44 @@ const AddNewUserModal: React.FC<AddNewUserModalProps> = ({ isOpen, onClose, onUs
     if (isOpen && isAdmin) {
       const fetchManagers = async () => {
         try {
-          const response = await API.get('/users/managers');
-          const managersData = response.data?.data || [];
+          // Try to fetch all users first, then filter for managers
+          let response;
+          try {
+            response = await API.get('/users/');
+          } catch (error) {
+            // Fallback to tenant users if /users/ fails
+            response = await API.get('/users/tenant-users');
+          }
+          
+          const allUsers = response.data?.data || response.data || [];
+          
+          // Filter for users with SALES_MANAGER or MANAGER role
+          // Check both normalized and original roles for flexibility
+          const managersData = allUsers.filter((user: any) => {
+            const userRole = user.role?.toUpperCase();
+            const userOriginalRole = user.originalRole?.toUpperCase();
+            
+            // Check for various manager role formats
+            return userRole === 'SALES_MANAGER' || userRole === 'MANAGER' || 
+                   userOriginalRole === 'SALES_MANAGER' || userOriginalRole === 'MANAGER' ||
+                   userRole === 'SALESMANAGER' || userOriginalRole === 'SALESMANAGER';
+          });
+          
           setManagers(managersData.map((manager: any) => ({
             id: manager.userId || manager.id,
-            name: manager.name || `${manager.firstName} ${manager.lastName}`
+            name: manager.name || `${manager.firstName || ''} ${manager.lastName || ''}`.trim() || manager.email
+          })));
+          
+          console.log('Managers fetched:', managersData.length, managersData);
+          console.log('Manager roles:', managersData.map((m: any) => ({
+            email: m.email,
+            role: m.role,
+            originalRole: m.originalRole,
+            name: m.name || `${m.firstName || ''} ${m.lastName || ''}`.trim()
           })));
         } catch (error) {
           console.error('Failed to fetch managers:', error);
+          setManagers([]);
         }
       };
       fetchManagers();
@@ -257,7 +288,17 @@ const AddNewUserModal: React.FC<AddNewUserModalProps> = ({ isOpen, onClose, onUs
                 ))}
               </select>
               {managers.length === 0 && (
-                <p className="text-sm text-red-600 mt-1">No managers available. Please create a Sales Manager first.</p>
+                <div className="text-sm text-red-600 mt-1">
+                  <p>No managers available. Please create a Sales Manager first.</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Debug: Managers count: {managers.length}
+                  </p>
+                </div>
+              )}
+              {managers.length > 0 && (
+                <p className="text-sm text-green-600 mt-1">
+                  {managers.length} manager(s) available
+                </p>
               )}
             </div>
           )}

@@ -3,7 +3,8 @@ export interface User {
   name: string;
   email: string;
   avatar?: string;
-  role: 'admin' | 'manager' | 'rep';
+  role: string;
+  originalRole?: string; // Keep the original role from database
   department?: string;
   userId: string;
   firstName: string;
@@ -258,11 +259,6 @@ export interface Quote {
   status: 'Draft' | 'Sent' | 'Accepted' | 'Rejected' | 'Expired';
   validUntil: string;
   activeStatus: boolean;
-  
-  // Customer Info
-  customerName: string;
-  customerEmail: string;
-  customerPhone: string;
   
   // Line Items
   lineItems: LineItem[];

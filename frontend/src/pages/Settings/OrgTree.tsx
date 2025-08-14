@@ -4,11 +4,14 @@ import { usersApi, User } from '../../api/services';
 import { useAuthStore } from '../../store/useAuthStore';
 import PageHeader from '../../components/Common/PageHeader';
 
+
 interface OrganisationUser {
   id: string;
+  userId?: string;
   name: string;
   email: string;
   role: string;
+  originalRole?: string;
   tenantId: string;
   firstName?: string;
   lastName?: string;
@@ -48,11 +51,13 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ user, isOpen, onClo
       case 'ADMIN':
         return <Icons.Shield className="w-6 h-6 text-blue-600" />;
       case 'SALES_MANAGER':
+      case 'MANAGER':
         return <Icons.Users className="w-6 h-6 text-green-600" />;
       case 'SALES_REP':
+      case 'REP':
         return <Icons.User className="w-6 h-6 text-gray-600" />;
       default:
-        return <Icons.User className="w-6 h-6 text-gray-400" />;
+        return <Icons.Shield className="w-6 h-6 text-gray-400" />; // Default to shield for security
     }
   };
 
@@ -63,11 +68,13 @@ const UserDetailsModal: React.FC<UserDetailsModalProps> = ({ user, isOpen, onClo
       case 'ADMIN':
         return 'bg-gradient-to-br from-blue-500 to-blue-600';
       case 'SALES_MANAGER':
+      case 'MANAGER':
         return 'bg-gradient-to-br from-green-500 to-green-600';
       case 'SALES_REP':
+      case 'REP':
         return 'bg-gradient-to-br from-gray-500 to-gray-600';
       default:
-        return 'bg-gradient-to-br from-gray-500 to-gray-600';
+        return 'bg-gradient-to-br from-gray-500 to-gray-600'; // Default for any unexpected roles
     }
   };
 
@@ -242,12 +249,62 @@ const OrgTree: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { user: currentUser } = useAuthStore();
 
+
+
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         setLoading(true);
-        const users = await usersApi.getAll();
-        setUserList(users);
+        console.log('🔍 Debug - Fetching users from API...');
+        
+        // For SUPER_ADMIN users, fetch all users from all tenants
+        // For regular users, fetch only tenant users
+        let users;
+        if (currentUser?.originalRole?.toUpperCase() === 'SUPER_ADMIN' || 
+            currentUser?.role?.toUpperCase() === 'SUPER_ADMIN') {
+          try {
+            console.log('🔍 Debug - SUPER_ADMIN detected, fetching all users...');
+            users = await usersApi.getAllUsers();
+            console.log('🔍 Debug - Successfully fetched all users for SUPER_ADMIN');
+          } catch (error) {
+            console.log('🔍 Debug - Failed to fetch all users, falling back to tenant users:', error);
+            users = await usersApi.getAll();
+          }
+        } else {
+          console.log('🔍 Debug - Regular user, fetching tenant users...');
+          users = await usersApi.getAll();
+        }
+        
+        console.log('🔍 Debug - API response:', {
+          totalUsers: users.length,
+          users: users.map(u => ({ id: u.id, role: u.role, originalRole: u.originalRole, email: u.email }))
+        });
+        // Allow all role types for organizational chart display
+        const filteredUsers = users.filter((user: any) => {
+          const userRole = user.role?.toUpperCase();
+          const userOriginalRole = user.originalRole?.toUpperCase();
+          const isAllowed = userRole === 'SUPER_ADMIN' || userRole === 'ADMIN' || userRole === 'SALES_MANAGER' || userRole === 'SALES_REP' ||
+                 userOriginalRole === 'SUPER_ADMIN' || userOriginalRole === 'ADMIN' || userOriginalRole === 'SALES_MANAGER' || userOriginalRole === 'SALES_REP' ||
+                 userRole === 'MANAGER' || userRole === 'REP' ||
+                 userOriginalRole === 'MANAGER' || userOriginalRole === 'REP';
+          
+          if (!isAllowed) {
+            console.log('🔍 Debug - Filtered out user:', { 
+              email: user.email, 
+              role: user.role, 
+              originalRole: user.originalRole 
+            });
+          }
+          
+          return isAllowed;
+        });
+        
+        console.log('🔍 Debug - After filtering:', {
+          totalUsers: users.length,
+          filteredUsers: filteredUsers.length,
+          roles: filteredUsers.map(u => ({ email: u.email, role: u.role, originalRole: u.originalRole }))
+        });
+        setUserList(filteredUsers);
       } catch (error) {
         console.error('Failed to fetch users:', error);
         setError('Failed to load organisation data');
@@ -256,7 +313,7 @@ const OrgTree: React.FC = () => {
       }
     };
     fetchUsers();
-  }, []);
+  }, [currentUser]);
 
   const getUserFullName = (user: OrganisationUser) => {
     if (user.firstName && user.lastName) {
@@ -266,14 +323,40 @@ const OrgTree: React.FC = () => {
   };
 
   const filterUsersByRole = (role: string) => {
-    return userList.filter(user => {
+    const usersToDisplay = getUsersToDisplay();
+    console.log('🔍 Debug - filterUsersByRole:', { role, totalUsers: usersToDisplay.length });
+    
+    const filtered = usersToDisplay.filter(user => {
       const userRole = user.role?.toUpperCase();
+      const userOriginalRole = user.originalRole?.toUpperCase();
       const targetRole = role.toUpperCase();
       
-      // The backend already handles filtering based on user role and tenant
-      // SuperAdmin sees users they created (admins), others see users in their tenant
-      return userRole === targetRole;
+      // Allow all role types for organizational chart display
+      if (targetRole === 'SUPER_ADMIN') {
+        return userRole === 'SUPER_ADMIN' || userOriginalRole === 'SUPER_ADMIN';
+      } else if (targetRole === 'ADMIN') {
+        return userRole === 'ADMIN' || userOriginalRole === 'ADMIN';
+      } else if (targetRole === 'SALES_MANAGER') {
+        return userRole === 'SALES_MANAGER' || userOriginalRole === 'SALES_MANAGER' || userRole === 'MANAGER' || userOriginalRole === 'MANAGER';
+      } else if (targetRole === 'SALES_REP') {
+        return userRole === 'SALES_REP' || userOriginalRole === 'SALES_REP' || userRole === 'REP' || userOriginalRole === 'REP';
+      } else if (targetRole === 'REP') {
+        return userRole === 'SALES_REP' || userOriginalRole === 'SALES_REP' || userRole === 'REP' || userOriginalRole === 'REP';
+      } else {
+        // Block any other unexpected roles for security
+        return false;
+      }
     });
+    
+    console.log('🔍 Debug - filterUsersByRole result:', { role, filteredCount: filtered.length, filtered: filtered.map(u => ({ id: u.id, email: u.email, role: u.role, originalRole: u.originalRole })) });
+    
+    // Remove duplicates at the source using userId (since id might be undefined)
+    const uniqueFiltered = filtered.filter((user, index, arr) => {
+      const firstIndex = arr.findIndex(u => (u.userId || u.id) === (user.userId || user.id));
+      return firstIndex === index;
+    });
+    
+    return uniqueFiltered;
   };
 
   const getRoleIcon = (role: string) => {
@@ -283,11 +366,13 @@ const OrgTree: React.FC = () => {
       case 'ADMIN':
         return <Icons.Shield className="w-5 h-5 text-blue-600" />;
       case 'SALES_MANAGER':
+      case 'MANAGER':
         return <Icons.Users className="w-5 h-5 text-green-600" />;
       case 'SALES_REP':
+      case 'REP':
         return <Icons.User className="w-5 h-5 text-gray-600" />;
       default:
-        return <Icons.User className="w-5 h-5 text-gray-400" />;
+        return <Icons.Shield className="w-5 h-5 text-gray-400" />; // Default to shield for security
     }
   };
 
@@ -298,158 +383,232 @@ const OrgTree: React.FC = () => {
       case 'ADMIN':
         return 'bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 shadow-blue-100';
       case 'SALES_MANAGER':
+      case 'MANAGER':
         return 'bg-gradient-to-br from-green-50 to-green-100 border-green-200 shadow-green-100';
       case 'SALES_REP':
+      case 'REP':
         return 'bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200 shadow-gray-100';
       default:
-        return 'bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200 shadow-gray-100';
+        return 'bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200 shadow-gray-100'; // Default for any unexpected roles
     }
   };
-
-  const TreeNode: React.FC<{ users: OrganisationUser[]; role: string; level: number }> = ({ users, role, level }) => {
-    if (users.length === 0) return null;
 
     const handleUserClick = (user: OrganisationUser) => {
       setSelectedUser(user);
       setIsModalOpen(true);
     };
 
+  const TreeNode: React.FC<{ users: OrganisationUser[]; role: string; level: number; onUserClick: (user: OrganisationUser) => void }> = ({ users, role, level, onUserClick }) => {
+    if (users.length === 0) return null;
+
     return (
       <div className="flex flex-col items-center w-full">
         {users.map((user, index) => {
           const childRoles = getChildRoles(role);
+          console.log('🔍 Debug - TreeNode:', { user: user.email, role, childRoles });
+          
           const directReports = childRoles.flatMap(childRole => 
             filterUsersByRole(childRole).filter(u => {
-              if (currentUser?.role?.toUpperCase() === 'SUPER_ADMIN' && role.toUpperCase() === 'SUPER_ADMIN' && childRole.toUpperCase() === 'ADMIN') {
+              // For SUPER_ADMIN, show all ADMIN users below them (no reporting relationship check)
+              if (currentUser?.originalRole?.toUpperCase() === 'SUPER_ADMIN' && role.toUpperCase() === 'SUPER_ADMIN' && childRole.toUpperCase() === 'ADMIN') {
                 return true;
               }
-              return u.reportingTo === user.id;
+              // For ADMIN users, show all SALES_MANAGER users in their tenant
+              if (role.toUpperCase() === 'ADMIN' && childRole.toUpperCase() === 'SALES_MANAGER') {
+                return u.tenantId === user.tenantId; // Show SALES_MANAGER users in same tenant
+              }
+              // For SALES_MANAGER users, show their direct SALES_REP reports
+              if (role.toUpperCase() === 'SALES_MANAGER' && childRole.toUpperCase() === 'SALES_REP') {
+                // Check if the user reports to this manager OR if they're in the same tenant (fallback)
+                const isDirectReport = u.reportingTo === (user.userId || user.id);
+                const isSameTenant = u.tenantId === user.tenantId;
+                console.log('🔍 Debug - SALES_REP filtering:', { 
+                  userEmail: user.email, 
+                  childUserEmail: u.email, 
+                  childRole: u.role, 
+                  reportingTo: u.reportingTo, 
+                  userUserId: user.userId || user.id,
+                  isDirectReport,
+                  isSameTenant,
+                  result: isDirectReport || isSameTenant
+                });
+                return isDirectReport || isSameTenant;
+              }
+              // For regular hierarchy, check reporting relationship
+              return u.reportingTo === (user.userId || user.id);
             })
           );
           
+          console.log('🔍 Debug - Direct reports:', { user: user.email, directReportsCount: directReports.length, directReports: directReports.map(u => ({ id: u.id, email: u.email, role: u.role })) });
+          
+          // Remove duplicates based on user ID more effectively
+          const uniqueDirectReports = directReports.filter((u, index, arr) => {
+            const firstIndex = arr.findIndex(user => (user.userId || user.id) === (u.userId || u.id));
+            return firstIndex === index;
+          });
+          
           return (
-            <div key={user.id} className="flex flex-col items-center w-full">
-              {/* User card */}
+            <div key={`${user.id}-${user.email}-${index}`} className="flex flex-col items-center w-full mb-8">
+              {/* User card - Enhanced with better shadows and hover effects */}
               <div 
-                className={`flex items-center p-4 mb-6 rounded-xl border-2 shadow-lg hover:shadow-xl transition-all duration-300 ${getRoleColor(role)} min-w-64 backdrop-blur-sm bg-white/90 cursor-pointer hover:scale-105 hover:border-blue-300`}
-                onClick={() => handleUserClick(user)}
+                className={`group relative flex items-center p-6 mb-8 rounded-2xl border-2 shadow-xl hover:shadow-2xl transition-all duration-500 ${getRoleColor(role)} min-w-72 backdrop-blur-sm bg-white/95 cursor-pointer hover:scale-105 hover:border-blue-400 transform-gpu`}
+                onClick={() => onUserClick(user)}
                 title="Click to view user details"
               >
-                <div className="flex-shrink-0 mr-3">
-                  <div className="p-2 rounded-full bg-gradient-to-br from-blue-50 to-blue-100">
+                {/* Subtle background pattern */}
+                <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                
+                <div className="relative z-10 flex items-center w-full">
+                  <div className="flex-shrink-0 mr-4">
+                    <div className="p-3 rounded-full bg-gradient-to-br from-blue-50 to-blue-100 shadow-lg group-hover:shadow-xl transition-shadow duration-300">
                   {getRoleIcon(role)}
                   </div>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-base font-semibold text-gray-900 truncate">
+                      <div className="min-w-0">
+                        <p className="text-lg font-bold text-gray-900 truncate group-hover:text-blue-800 transition-colors duration-300">
                         {getUserFullName(user)}
                       </p>
-                      <p className="text-sm text-gray-500 truncate">
+                        <p className="text-sm text-gray-600 truncate group-hover:text-blue-600 transition-colors duration-300">
                         {user.email}
                       </p>
                     </div>
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium capitalize shadow-sm">
+                      <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold capitalize shadow-lg bg-white/80 backdrop-blur-sm border border-white/50 group-hover:bg-blue-50 group-hover:border-blue-200 transition-all duration-300">
                       {role.toLowerCase().replace('_', ' ')}
                     </span>
+                    </div>
                   </div>
                 </div>
+                
+                {/* Hover indicator */}
+                <div className="absolute top-0 right-0 w-3 h-3 bg-blue-400 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 transform scale-0 group-hover:scale-100"></div>
               </div>
               
-              {/* Connecting line down from user card */}
-              {directReports.length > 0 && (
-                <div className="w-1 h-6 bg-gradient-to-b from-gray-300 to-gray-200 mb-3 rounded-full"></div>
+              {/* Enhanced connecting line down from user card */}
+              {uniqueDirectReports.length > 0 && (
+                <div className="relative w-1 h-8 mb-4">
+                  <div className="absolute inset-0 bg-gradient-to-b from-blue-300 via-blue-200 to-gray-200 rounded-full shadow-lg"></div>
+                  <div className="absolute inset-0 bg-gradient-to-b from-blue-400 to-blue-300 rounded-full animate-pulse opacity-75"></div>
+                </div>
               )}
 
-              {/* Children container */}
-              {directReports.length > 0 && (
+              {/* Children container - Enhanced with better spacing and visual hierarchy */}
+              {uniqueDirectReports.length > 0 && (
                 <div className="relative w-full">
-                  {/* Horizontal line connecting children (Sales Managers) */}
-                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-gray-300 via-gray-200 to-gray-300 rounded-full"></div>
+                  {/* Enhanced horizontal line connecting children */}
+                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-300 via-green-300 to-blue-300 rounded-full shadow-lg"></div>
                   
-                  {/* Children cards */}
-                  <div className="flex justify-center space-x-12 pt-3 min-w-max mx-auto px-4">
-                    {directReports.map((childUser, childIndex) => {
+                  {/* Children cards with improved spacing */}
+                  <div className="flex justify-center space-x-16 pt-4 min-w-max mx-auto px-6">
+                    {uniqueDirectReports.map((childUser, childIndex) => {
                       const childChildRoles = getChildRoles(childUser.role || '');
                       const grandChildren = childChildRoles.flatMap(childRole => 
-                        filterUsersByRole(childRole).filter(u => u.reportingTo === childUser.id)
+                          filterUsersByRole(childRole).filter(u => u.reportingTo === (childUser.userId || childUser.id))
                       );
+                        
+                        // Remove duplicates from grandChildren as well
+                        const uniqueGrandChildren = grandChildren.filter((u, index, arr) => {
+                          const firstIndex = arr.findIndex(user => (user.userId || user.id) === (u.userId || u.id));
+                          return firstIndex === index;
+                        });
 
                 return (
-                        <div key={childUser.id} className="flex flex-col items-center flex-shrink-0 min-w-0">
-                          {/* Vertical line from horizontal line to child */}
-                          <div className="w-1 h-6 bg-gradient-to-b from-gray-300 to-gray-200 mb-3 rounded-full"></div>
+                        <div key={`${childUser.id}-${childUser.email}-${childIndex}`} className="flex flex-col items-center flex-shrink-0 min-w-0">
+                          {/* Enhanced vertical line from horizontal line to child */}
+                          <div className="relative w-1 h-8 mb-4">
+                            <div className="absolute inset-0 bg-gradient-to-b from-green-300 via-green-200 to-gray-200 rounded-full shadow-lg"></div>
+                            <div className="absolute inset-0 bg-gradient-to-b from-green-400 to-green-300 rounded-full animate-pulse opacity-75"></div>
+                          </div>
                           
-                          {/* Child user card */}
+                          {/* Enhanced child user card */}
                           <div 
-                            className={`flex items-center p-3 mb-6 rounded-xl border-2 shadow-lg hover:shadow-xl transition-all duration-300 ${getRoleColor(childUser.role || '')} min-w-56 max-w-64 backdrop-blur-sm bg-white/90 cursor-pointer hover:scale-105 hover:border-green-300`}
-                            onClick={() => handleUserClick(childUser)}
+                            className={`group relative flex items-center p-4 mb-8 rounded-xl border-2 shadow-lg hover:shadow-2xl transition-all duration-500 ${getRoleColor(childUser.role || '')} min-w-60 max-w-72 backdrop-blur-sm bg-white/95 cursor-pointer hover:scale-105 hover:border-green-400 transform-gpu`}
+                            onClick={() => onUserClick(childUser)}
                             title="Click to view user details"
                           >
-                            <div className="flex-shrink-0 mr-2">
-                              <div className="p-2 rounded-full bg-gradient-to-br from-green-50 to-green-100">
+                            {/* Subtle background pattern */}
+                            <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                            
+                            <div className="relative z-10 flex items-center w-full">
+                              <div className="flex-shrink-0 mr-3">
+                                <div className="p-2.5 rounded-full bg-gradient-to-br from-green-50 to-green-100 shadow-lg group-hover:shadow-xl transition-shadow duration-300">
                                 {getRoleIcon(childUser.role || '')}
                               </div>
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between">
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-semibold text-gray-900 truncate">
+                                    <p className="text-base font-semibold text-gray-900 truncate group-hover:text-green-800 transition-colors duration-300">
                                     {getUserFullName(childUser)}
                                   </p>
-                                  <p className="text-xs text-gray-500 truncate">
+                                    <p className="text-sm text-gray-600 truncate group-hover:text-green-600 transition-colors duration-300">
                                     {childUser.email}
                                   </p>
                                 </div>
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize shadow-sm flex-shrink-0 ml-2">
+                                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold capitalize shadow-lg bg-white/80 backdrop-blur-sm border border-white/50 group-hover:bg-green-50 group-hover:border-green-200 transition-all duration-300 flex-shrink-0 ml-2">
                                   {(childUser.role || '').toLowerCase().replace('_', ' ')}
                                 </span>
                               </div>
                             </div>
                           </div>
 
-                          {/* Connecting line down from child card */}
-                          {grandChildren.length > 0 && (
-                            <div className="w-1 h-6 bg-gradient-to-b from-gray-300 to-gray-200 mb-3 rounded-full"></div>
+                            {/* Hover indicator */}
+                            <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-green-400 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 transform scale-0 group-hover:scale-100"></div>
+                          </div>
+
+                          {/* Enhanced connecting line down from child card */}
+                          {uniqueGrandChildren.length > 0 && (
+                            <div className="relative w-1 h-8 mb-4">
+                              <div className="absolute inset-0 bg-gradient-to-b from-gray-300 via-gray-200 to-gray-100 rounded-full shadow-lg"></div>
+                              <div className="absolute inset-0 bg-gradient-to-b from-gray-400 to-gray-300 rounded-full animate-pulse opacity-75"></div>
+                            </div>
                           )}
 
-                          {/* Grandchildren - Display vertically for Sales Reps */}
-                          {grandChildren.length > 0 && (
+                          {/* Enhanced Grandchildren - Display vertically for Sales Reps */}
+                          {uniqueGrandChildren.length > 0 && (
                             <div className="relative w-full">
-                              {/* Grandchildren cards - Vertical layout */}
-                              <div className="flex flex-col items-center space-y-3 pt-3">
-                                {grandChildren.map((grandChild) => (
-                                  <div key={grandChild.id} className="flex flex-col items-center">
-                                    {/* Horizontal line from vertical line to grandchild */}
-                                    <div className="w-6 h-0.5 bg-gradient-to-r from-gray-300 to-gray-200 mb-3 rounded-full"></div>
+                              {/* Grandchildren cards - Vertical layout with improved spacing */}
+                              <div className="flex flex-col items-center space-y-4 pt-4">
+                                {uniqueGrandChildren.map((grandChild, grandChildIndex) => (
+                                  <div key={`${grandChild.id}-${grandChild.email}-${grandChildIndex}`} className="flex flex-col items-center">
+                                    {/* Enhanced horizontal line from vertical line to grandchild */}
+                                    <div className="w-8 h-1 bg-gradient-to-r from-gray-300 via-gray-200 to-gray-100 mb-4 rounded-full shadow-md"></div>
                                     
-                                    {/* Grandchild user card */}
+                                    {/* Enhanced grandchild user card */}
                                     <div 
-                                      className={`flex items-center p-3 rounded-xl border-2 shadow-lg hover:shadow-xl transition-all duration-300 ${getRoleColor(grandChild.role || '')} min-w-48 max-w-56 backdrop-blur-sm bg-white/90 cursor-pointer hover:scale-105 hover:border-gray-300`}
-                                      onClick={() => handleUserClick(grandChild)}
+                                      className={`group relative flex items-center p-3 rounded-lg border-2 shadow-md hover:shadow-xl transition-all duration-500 ${getRoleColor(grandChild.role || '')} min-w-52 max-w-60 backdrop-blur-sm bg-white/95 cursor-pointer hover:scale-105 hover:border-gray-400 transform-gpu`}
+                                      onClick={() => onUserClick(grandChild)}
                                       title="Click to view user details"
                                     >
+                                      {/* Subtle background pattern */}
+                                      <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                                      
+                                      <div className="relative z-10 flex items-center w-full">
                                       <div className="flex-shrink-0 mr-2">
-                                        <div className="p-1.5 rounded-full bg-gradient-to-br from-gray-50 to-gray-100">
+                                          <div className="p-2 rounded-full bg-gradient-to-br from-gray-50 to-gray-100 shadow-md group-hover:shadow-lg transition-shadow duration-300">
                                           {getRoleIcon(grandChild.role || '')}
                                         </div>
                                       </div>
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center justify-between">
                                           <div className="min-w-0 flex-1">
-                                            <p className="text-sm font-semibold text-gray-900 truncate">
+                                              <p className="text-sm font-semibold text-gray-900 truncate group-hover:text-gray-800 transition-colors duration-300">
                                               {getUserFullName(grandChild)}
                                             </p>
-                                            <p className="text-xs text-gray-500 truncate">
+                                              <p className="text-xs text-gray-600 truncate group-hover:text-gray-700 transition-colors duration-300">
                                               {grandChild.email}
                                             </p>
                                           </div>
-                                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize shadow-sm flex-shrink-0 ml-2">
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize shadow-md bg-white/80 backdrop-blur-sm border border-white/50 group-hover:bg-gray-50 group-hover:border-gray-200 transition-all duration-300 flex-shrink-0 ml-2">
                                             {(grandChild.role || '').toLowerCase().replace('_', ' ')}
                                           </span>
+                                          </div>
                                         </div>
                                       </div>
+                                      
+                                      {/* Hover indicator */}
+                                      <div className="absolute top-0 right-0 w-2 h-2 bg-gray-400 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 transform scale-0 group-hover:scale-100"></div>
                                     </div>
                                   </div>
                                 ))}
@@ -472,22 +631,46 @@ const OrgTree: React.FC = () => {
   const getChildRoles = (parentRole: string): string[] => {
     switch (parentRole.toUpperCase()) {
       case 'SUPER_ADMIN':
-        return ['ADMIN'];
+        return ['ADMIN']; // SUPER_ADMIN shows ADMIN role structure only
       case 'ADMIN':
-        return ['SALES_MANAGER'];
+        return ['SALES_MANAGER']; // ADMIN users can show SALES_MANAGER users
       case 'SALES_MANAGER':
-        return ['SALES_REP'];
+      case 'MANAGER':
+        return ['SALES_REP', 'REP']; // SALES_MANAGER users can show SALES_REP users
       default:
-        return [];
+        return []; // No children for any other roles
     }
   };
 
   const getRootRole = (): string => {
     const currentUserRole = currentUser?.role?.toUpperCase();
-    if (currentUserRole === 'SUPER_ADMIN') {
+    const currentUserOriginalRole = currentUser?.originalRole?.toUpperCase();
+    
+    if (currentUserOriginalRole === 'SUPER_ADMIN' || currentUserRole === 'SUPER_ADMIN') {
       return 'SUPER_ADMIN';
     }
+    
     return 'ADMIN';
+  };
+
+  const getUsersToDisplay = (): OrganisationUser[] => {
+    const currentUserRole = currentUser?.role?.toUpperCase();
+    const currentUserOriginalRole = currentUser?.originalRole?.toUpperCase();
+    
+    console.log('🔍 Debug - getUsersToDisplay:', { 
+      currentUserRole, 
+      currentUserOriginalRole, 
+      userListLength: userList.length,
+      userList: userList.map(u => ({ id: u.id, email: u.email, role: u.role, originalRole: u.originalRole }))
+    });
+    
+    if (currentUserOriginalRole === 'SUPER_ADMIN' || currentUserRole === 'SUPER_ADMIN') {
+      // SUPER_ADMIN sees ALL users from ALL tenants
+      return userList;
+    } else {
+      // Regular users see users in their tenant
+      return userList;
+    }
   };
 
   if (loading) {
@@ -547,6 +730,22 @@ const OrgTree: React.FC = () => {
 
   const rootRole = getRootRole();
   const rootUsers = filterUsersByRole(rootRole);
+  
+  const adminUsers = filterUsersByRole('ADMIN');
+  const salesManagerUsers = filterUsersByRole('SALES_MANAGER');
+  const salesRepUsers = filterUsersByRole('SALES_REP');
+  
+  console.log('🔍 Debug - Main render:', {
+    rootRole,
+    rootUsersCount: rootUsers.length,
+    rootUsers: rootUsers.map(u => ({ id: u.id, email: u.email, role: u.role })),
+    adminUsersCount: adminUsers.length,
+    adminUsers: adminUsers.map(u => ({ id: u.id, email: u.email, role: u.role })),
+    salesManagerUsersCount: salesManagerUsers.length,
+    salesRepUsersCount: salesRepUsers.length,
+    salesRepUsers: salesRepUsers.map(u => ({ id: u.id, email: u.email, role: u.role, reportingTo: u.reportingTo, tenantId: u.tenantId })),
+    totalUsers: userList.length
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50 p-6">
@@ -561,76 +760,114 @@ const OrgTree: React.FC = () => {
       />
 
       <div className="max-w-7xl mx-auto">
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20">
-          <div className="p-6 border-b border-gray-200/50">
-            <div className="flex items-center justify-between">
-              
-              <div className="flex items-center space-x-4">
-                <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-3 py-1.5 rounded-full shadow-lg">
-                  <span className="text-sm font-semibold">
-                  Total Users: {userList.length}
-                </span>
+        <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/30 overflow-hidden">
+
+
+          {/* Organizational Structure Overview */}
+          <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center p-4 bg-white rounded-xl shadow-sm border border-blue-200">
+                <div className="text-2xl font-bold text-blue-600">{rootUsers.length}</div>
+                <div className="text-sm text-blue-800 font-medium">Root Users</div>
+              </div>
+              <div className="text-center p-4 bg-white rounded-xl shadow-sm border border-blue-200">
+                <div className="text-2xl font-bold text-blue-600">{adminUsers.length}</div>
+                <div className="text-sm text-blue-800 font-medium">Admin Users</div>
                 </div>
-                <div className="flex items-center space-x-2 bg-white/80 px-3 py-1.5 rounded-full shadow-sm border border-gray-200/50">
-                  <Icons.Network className="w-4 h-4 text-blue-500" />
-                  <span className="text-sm font-medium text-blue-600">
-                    {currentUser?.role?.toUpperCase().replace('_', ' ')} View
-                  </span>
+              <div className="text-center p-4 bg-white rounded-xl shadow-sm border border-green-200">
+                <div className="text-2xl font-bold text-green-600">{salesManagerUsers.length}</div>
+                <div className="text-sm text-green-800 font-medium">Sales Managers</div>
                 </div>
+              <div className="text-center p-4 bg-white rounded-xl shadow-sm border border-gray-200">
+                <div className="text-2xl font-bold text-gray-600">{salesRepUsers.length}</div>
+                <div className="text-sm text-gray-800 font-medium">Sales Reps</div>
               </div>
             </div>
           </div>
 
-          <div className="p-8 max-h-[70vh] overflow-y-auto">
+          <div className="p-8 max-h-[70vh] overflow-y-auto bg-gradient-to-br from-gray-50/50 to-blue-50/50">
             {rootUsers.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Icons.Users className="w-8 h-8 text-gray-400" />
+              <div className="text-center py-16">
+                <div className="w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                  <Icons.Users className="w-10 h-10 text-gray-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">No Users Found</h3>
-                <p className="text-gray-600">No users found in your organisation structure.</p>
+                <h3 className="text-xl font-semibold text-gray-900 mb-3">No Users Found</h3>
+                <p className="text-gray-600 mb-4">No users found in your organisation structure.</p>
+                <div className="w-16 h-1 bg-gradient-to-r from-gray-300 to-gray-400 rounded-full mx-auto"></div>
               </div>
             ) : (
               <div className="w-full overflow-x-auto orgtree-scrollbar">
-                <div className="min-w-max mx-auto px-12 py-2">
-                <TreeNode users={rootUsers} role={rootRole} level={0} />
+                <div className="min-w-max mx-auto px-16 py-4">
+                  <TreeNode users={rootUsers} role={rootRole} level={0} onUserClick={handleUserClick} />
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Legend */}
-        <div className="mt-6 bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-4">
-          <h4 className="text-base font-semibold text-gray-900 mb-3">Role Legend</h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* Enhanced Legend */}
+        <div className="mt-8 bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/30 p-6 overflow-hidden">
+          {/* Legend Header */}
+          <div className="relative mb-6">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-100/20 via-indigo-100/20 to-purple-100/20"></div>
+            <div className="relative z-10 flex items-center space-x-3">
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                <Icons.Info className="w-4 h-4 text-white" />
+              </div>
+              <h4 className="text-lg font-bold text-gray-900">Role Legend</h4>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {/* Only show Super Admin role if current user is SUPER_ADMIN */}
-            {currentUser?.role?.toUpperCase() === 'SUPER_ADMIN' && (
-              <div className="flex items-center space-x-2 p-2 bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border border-purple-200">
-                <div className="p-1.5 bg-gradient-to-br from-purple-100 to-purple-200 rounded-full">
-                  <Icons.Crown className="w-3 h-3 text-purple-600" />
+            {currentUser?.originalRole?.toUpperCase() === 'SUPER_ADMIN' && (
+              <div className="group relative p-4 bg-gradient-to-r from-purple-50 to-purple-100 rounded-2xl border-2 border-purple-200 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+                <div className="absolute top-0 right-0 w-2 h-2 bg-purple-400 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300"></div>
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-gradient-to-br from-purple-100 to-purple-200 rounded-full shadow-md">
+                    <Icons.Crown className="w-4 h-4 text-purple-600" />
+                  </div>
+                  <span className="text-sm font-semibold text-purple-800">Super Admin</span>
                 </div>
-                <span className="text-sm font-medium text-purple-800">Super Admin</span>
               </div>
             )}
-            <div className="flex items-center space-x-2 p-2 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border border-blue-200">
-              <div className="p-1.5 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full">
-                <Icons.Shield className="w-3 h-3 text-blue-600" />
+            
+            <div className="group relative p-4 bg-gradient-to-r from-blue-50 to-blue-100 rounded-2xl border-2 border-blue-200 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <div className="absolute top-0 right-0 w-2 h-2 bg-blue-400 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300"></div>
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full shadow-md">
+                  <Icons.Shield className="w-4 h-4 text-blue-600" />
+                </div>
+                <span className="text-sm font-semibold text-blue-800">Admin</span>
               </div>
-              <span className="text-sm font-medium text-blue-800">Admin</span>
             </div>
-            <div className="flex items-center space-x-2 p-2 bg-gradient-to-r from-green-50 to-green-100 rounded-lg border border-green-200">
-              <div className="p-1.5 bg-gradient-to-br from-green-100 to-green-200 rounded-full">
-                <Icons.Users className="w-3 h-3 text-green-600" />
+            
+            <div className="group relative p-4 bg-gradient-to-r from-green-50 to-green-100 rounded-2xl border-2 border-green-200 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <div className="absolute top-0 right-0 w-2 h-2 bg-green-400 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300"></div>
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-gradient-to-br from-green-100 to-green-200 rounded-full shadow-md">
+                  <Icons.Users className="w-4 h-4 text-green-600" />
+                </div>
+                <span className="text-sm font-semibold text-green-800">SALES_MANAGER</span>
               </div>
-              <span className="text-sm font-medium text-green-800">Sales Manager</span>
             </div>
-            <div className="flex items-center space-x-2 p-2 bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg border border-gray-200">
-              <div className="p-1.5 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full">
-                <Icons.User className="w-3 h-3 text-gray-600" />
+            
+            <div className="group relative p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-2xl border-2 border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+              <div className="absolute top-0 right-0 w-2 h-2 bg-gray-400 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300"></div>
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full shadow-md">
+                  <Icons.User className="w-4 h-4 text-gray-600" />
+                </div>
+                <span className="text-sm font-semibold text-gray-800">SALES_REP</span>
               </div>
-              <span className="text-sm font-medium text-gray-800">Sales Rep</span>
             </div>
+          </div>
+          
+          {/* Legend Footer */}
+          <div className="mt-6 pt-4 border-t border-gray-200/50">
+            <p className="text-xs text-gray-500 text-center">
+              Click on any user card to view detailed information
+            </p>
           </div>
         </div>
       </div>
@@ -649,4 +886,35 @@ const OrgTree: React.FC = () => {
 };
 
 export default OrgTree;
+
+// Add custom CSS for better scrolling experience
+const customStyles = `
+  .orgtree-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .orgtree-scrollbar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+  }
+  
+  .orgtree-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    border-radius: 4px;
+    transition: all 0.3s ease;
+  }
+  
+  .orgtree-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    transform: scale(1.1);
+  }
+`;
+
+// Inject custom styles
+if (typeof document !== 'undefined') {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = customStyles;
+  document.head.appendChild(styleElement);
+}
 
