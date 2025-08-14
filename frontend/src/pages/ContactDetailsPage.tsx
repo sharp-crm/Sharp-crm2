@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
-import { contactsApi, Contact, usersApi, User, Task } from '../api/services';
+import { contactsApi, Contact, usersApi, User, Task, Deal } from '../api/services';
 import ContactHeader from '../components/ContactDetails/ContactHeader';
 import ContactSidebar from '../components/ContactDetails/ContactSidebar';
 import ContactTabs from '../components/ContactDetails/ContactTabs';
@@ -18,6 +18,7 @@ const ContactDetailsPage: React.FC = () => {
   const [sidebarSection, setSidebarSection] = useState<string>('notes');
   const [currentContact, setCurrentContact] = useState<Contact | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [deals, setDeals] = useState<Deal[]>([]);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
@@ -98,6 +99,10 @@ const ContactDetailsPage: React.FC = () => {
     setTasks(updatedTasks);
   }, []);
 
+  const handleDealsUpdate = useCallback((updatedDeals: Deal[]) => {
+    setDeals(updatedDeals);
+  }, []);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -141,7 +146,7 @@ const ContactDetailsPage: React.FC = () => {
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar */}
           <div className="w-56 bg-white border-r border-gray-200 overflow-y-auto">
-            <ContactSidebar contact={currentContact || contact} tasks={tasks} />
+            <ContactSidebar contact={currentContact || contact} tasks={tasks} dealsCount={deals.length} />
           </div>
 
           {/* Main Content */}
@@ -153,6 +158,7 @@ const ContactDetailsPage: React.FC = () => {
               getUserDisplayName={getUserDisplayName}
               onContactUpdate={handleContactUpdate}
               onTasksUpdate={handleTasksUpdate}
+              onDealsUpdate={handleDealsUpdate}
             />
           </div>
         </div>

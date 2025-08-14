@@ -34,8 +34,8 @@ const adminItems: SidebarItem[] = [
 // SuperAdmin-specific items (standalone, not in dropdowns)
 const superAdminItems: SidebarItem[] = [
   { name: 'Home', path: '/home', icon: 'Home' },
-  { name: 'Organisational Tree', path: '/settings/org-tree', icon: 'Network' },
-  { name: 'Access Control', path: '/settings/access-control', icon: 'Users' },
+  { name: 'SuperAdmin Org Tree', path: '/settings/super-admin-org-tree', icon: 'Network' },
+  { name: 'Admin Access Control', path: '/settings/super-admin-access-control', icon: 'Shield' },
   { name: 'Personal', path: '/settings/personal', icon: 'User' },
   { name: 'Email Integration', path: '/integrations/email', icon: 'Mail' },
   { name: 'Team Chat', path: '/team-chat', icon: 'MessageSquare' },
@@ -110,7 +110,7 @@ export const settingsItems: SidebarItem[] = [
     children: [
       { name: 'Personal Settings', path: '/settings/personal', icon: 'User' },
       { name: 'Access Control', path: '/settings/access-control', icon: 'Users' },
-      { name: 'Organisation Tree', path: '/settings/org-tree', icon: 'Network' },
+      { name: 'Tenant Org Tree', path: '/settings/org-tree', icon: 'Network' },
     ]
   }
 ];

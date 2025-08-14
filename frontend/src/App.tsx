@@ -23,7 +23,9 @@ import Dealers from './pages/Dealers';
 import Notifications from './pages/Notifications';
 import Personal from './pages/Settings/Personal';
 import AccessControl from './pages/Settings/AccessControl';
+import SuperAdminAccessControl from './pages/Settings/SuperAdminAccessControl';
 import OrgTree from './pages/Settings/OrgTree';
+import SuperAdminOrgTree from './pages/Settings/SuperAdminOrgTree';
 import EmailIntegration from './pages/Integration/EmailIntegration';
 import TeamChat from './pages/TeamChat';
 import Profile from './pages/Profile';
@@ -101,7 +103,9 @@ const App: React.FC = () => {
             {/* Settings routes - SuperAdmin can access specific ones */}
             <Route path="settings/personal" element={<Personal />} />
             <Route path="settings/access-control" element={<AccessControl />} />
+            <Route path="settings/super-admin-access-control" element={<SuperAdminAccessControl />} />
             <Route path="settings/org-tree" element={<OrgTree />} />
+            <Route path="settings/super-admin-org-tree" element={<SuperAdminOrgTree />} />
             
             {/* Integration and Chat routes - SuperAdmin can access */}
             <Route path="integrations/email" element={<EmailIntegration />} />

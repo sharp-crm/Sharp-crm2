@@ -28,6 +28,7 @@ const QuoteDetailsPage: React.FC = () => {
     setTasks(updatedTasks);
   }, []);
 
+  // Fetch quote and users data
   useEffect(() => {
     const fetchData = async () => {
       if (!id) return;
@@ -54,6 +55,23 @@ const QuoteDetailsPage: React.FC = () => {
     };
 
     fetchData();
+  }, [id]);
+
+  // Fetch tasks related to this quote
+  useEffect(() => {
+    const fetchTasks = async () => {
+      if (!id) return;
+      
+      try {
+        const quoteTasks = await tasksApi.getByRelatedRecord('quote', id);
+        setTasks(quoteTasks);
+      } catch (err) {
+        console.error('Error fetching quote tasks:', err);
+        // Don't set error for tasks, just log it
+      }
+    };
+
+    fetchTasks();
   }, [id]);
 
   const getUserDisplayName = (userId: string): string => {

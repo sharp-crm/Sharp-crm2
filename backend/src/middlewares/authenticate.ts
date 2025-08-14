@@ -9,6 +9,8 @@ import {
   cleanupExpiredTokens 
 } from "../utils/tokenUtils";
 
+
+
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
 
 export interface AuthenticatedRequest extends Request {
@@ -18,6 +20,7 @@ export interface AuthenticatedRequest extends Request {
     firstName: string;
     lastName: string;
     role: string;
+    originalRole?: string; // Optional original role
     tenantId: string;
     isDeleted?: boolean;
   };
@@ -78,6 +81,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
           firstName: userResult.Item.firstName || '',
           lastName: userResult.Item.lastName || '',
           role: userResult.Item.role || 'SALES_REP',
+          originalRole: userResult.Item.role || 'SALES_REP', // Keep original role for display
           tenantId: userResult.Item.tenantId || 'DEFAULT_TENANT',
           isDeleted: userResult.Item.isDeleted || false
         };

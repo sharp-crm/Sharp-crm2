@@ -184,6 +184,7 @@ export interface Product {
   // Related records
   relatedLeadIds?: string[];
   relatedContactIds?: string[];
+  relatedDealIds?: string[];
   
   // Legacy fields for backward compatibility
   category?: string;
@@ -1328,6 +1329,7 @@ export interface User {
   name: string;
   email: string;
   role: string;
+  originalRole?: string;
   tenantId: string;
   firstName?: string;
   lastName?: string;
@@ -1343,6 +1345,13 @@ export const usersApi = {
     const response = await API.get('/users/tenant-users');
     return response.data.data;
   },
+
+  getAllUsers: async (): Promise<User[]> => {
+    const response = await API.get('/users/');
+    return response.data.data;
+  },
+
+
 
   getById: async (id: string): Promise<User> => {
     const response = await API.get(`/users/${id}`);

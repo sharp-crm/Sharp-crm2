@@ -39,10 +39,13 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
     tasks: [],
     subsidiaries: [],
     dealers: [],
+    products: [],
+    quotes: [],
     total: 0
   });
   const [isSearching, setIsSearching] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
   
   const notificationRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
@@ -61,6 +64,8 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
           tasks: [],
           subsidiaries: [],
           dealers: [],
+          products: [],
+          quotes: [],
           total: 0
         });
         setIsSearching(false);
@@ -95,6 +100,8 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
         tasks: [],
         subsidiaries: [],
         dealers: [],
+        products: [],
+        quotes: [],
         total: 0
       });
     } else {
@@ -106,7 +113,15 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const handleSearchResultClick = (result: SearchResult) => {
     setSearchQuery('');
     setShowSearchResults(false);
-    // Navigation is handled in the SearchDropdown component
+    setSelectedResult(result);
+    
+    // Provide user feedback about the navigation
+    console.log(`Navigating to ${result.type}: ${result.title}`);
+    
+    // Clear the selected result after a delay
+    setTimeout(() => {
+      setSelectedResult(null);
+    }, 3000);
   };
 
   // Close search dropdown
@@ -119,6 +134,11 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
     if (e.key === 'Escape') {
       setShowSearchResults(false);
       searchInputRef.current?.blur();
+    } else if (e.key === 'Enter' && searchQuery.trim()) {
+      // If there are search results, trigger a search
+      if (searchResults.total > 0) {
+        debouncedSearch(searchQuery);
+      }
     }
   };
 
@@ -154,7 +174,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
             >
               <Icons.Menu className="w-5 h-5" />
             </button>
-            <div className="relative w-full" ref={searchRef}>
+            <div className="relative w-80" ref={searchRef}> 
               <div className="relative">
             <input
                   ref={searchInputRef}
@@ -162,7 +182,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
               value={searchQuery}
                   onChange={handleSearchChange}
                   onKeyDown={handleSearchKeyDown}
-                  placeholder="Search contacts, leads, deals, tasks..."
+                  placeholder="Search..."
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
             />
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -194,6 +214,18 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
                   onClose={closeSearchDropdown}
                   onResultClick={handleSearchResultClick}
                 />
+              )}
+              
+              {/* Success Message */}
+              {selectedResult && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-green-50 border border-green-200 rounded-lg p-3 animate-in fade-in-0 slide-in-from-top-2 duration-200">
+                  <div className="flex items-center space-x-2">
+                    <Icons.CheckCircle className="w-4 h-4 text-green-600" />
+                    <span className="text-sm text-green-800">
+                      Navigating to <strong>{selectedResult.type}</strong>: {selectedResult.title}
+                    </span>
+                  </div>
+                </div>
               )}
             </div>
           </div>

@@ -16,6 +16,7 @@ interface AuthState {
     firstName: string;
     lastName: string;
     role: string;
+    originalRole?: string;
     tenantId?: string;
     createdBy?: string;
     phoneNumber?: string;
@@ -37,8 +38,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
 
   login: (payload) => {
-    const { userId, email, firstName, lastName, role, tenantId, createdBy, phoneNumber, accessToken, refreshToken } = payload;
-    const user = { userId, email, firstName, lastName, role, tenantId, createdBy, phoneNumber };
+    const { userId, email, firstName, lastName, role, originalRole, tenantId, createdBy, phoneNumber, accessToken, refreshToken } = payload;
+    const user = { 
+      id: userId,
+      userId, 
+      email, 
+      firstName, 
+      lastName, 
+      role: role as 'admin' | 'manager' | 'rep', 
+      originalRole: (originalRole as string) || role, // Use originalRole if provided, otherwise use role
+      tenantId, 
+      createdBy, 
+      phoneNumber,
+      name: `${firstName} ${lastName}`.trim()
+    };
     set({ user, accessToken, refreshToken: refreshToken || null });
 
     // Store in both session and local storage (access token only, refresh token is in cookie)
@@ -143,7 +156,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  setUser: (user) => set({ user }),
+  setUser: (user) => {
+    set({ user });
+    // Also update storage if user has originalRole
+    if (user) {
+      const userStr = JSON.stringify(user);
+      sessionStorage.setItem('user', userStr);
+      localStorage.setItem('user', userStr);
+    }
+  },
 
   setToken: (token) => set({ token }),
 
@@ -161,7 +182,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  updateUser: (user) => set({ user }),
+  updateUser: (user) => {
+    set({ user });
+    // Also update storage if user has originalRole
+    if (user) {
+      const userStr = JSON.stringify(user);
+      sessionStorage.setItem('user', userStr);
+      localStorage.setItem('user', userStr);
+    }
+  },
 }));
 
 // Manual debugging helper - accessible from console

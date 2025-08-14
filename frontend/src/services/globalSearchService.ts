@@ -5,17 +5,21 @@ import {
   tasksApi, 
   subsidiariesApi, 
   dealersApi,
+  productsApi,
+  quotesApi,
   Lead,
   Contact,
   Deal,
   Task,
   Subsidiary,
-  Dealer
+  Dealer,
+  Product,
+  Quote
 } from '../api/services';
 
 export interface SearchResult {
   id: string;
-  type: 'lead' | 'contact' | 'deal' | 'task' | 'subsidiary' | 'dealer';
+  type: 'lead' | 'contact' | 'deal' | 'task' | 'subsidiary' | 'dealer' | 'product' | 'quote';
   title: string;
   subtitle: string;
   description: string;
@@ -30,6 +34,8 @@ export interface SearchResults {
   tasks: SearchResult[];
   subsidiaries: SearchResult[];
   dealers: SearchResult[];
+  products: SearchResult[];
+  quotes: SearchResult[];
   total: number;
 }
 
@@ -63,17 +69,22 @@ class GlobalSearchService {
           lead.leadStatus,
           lead.description,
           lead.city,
-          lead.state
+          lead.state,
+          lead.street,
+          lead.area,
+          lead.country,
+          lead.zipCode,
+          lead.value?.toString()
         )
       )
       .slice(0, this.maxResultsPerType)
       .map(lead => ({
         id: lead.id,
         type: 'lead' as const,
-        title: `${lead.firstName} ${lead.lastName}`.trim(),
+        title: [lead.firstName, lead.lastName].filter(Boolean).join(' ') || 'Unnamed Lead',
         subtitle: lead.company || lead.email,
         description: `${lead.leadStatus} • ${lead.leadSource}`,
-        route: '/leads',
+        route: `/leads/${lead.id}`,
         data: lead
       }));
   }
@@ -84,6 +95,7 @@ class GlobalSearchService {
         this.searchInText(
           searchTerm,
           contact.firstName,
+          contact.lastName,
           contact.email,
           contact.phone,
           contact.companyName,
@@ -92,17 +104,23 @@ class GlobalSearchService {
           contact.leadSource,
           contact.description,
           contact.city,
-          contact.state
+          contact.state,
+          contact.street,
+          contact.area,
+          contact.country,
+          contact.zipCode,
+          contact.notes,
+          contact.status
         )
       )
       .slice(0, this.maxResultsPerType)
       .map(contact => ({
         id: contact.id,
         type: 'contact' as const,
-        title: contact.firstName,
-        subtitle: contact.companyName || contact.email,
+        title: [contact.firstName, contact.lastName].filter(Boolean).join(' ') || 'Unnamed Contact',
+        subtitle: contact.companyName || contact.phone || contact.email,
         description: `${contact.title || 'Contact'} • ${contact.leadSource}`,
-        route: '/contacts',
+        route: `/contacts/${contact.id}`,
         data: contact
       }));
   }
@@ -127,7 +145,7 @@ class GlobalSearchService {
         title: deal.dealName || deal.name || 'Untitled Deal',
         subtitle: `$${deal.amount?.toLocaleString() || '0'}`,
         description: `${deal.stage} • ${deal.dealOwner || deal.owner}`,
-        route: '/deals',
+        route: `/deals/${deal.id}`,
         data: deal
       }));
   }
@@ -152,7 +170,7 @@ class GlobalSearchService {
         title: task.title,
         subtitle: task.assignee,
         description: `${task.status} • ${task.priority} Priority • ${task.type}`,
-        route: '/tasks',
+        route: `/tasks/${task.id}`,
         data: task
       }));
   }
@@ -176,7 +194,7 @@ class GlobalSearchService {
         title: subsidiary.name,
         subtitle: subsidiary.email,
         description: `${subsidiary.totalEmployees} employees • ${subsidiary.address}`,
-        route: '/subsidiaries',
+        route: `/subsidiaries/${subsidiary.id}`,
         data: subsidiary
       }));
   }
@@ -202,8 +220,57 @@ class GlobalSearchService {
         title: dealer.name,
         subtitle: dealer.company,
         description: `${dealer.status} • ${dealer.territory} • ${dealer.location}`,
-        route: '/dealers',
+        route: `/dealers/${dealer.id}`,
         data: dealer
+      }));
+  }
+
+  private searchProducts(products: Product[], searchTerm: string): SearchResult[] {
+    return products
+      .filter(product =>
+        this.searchInText(
+          searchTerm,
+          product.name,
+          product.description,
+          product.category,
+          product.price?.toString(),
+          product.cost?.toString()
+        )
+      )
+      .slice(0, this.maxResultsPerType)
+      .map(product => ({
+        id: product.id,
+        type: 'product' as const,
+        title: product.name || 'Untitled Product',
+        subtitle: product.category || 'No Category',
+        description: `${product.category || 'No Category'} • $${product.price?.toLocaleString() || '0'}`,
+        route: `/products/${product.id}`,
+        data: product
+      }));
+  }
+
+  private searchQuotes(quotes: Quote[], searchTerm: string): SearchResult[] {
+    return quotes
+      .filter(quote =>
+        this.searchInText(
+          searchTerm,
+          quote.quoteNumber,
+          quote.quoteName,
+          quote.description,
+          quote.status,
+          quote.totalAmount?.toString(),
+          quote.quoteOwner
+        )
+      )
+      .slice(0, this.maxResultsPerType)
+      .map(quote => ({
+        id: quote.id,
+        type: 'quote' as const,
+        title: quote.quoteName || quote.quoteNumber || 'Untitled Quote',
+        subtitle: quote.quoteOwner || quote.quoteNumber,
+        description: `${quote.status} • $${quote.totalAmount?.toLocaleString() || '0'}`,
+        route: `/quotes/${quote.id}`,
+        data: quote
       }));
   }
 
@@ -216,19 +283,23 @@ class GlobalSearchService {
         tasks: [],
         subsidiaries: [],
         dealers: [],
+        products: [],
+        quotes: [],
         total: 0
       };
     }
 
     try {
       // Fetch data from all APIs in parallel
-      const [leads, contacts, deals, tasks, subsidiaries, dealers] = await Promise.all([
+      const [leads, contacts, deals, tasks, subsidiaries, dealers, products, quotes] = await Promise.all([
         leadsApi.getAll(),
         contactsApi.getAll(),
         dealsApi.getAll(),
         tasksApi.getAll(),
         subsidiariesApi.getAll(),
-        dealersApi.getAll()
+        dealersApi.getAll(),
+        productsApi.getAll(),
+        quotesApi.getAll()
       ]);
 
       // Search in each data type
@@ -238,9 +309,12 @@ class GlobalSearchService {
       const taskResults = this.searchTasks(tasks, searchTerm);
       const subsidiaryResults = this.searchSubsidiaries(subsidiaries, searchTerm);
       const dealerResults = this.searchDealers(dealers, searchTerm);
+      const productResults = this.searchProducts(products, searchTerm);
+      const quoteResults = this.searchQuotes(quotes, searchTerm);
 
       const total = leadResults.length + contactResults.length + dealResults.length + 
-                   taskResults.length + subsidiaryResults.length + dealerResults.length;
+                   taskResults.length + subsidiaryResults.length + dealerResults.length +
+                   productResults.length + quoteResults.length;
 
       return {
         leads: leadResults,
@@ -249,6 +323,8 @@ class GlobalSearchService {
         tasks: taskResults,
         subsidiaries: subsidiaryResults,
         dealers: dealerResults,
+        products: productResults,
+        quotes: quoteResults,
         total
       };
     } catch (error) {
@@ -260,6 +336,8 @@ class GlobalSearchService {
         tasks: [],
         subsidiaries: [],
         dealers: [],
+        products: [],
+        quotes: [],
         total: 0
       };
     }
@@ -276,7 +354,9 @@ class GlobalSearchService {
       ...results.deals,
       ...results.tasks,
       ...results.subsidiaries,
-      ...results.dealers
+      ...results.dealers,
+      ...results.products,
+      ...results.quotes
     ];
 
     return allResults.slice(0, maxResults);

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog } from '@headlessui/react';
 import { useNavigate } from 'react-router-dom';
 import * as Icons from 'lucide-react';
-import { Lead, contactsApi, dealsApi, leadsApi } from '../api/services';
+import { Lead, contactsApi, dealsApi, leadsApi, productsApi } from '../api/services';
 import PhoneNumberInput from './Common/PhoneNumberInput';
 import { DEAL_STAGES } from '../types';
 
@@ -114,10 +114,43 @@ const ConvertLeadModal: React.FC<ConvertLeadModalProps> = ({
         state: lead.state,
         country: lead.country,
         zipCode: lead.zipCode,
-        visibleTo: lead.visibleTo || []
+        visibleTo: lead.visibleTo || [],
+        // Preserve product associations from the lead
+        relatedProductIds: lead.relatedProductIds || []
       };
 
       const contact = await contactsApi.create(contactData);
+
+      // Update all products that were associated with this lead
+      if (lead.relatedProductIds && lead.relatedProductIds.length > 0) {
+        console.log('🔄 Updating products after lead conversion:', lead.relatedProductIds);
+        
+        for (const productId of lead.relatedProductIds) {
+          try {
+            // Get the current product
+            const product = await productsApi.getById(productId);
+            if (product) {
+              // Remove the lead from relatedLeadIds
+              const currentLeadIds = product.relatedLeadIds || [];
+              const updatedLeadIds = currentLeadIds.filter(id => id !== lead.id);
+              
+              // Add the new contact to relatedContactIds
+              const currentContactIds = product.relatedContactIds || [];
+              const updatedContactIds = [...currentContactIds, contact.id];
+              
+              // Update the product
+              await productsApi.update(productId, {
+                relatedLeadIds: updatedLeadIds,
+                relatedContactIds: updatedContactIds
+              });
+              
+              console.log(`✅ Product ${productId} updated: removed lead ${lead.id}, added contact ${contact.id}`);
+            }
+          } catch (error) {
+            console.error(`❌ Failed to update product ${productId}:`, error);
+          }
+        }
+      }
 
       // Create deal if checkbox is checked
       if (convertToDeal) {

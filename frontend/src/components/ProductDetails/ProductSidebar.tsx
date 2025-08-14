@@ -5,9 +5,10 @@ import { Product, Task } from '../../api/services';
 interface ProductSidebarProps {
   product?: Product;
   tasks?: Task[];
+  dealsCount?: number;
 }
 
-const ProductSidebar: React.FC<ProductSidebarProps> = ({ product, tasks = [] }) => {
+const ProductSidebar: React.FC<ProductSidebarProps> = ({ product, tasks = [], dealsCount }) => {
   // Calculate counts based on product data
   const getSpecificationsCount = () => {
     if (!product) return 0;
@@ -55,6 +56,10 @@ const ProductSidebar: React.FC<ProductSidebarProps> = ({ product, tasks = [] }) 
     return product.relatedContactIds.length;
   };
 
+  const getDealsCount = () => {
+    return dealsCount || 0;
+  };
+
   const sidebarItems = [
     { 
       id: 'product-information', 
@@ -67,6 +72,12 @@ const ProductSidebar: React.FC<ProductSidebarProps> = ({ product, tasks = [] }) 
       label: 'Notes', 
       icon: Icons.FileText, 
       count: getNotesCount()
+    },
+    { 
+      id: 'deals', 
+      label: 'Deals', 
+      icon: Icons.Target, 
+      count: getDealsCount()
     },
     { 
       id: 'open-activities', 
