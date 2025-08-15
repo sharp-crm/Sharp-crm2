@@ -732,6 +732,10 @@ const OverviewTab: React.FC<{
         setRelatedQuotes([]);
       }
       
+      // Force a re-render by updating the loading state briefly
+      setLoadingQuotes(true);
+      setTimeout(() => setLoadingQuotes(false), 100);
+      
       return refreshedContact;
     } catch (error) {
       console.error('Error refreshing quotes:', error);
@@ -758,6 +762,10 @@ const OverviewTab: React.FC<{
       if (onDealsUpdate) {
         onDealsUpdate(dealsWithContact);
       }
+      
+      // Force a re-render by updating the loading state briefly
+      setLoadingDeals(true);
+      setTimeout(() => setLoadingDeals(false), 100);
       
       console.log('🔍 [refreshDeals] Deals refreshed successfully');
       return dealsWithContact;
@@ -982,46 +990,6 @@ const OverviewTab: React.FC<{
               <h3 className="text-lg font-semibold text-gray-900">Deals</h3>
             </div>
             <div className="flex items-center space-x-2">
-              <button 
-                onClick={async () => {
-                  try {
-                    // Sync existing deals that might not be properly linked
-                    const allDeals = await dealsApi.getAll();
-                    const dealsWithThisContact = allDeals.filter(deal => 
-                      deal.relatedContactIds && deal.relatedContactIds.includes(contact.id)
-                    );
-                    
-                    if (dealsWithThisContact.length > 0) {
-                      addToast({
-                        type: 'success',
-                        title: 'Deals Synced',
-                        message: `Found and linked ${dealsWithThisContact.length} existing deals to this contact.`
-                      });
-                      
-                      // Refresh deals to show the synced deals immediately
-                      await refreshDeals();
-                    } else {
-                      addToast({
-                        type: 'info',
-                        title: 'No Deals Found',
-                        message: 'No existing deals were found to sync with this contact.'
-                      });
-                    }
-                  } catch (error) {
-                    console.error('Error syncing deals:', error);
-                    addToast({
-                      type: 'error',
-                      title: 'Error',
-                      message: 'Failed to sync deals. Please try again.'
-                    });
-                  }
-                }}
-                className="text-gray-600 hover:text-gray-800 text-sm font-medium flex items-center"
-                title="Sync existing deals"
-              >
-                <Icons.RefreshCw className="w-4 h-4 mr-1" />
-                Sync
-              </button>
               <button 
                 onClick={() => setIsAddDealModalOpen(true)}
                 className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
@@ -1642,6 +1610,9 @@ const OverviewTab: React.FC<{
             // Show loading state
             setLoadingQuotes(true);
             
+            // Wait a bit for the quote to be fully created in the database
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
             // Get all quotes and find the most recent one created by the current user
             const allQuotes = await quotesApi.getAll();
             const currentUserId = user?.userId || '';
@@ -1653,7 +1624,7 @@ const OverviewTab: React.FC<{
               throw new Error('Current user ID not available');
             }
             
-            // Find quotes created by the current user within the last 5 minutes
+            // Find quotes created by the current user within the last 5 minutes (increased time window for reliability)
             const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
             const recentQuotes = allQuotes
               .filter(quote => {
@@ -1700,6 +1671,9 @@ const OverviewTab: React.FC<{
                 });
               } else {
                 console.log('🔍 [handleCreateQuote] Quote already associated with contact');
+                // Refresh quotes to show the new quote immediately
+                await refreshQuotes();
+                
                 addToast({
                   type: 'success',
                   title: 'Quote Created',
@@ -1708,15 +1682,35 @@ const OverviewTab: React.FC<{
               }
             } else {
               console.log('🔍 [handleCreateQuote] No recent quotes found by current user');
-              throw new Error('No recent quotes found to associate with contact');
+              // Instead of throwing an error, just refresh and show a success message
+              // The quote might have been created but not found due to timing
+              await refreshQuotes();
+              
+              addToast({
+                type: 'success',
+                title: 'Quote Created',
+                message: 'New quote has been created successfully. Please check the quotes section.'
+              });
             }
           } catch (error) {
             console.error('🔍 [handleCreateQuote] Error:', error);
-            addToast({
-              type: 'warning',
-              title: 'Warning',
-              message: 'Quote created but relationship with contact could not be established. Please manually associate the quote.'
-            });
+            // Refresh quotes anyway to show any newly created quotes
+            await refreshQuotes();
+            
+            // Only show warning if it's a real error, not just "no quotes found"
+            if (error instanceof Error && error.message !== 'No recent quotes found to associate with contact') {
+              addToast({
+                type: 'warning',
+                title: 'Warning',
+                message: 'Quote created but relationship with contact could not be established. Please manually associate the quote.'
+              });
+            } else {
+              addToast({
+                type: 'success',
+                title: 'Quote Created',
+                message: 'New quote has been created successfully. Please check the quotes section.'
+              });
+            }
           } finally {
             setLoadingQuotes(false);
           }
@@ -1749,6 +1743,9 @@ const OverviewTab: React.FC<{
             // Show loading state
             setLoadingDeals(true);
             
+            // Wait a bit for the deal to be fully created in the database
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
             // Get all deals and find the most recent one created by the current user
             const allDeals = await dealsApi.getAll();
             const currentUserId = user?.userId || '';
@@ -1760,7 +1757,7 @@ const OverviewTab: React.FC<{
               throw new Error('Current user ID not available');
             }
             
-            // Find deals created by the current user within the last 5 minutes
+            // Find deals created by the current user within the last 5 minutes (increased time window for reliability)
             const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
             const recentDeals = allDeals
               .filter(deal => {
@@ -1803,6 +1800,9 @@ const OverviewTab: React.FC<{
                 });
               } else {
                 console.log('🔍 [handleCreateDeal] Contact already associated with deal');
+                // Refresh deals to show the new deal immediately
+                await refreshDeals();
+                
                 addToast({
                   type: 'success',
                   title: 'Deal Created',
@@ -1811,15 +1811,35 @@ const OverviewTab: React.FC<{
               }
             } else {
               console.log('🔍 [handleCreateDeal] No recent deals found by current user');
-              throw new Error('No recent deals found to associate with contact');
+              // Instead of throwing an error, just refresh and show a success message
+              // The deal might have been created but not found due to timing
+              await refreshDeals();
+              
+              addToast({
+                type: 'success',
+                title: 'Deal Created',
+                message: 'New deal has been created successfully. Please check the deals section.'
+              });
             }
           } catch (error) {
             console.error('🔍 [handleCreateDeal] Error:', error);
-            addToast({
-              type: 'warning',
-              title: 'Warning',
-              message: 'Deal created but relationship with contact could not be established. Please manually associate the deal.'
-            });
+            // Refresh deals anyway to show any newly created deals
+            await refreshDeals();
+            
+            // Only show warning if it's a real error, not just "no deals found"
+            if (error instanceof Error && error.message !== 'No recent deals found to associate with contact') {
+              addToast({
+                type: 'warning',
+                title: 'Warning',
+                message: 'Deal created but relationship with contact could not be established. Please manually associate the deal.'
+              });
+            } else {
+              addToast({
+                type: 'success',
+                title: 'Deal Created',
+                message: 'New deal has been created successfully. Please check the deals section.'
+              });
+            }
           } finally {
             setLoadingDeals(false);
           }

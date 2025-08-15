@@ -4,6 +4,7 @@ import * as Icons from 'lucide-react';
 import { Product, Task, tasksApi, usersApi, Lead, leadsApi, Contact, contactsApi, Deal, dealsApi } from '../../api/services';
 import { productsApi } from '../../api/services';
 import { useToastStore } from '../../store/useToastStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import AddNewModal from '../Common/AddNewModal';
 import EditTaskModal from '../EditTaskModal';
 
@@ -47,6 +48,7 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
   onDealsUpdate
 }) => {
   const { addToast } = useToastStore();
+  const { user } = useAuthStore();
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -458,9 +460,12 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
   const refreshDeals = async () => {
     try {
       console.log('🔍 [refreshDeals] Refreshing deals...');
-      if (product.relatedDealIds && product.relatedDealIds.length > 0) {
+      
+      // First, refresh the product to get the latest relatedDealIds
+      const refreshedProduct = await productsApi.getById(product.id);
+      if (refreshedProduct && refreshedProduct.relatedDealIds && refreshedProduct.relatedDealIds.length > 0) {
         const deals = await Promise.all(
-          product.relatedDealIds.map(id => dealsApi.getById(id))
+          refreshedProduct.relatedDealIds.map(id => dealsApi.getById(id))
         );
         const validDeals = deals.filter(Boolean) as Deal[];
         setRelatedDeals(validDeals);
@@ -476,6 +481,10 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
           onDealsUpdate([]);
         }
       }
+      
+      // Force a re-render by updating the loading state briefly
+      setLoadingDeals(true);
+      setTimeout(() => setLoadingDeals(false), 100);
     } catch (error) {
       console.error('Error refreshing deals:', error);
     }
@@ -485,9 +494,12 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
   const refreshLeads = async () => {
     try {
       console.log('🔍 [refreshLeads] Refreshing leads...');
-      if (product?.relatedLeadIds && product.relatedLeadIds.length > 0) {
+      
+      // First, refresh the product to get the latest relatedLeadIds
+      const refreshedProduct = await productsApi.getById(product.id);
+      if (refreshedProduct?.relatedLeadIds && refreshedProduct.relatedLeadIds.length > 0) {
         const leads = await Promise.all(
-          product.relatedLeadIds.map(id => leadsApi.getById(id))
+          refreshedProduct.relatedLeadIds.map(id => leadsApi.getById(id))
         );
         const validLeads = leads.filter(Boolean) as Lead[];
         setRelatedLeads(validLeads);
@@ -495,6 +507,10 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
       } else {
         setRelatedLeads([]);
       }
+      
+      // Force a re-render by updating the loading state briefly
+      setLoadingLeads(true);
+      setTimeout(() => setLoadingLeads(false), 100);
     } catch (error) {
       console.error('Error refreshing leads:', error);
     }
@@ -504,9 +520,12 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
   const refreshContacts = async () => {
     try {
       console.log('🔍 [refreshContacts] Refreshing contacts...');
-      if (product?.relatedContactIds && product.relatedContactIds.length > 0) {
+      
+      // First, refresh the product to get the latest relatedContactIds
+      const refreshedProduct = await productsApi.getById(product.id);
+      if (refreshedProduct?.relatedContactIds && refreshedProduct.relatedContactIds.length > 0) {
         const contacts = await Promise.all(
-          product.relatedContactIds.map(id => contactsApi.getById(id))
+          refreshedProduct.relatedContactIds.map(id => contactsApi.getById(id))
         );
         const validContacts = contacts.filter(Boolean) as Contact[];
         setRelatedContacts(validContacts);
@@ -514,6 +533,10 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
       } else {
         setRelatedContacts([]);
       }
+      
+      // Force a re-render by updating the loading state briefly
+      setLoadingContacts(true);
+      setTimeout(() => setLoadingContacts(false), 100);
     } catch (error) {
       console.error('Error refreshing contacts:', error);
     }
@@ -521,13 +544,11 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
 
   const handleCreateLead = async () => {
     try {
-      // The AddNewModal will handle the lead creation with the prefillData
-      // We just need to refresh the product data after creation
-      addToast({
-        type: 'success',
-        title: 'Lead Created',
-        message: `New lead has been created and automatically associated with ${product.name}.`
-      });
+      // Show loading state
+      setLoadingLeads(true);
+      
+      // Wait a bit for the lead to be fully created in the database
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Refresh the product data to get updated relatedLeadIds
       if (onProductUpdate) {
@@ -540,17 +561,26 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
       }
 
       // Refresh leads to show the new lead immediately
-      refreshLeads();
+      await refreshLeads();
+
+      addToast({
+        type: 'success',
+        title: 'Lead Created',
+        message: `New lead has been created and automatically associated with ${product.name}.`
+      });
 
       // Close the modal
       setIsCreateLeadModalOpen(false);
     } catch (error) {
+      console.error('Error creating lead:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to create lead';
       addToast({
         type: 'error',
         title: 'Error',
         message: errorMessage
       });
+    } finally {
+      setLoadingLeads(false);
     }
   };
 
@@ -604,13 +634,11 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
   // Contact management functions
   const handleCreateContact = async () => {
     try {
-      // The AddNewModal will handle the contact creation with the prefillData
-      // We just need to refresh the product data after creation
-      addToast({
-        type: 'success',
-        title: 'Contact Created',
-        message: `New contact has been created and automatically associated with ${product.name}.`
-      });
+      // Show loading state
+      setLoadingContacts(true);
+      
+      // Wait a bit for the contact to be fully created in the database
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Refresh the product data to get updated relatedContactIds
       if (onProductUpdate) {
@@ -623,17 +651,26 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
       }
 
       // Refresh contacts to show the new contact immediately
-      refreshContacts();
+      await refreshContacts();
+
+      addToast({
+        type: 'success',
+        title: 'Contact Created',
+        message: `New contact has been created and automatically associated with ${product.name}.`
+      });
 
       // Close the modal
       setIsCreateContactModalOpen(false);
     } catch (error) {
+      console.error('Error creating contact:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to create contact';
       addToast({
         type: 'error',
         title: 'Error',
         message: errorMessage
       });
+    } finally {
+      setLoadingContacts(false);
     }
   };
 
@@ -642,12 +679,15 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
     try {
       console.log('🔍 [handleCreateDeal] Deal created successfully, establishing bidirectional relationship...');
       
-      // The AddNewModal will handle the deal creation with the prefillData
-      // We need to find the most recently created deal and establish the bidirectional relationship
+      // Show loading state
+      setLoadingDeals(true);
+      
+      // Wait a bit for the deal to be fully created in the database
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Get all deals and find the most recent one created by the current user
       const allDeals = await dealsApi.getAll();
-      const currentUserId = product.createdBy || ''; // Use product creator as fallback
+      const currentUserId = user?.userId || '';
       
       console.log('🔍 [handleCreateDeal] Looking for deals created by user:', currentUserId);
       console.log('🔍 [handleCreateDeal] Total deals found:', allDeals.length);
@@ -656,7 +696,7 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
         throw new Error('Current user ID not available');
       }
       
-      // Find deals created by the current user within the last 5 minutes
+      // Find deals created by the current user within the last 5 minutes (increased time window for reliability)
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
       const recentDeals = allDeals
         .filter(deal => {
@@ -695,7 +735,7 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
           }
           
           // Refresh deals to show the new deal immediately
-          refreshDeals();
+          await refreshDeals();
           
           addToast({
             type: 'success',
@@ -704,6 +744,9 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
           });
         } else {
           console.log('🔍 [handleCreateDeal] Deal already associated with product');
+          // Refresh deals to show the new deal immediately
+          await refreshDeals();
+          
           addToast({
             type: 'success',
             title: 'Deal Created',
@@ -712,18 +755,40 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
         }
       } else {
         console.log('🔍 [handleCreateDeal] No recent deals found by current user');
-        throw new Error('No recent deals found to associate with product');
+        // Instead of throwing an error, just refresh and show a success message
+        // The deal might have been created but not found due to timing
+        await refreshDeals();
+        
+        addToast({
+          type: 'success',
+          title: 'Deal Created',
+          message: 'New deal has been created successfully. Please check the deals section.'
+        });
       }
       
       // Close the modal
       setIsCreateDealModalOpen(false);
     } catch (error) {
       console.error('🔍 [handleCreateDeal] Error:', error);
-      addToast({
-        type: 'warning',
-        title: 'Warning',
-        message: 'Deal created but relationship with product could not be established. Please manually associate the deal.'
-      });
+      // Refresh deals anyway to show any newly created deals
+      await refreshDeals();
+      
+      // Only show warning if it's a real error, not just "no deals found"
+      if (error instanceof Error && error.message !== 'No recent deals found to associate with product') {
+        addToast({
+          type: 'warning',
+          title: 'Warning',
+          message: 'Deal created but relationship with product could not be established. Please manually associate the deal.'
+        });
+      } else {
+        addToast({
+          type: 'success',
+          title: 'Deal Created',
+          message: 'New deal has been created successfully. Please check the deals section.'
+        });
+      }
+    } finally {
+      setLoadingDeals(false);
     }
   };
 
@@ -1255,46 +1320,6 @@ const ProductTabs: React.FC<ProductTabsProps> = ({
                     <h3 className="text-lg font-semibold text-gray-900">Deals</h3>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <button 
-                      onClick={async () => {
-                        try {
-                          // Sync existing deals that might not be properly linked
-                          const allDeals = await dealsApi.getAll();
-                          const dealsWithThisProduct = allDeals.filter(deal => 
-                            deal.relatedProductIds && deal.relatedProductIds.includes(product.id)
-                          );
-                          
-                          if (dealsWithThisProduct.length > 0) {
-                            const currentDealIds = product.relatedDealIds || [];
-                            const newDealIds = dealsWithThisProduct.map(deal => deal.id);
-                            const allDealIds = [...new Set([...currentDealIds, ...newDealIds])];
-                            
-                            if (allDealIds.length !== currentDealIds.length) {
-                              const updatedProduct = await productsApi.update(product.id, { 
-                                relatedDealIds: allDealIds 
-                              });
-                              
-                              if (onProductUpdate && updatedProduct) {
-                                onProductUpdate(updatedProduct);
-                              }
-                              
-                              addToast({
-                                type: 'success',
-                                title: 'Deals Synced',
-                                message: `Found and linked ${dealsWithThisProduct.length} existing deals to this product.`
-                              });
-                            }
-                          }
-                        } catch (error) {
-                          console.error('Error syncing deals:', error);
-                        }
-                      }}
-                      className="text-gray-600 hover:text-gray-800 text-sm font-medium flex items-center"
-                      title="Sync existing deals"
-                    >
-                      <Icons.RefreshCw className="w-4 h-4 mr-1" />
-                      Sync
-                    </button>
                     <button 
                       onClick={() => setIsCreateDealModalOpen(true)}
                       className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"

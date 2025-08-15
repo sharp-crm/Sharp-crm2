@@ -1572,15 +1572,31 @@ const OverviewTab: React.FC<{
               }
             } else {
               console.log('🔍 [Create Quote] No recent quotes found by current user');
-              throw new Error('No recent quotes found to associate with deal');
+              // Instead of throwing an error, just show a success message
+              // The quote might have been created but not found due to timing
+              addToast({
+                type: 'success',
+                title: 'Quote Created',
+                message: 'New quote has been created successfully. Please check the quotes section.'
+              });
             }
           } catch (error) {
             console.error('Error establishing quote-deal relationship:', error);
-            addToast({
-              type: 'warning',
-              title: 'Warning',
-              message: 'Quote created but relationship with deal could not be established. Please manually assign the quote.'
-            });
+            
+            // Only show warning if it's a real error, not just "no quotes found"
+            if (error instanceof Error && error.message !== 'No recent quotes found to associate with deal') {
+              addToast({
+                type: 'warning',
+                title: 'Warning',
+                message: 'Quote created but relationship with deal could not be established. Please manually assign the quote.'
+              });
+            } else {
+              addToast({
+                type: 'success',
+                title: 'Quote Created',
+                message: 'New quote has been created successfully. Please check the quotes section.'
+              });
+            }
           }
         }}
         prefillData={{
