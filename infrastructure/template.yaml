@@ -110,7 +110,7 @@ Resources:
           # JWT Configuration
           JWT_SECRET: !Ref JWTSecret
           JWT_REFRESH_SECRET: !Ref JWTRefreshSecret
-          ACCESS_TOKEN_EXPIRY: "60m"
+          ACCESS_TOKEN_EXPIRY: "120m"
           REFRESH_TOKEN_EXPIRY: "7d"
           REFRESH_THRESHOLD: "300000"
           
@@ -134,6 +134,7 @@ Resources:
           REPORTS_TABLE: !Sub "${TablePrefix}-Reports-${Environment}"
           REFRESH_TOKENS_TABLE: !Sub "${TablePrefix}-RefreshTokens-${Environment}"
           REFRESH_TOKENS_TABLE_NAME: !Sub "${TablePrefix}-RefreshTokens-${Environment}"
+          EMAIL_HISTORY_TABLE: !Sub "${TablePrefix}-EmailHistory-${Environment}"
           
           # Super Admin Configuration
           SUPER_ADMIN_EMAIL: "rootuser@sharp.com"
@@ -162,6 +163,9 @@ Resources:
           
           # Logging
           LOG_LEVEL: "info"
+
+          #Email Lambda Function
+          EMAIL_LAMBDA_FUNCTION_NAME: !Ref EmailServiceFunction
       Events:
         ApiEvent:
           Type: Api
@@ -210,6 +214,8 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Sub "${TablePrefix}-Reports-${Environment}"
         - DynamoDBCrudPolicy:
+            TableName: !Sub "${TablePrefix}-EmailHistory-${Environment}"
+        - DynamoDBCrudPolicy:
             TableName: Users
         - DynamoDBCrudPolicy:
             TableName: RefreshTokens
@@ -245,6 +251,62 @@ Resources:
                 - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/*/stream/*"
         - Version: '2012-10-17'
           Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: '*'
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt EmailServiceFunction.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+                - ses:GetSendQuota
+                - ses:GetSendStatistics
+              Resource: '*'
+
+  # Email Service Lambda Function
+  EmailServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${TablePrefix}-EmailService-${Environment}"
+      CodeUri: ../backend/dist
+      Handler: emailLambda.handler
+      Runtime: nodejs18.x
+      MemorySize: 256
+      Timeout: 30
+      Environment:
+        Variables:
+          NODE_ENV: !Ref Environment
+          EMAIL_HISTORY_TABLE: !Sub "${TablePrefix}-EmailHistory-${Environment}"
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+                - ses:GetSendQuota
+                - ses:GetSendStatistics
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource: 
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}-EmailHistory-${Environment}"
+                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}-EmailHistory-${Environment}/index/*"
             - Effect: Allow
               Action:
                 - logs:CreateLogGroup
@@ -332,6 +394,12 @@ Outputs:
     Value: !GetAtt BackendFunction.Arn
     Export:
       Name: !Sub "${AWS::StackName}-BackendFunctionArn"
+  
+  EmailServiceFunctionArn:
+    Description: "ARN of the Email Service Lambda function"
+    Value: !GetAtt EmailServiceFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-EmailServiceFunctionArn"
   
   
   Environment:

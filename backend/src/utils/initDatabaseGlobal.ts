@@ -39,7 +39,7 @@ const docClient = DynamoDBDocumentClient.from(client, {
 
 // Use environment-specific table names for AWS deployment
 const getTableName = (baseName: string): string => {
-  const environment = process.env.NODE_ENV || 'production';
+  const environment = process.env.NODE_ENV || 'development';
   const tablePrefix = process.env.TABLE_PREFIX || 'SharpCRM';
   return `${tablePrefix}-${baseName}-${environment}`;
 };
@@ -400,6 +400,52 @@ const tables = [
       }
     ],
     BillingMode: "PAY_PER_REQUEST"
+  },
+  {
+    TableName: getTableName("EmailHistory"),
+    KeySchema: [
+      { AttributeName: "id", KeyType: "HASH" }
+    ],
+    AttributeDefinitions: [
+      { AttributeName: "id", AttributeType: "S" },
+      { AttributeName: "userId", AttributeType: "S" },
+      { AttributeName: "sentAt", AttributeType: "S" },
+      { AttributeName: "senderEmail", AttributeType: "S" },
+      { AttributeName: "recipientEmail", AttributeType: "S" }
+    ],
+    GlobalSecondaryIndexes: [
+      {
+        IndexName: "UserIdIndex",
+        KeySchema: [
+          { AttributeName: "userId", KeyType: "HASH" },
+          { AttributeName: "sentAt", KeyType: "RANGE" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "SenderEmailIndex",
+        KeySchema: [
+          { AttributeName: "senderEmail", KeyType: "HASH" },
+          { AttributeName: "sentAt", KeyType: "RANGE" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "RecipientEmailIndex",
+        KeySchema: [
+          { AttributeName: "recipientEmail", KeyType: "HASH" },
+          { AttributeName: "sentAt", KeyType: "RANGE" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      }
+    ],
+    BillingMode: "PAY_PER_REQUEST"
   }
 ];
 
@@ -429,7 +475,7 @@ async function createSuperAdmin(usersTable: string) {
   try {
     const hashedPassword = await bcrypt.hash("User@123", 10);
     const userId = uuidv4();
-    const email = "rootuser@sharpcrm.com";
+    const email = "rootuser@sharp.com";
     const user = {
       userId,
       email,

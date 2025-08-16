@@ -1,216 +1,218 @@
-# AWS DynamoDB Deployment Guide
+# SharpCRM Deployment Guide
 
-## Step 1: Configure AWS Credentials
+This guide covers the deployment process for the SharpCRM application using AWS SAM (Serverless Application Model).
 
-Before deploying, you need to configure your AWS credentials:
+## Prerequisites
+
+Before deploying, ensure you have:
+
+1. **AWS CLI** installed and configured
+   ```bash
+   aws configure
+   ```
+
+2. **AWS SAM CLI** installed
+   ```bash
+   # Install via pip
+   pip install aws-sam-cli
+   
+   # Or via installer (Windows/Mac/Linux)
+   # See: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html
+   ```
+
+3. **Node.js 18+** installed
+4. **Valid AWS credentials** with appropriate permissions
+
+## Required AWS Permissions
+
+Your AWS user/role needs the following permissions:
+- CloudFormation (full access)
+- Lambda (full access)
+- API Gateway (full access)
+- DynamoDB (full access)
+- IAM (role creation)
+- S3 (for SAM artifacts)
+- SES (Simple Email Service)
+
+## Pre-Deployment Steps
+
+### 1. Build the Backend
+```bash
+cd backend
+npm install
+npm run build:all
+```
+
+### 2. Install Frontend Dependencies (Optional)
+```bash
+cd frontend
+npm install
+```
+
+### 3. Set Up Environment Variables
+Ensure your AWS credentials are configured:
+```bash
+aws configure list
+```
+
+## Deployment Process
+
+### 1. Navigate to Infrastructure Directory
+```bash
+cd infrastructure
+```
+
+### 2. Deploy the Stack
+```bash
+# First deployment (guided)
+sam deploy --guided --stack-name sharp-crm-infrastructure
+
+# Subsequent deployments
+sam deploy --stack-name sharp-crm-infrastructure
+```
+
+### 3. Deployment Parameters
+During the guided deployment, you'll be prompted for:
+
+- **Stack Name**: `sharp-crm-infrastructure`
+- **AWS Region**: `us-east-1` (recommended)
+- **Environment**: `development` or `production`
+- **TablePrefix**: `SharpCRM` (default)
+- **JWTSecret**: Your JWT secret key
+- **JWTRefreshSecret**: Your JWT refresh secret key
+- **DomainName**: Your domain (if applicable)
+
+## Post-Deployment Steps
+
+### 1. Initialize Database Tables
+```bash
+cd ../backend
+npm run init-db:global
+```
+
+### 2. Verify Deployment
+Check the CloudFormation stack in AWS Console:
+- Go to CloudFormation service
+- Find your stack: `sharp-crm-infrastructure`
+- Verify all resources are created successfully
+
+### 3. Get API Gateway URL
+From the CloudFormation outputs, note the `BackendApiUrl` value.
+
+### 4. Configure Frontend
+Update your frontend environment variables:
+```bash
+# In frontend/.env or as environment variable
+VITE_API_URL=https://your-api-gateway-url.amazonaws.com/development/api
+```
+
+### 5. Set Up AWS SES (Email Service)
+1. Go to AWS SES Console
+2. Verify your sender email address
+3. Request production access (to send to unverified emails)
+
+## Environment-Specific Deployments
+
+### Development
+```bash
+sam deploy --stack-name sharp-crm-dev --parameter-overrides Environment=development
+```
+
+### Production
+```bash
+sam deploy --stack-name sharp-crm-prod --parameter-overrides Environment=production
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Reserved Environment Variable Error**
+   - Error: `AWS_REGION is a reserved environment variable`
+   - Solution: This is already fixed in the template
+
+2. **Permission Denied**
+   - Ensure your AWS user has sufficient permissions
+   - Check IAM policies
+
+3. **Build Failures**
+   - Run `npm run build:all` in backend directory
+   - Ensure all TypeScript files compile successfully
+
+4. **Email Service Issues**
+   - Verify sender email in SES
+   - Check SES sandbox mode restrictions
+   - Request production access for SES
+
+### Debugging
+
+1. **Check CloudFormation Events**
+   ```bash
+   aws cloudformation describe-stack-events --stack-name sharp-crm-infrastructure
+   ```
+
+2. **View Lambda Logs**
+   ```bash
+   aws logs describe-log-groups --log-group-name-prefix /aws/lambda/SharpCRM
+   ```
+
+3. **Test API Endpoints**
+   ```bash
+   curl https://your-api-gateway-url.amazonaws.com/development/health
+   ```
+
+## Rollback
+
+If deployment fails or you need to rollback:
 
 ```bash
-aws configure
-```
-
-Enter your:
-- **AWS Access Key ID**: (from AWS Console -> IAM -> Users -> Your User -> Security Credentials)
-- **AWS Secret Access Key**: (from the same location)
-- **Default region**: `us-east-1`
-- **Default output format**: `json`
-
-Verify your credentials work:
-```bash
-aws sts get-caller-identity
-```
-
-## Step 2: Deploy to AWS
-
-Navigate to the infrastructure directory:
-```bash
-cd /Users/tejaswin/Downloads/sharp-crm-aws-3/infrastructure
-```
-
-### Option A: Guided Deployment (Recommended for first time)
-```bash
-sam deploy --guided
-```
-
-This will prompt you for:
-- **Stack Name**: `sharp-crm-infrastructure` (or your choice)
-- **AWS Region**: `us-east-1` (default)
-- **Parameter Environment**: `development` (default)
-- **Parameter TablePrefix**: `SharpCRM` (default)
-- **Confirm changes before deploy**: `Y`
-- **Allow SAM CLI IAM role creation**: `Y`
-- **Disable rollback**: `N`
-
-### Option B: Quick Deployment (After first deployment)
-```bash
-sam build && sam deploy
-```
-
-### Option C: Deploy to Production
-```bash
-sam deploy --config-env production
-```
-
-## Step 3: Verify Deployment
-
-After deployment, you'll see output like:
-```
-CloudFormation outputs from deployed stack
-----------------------------------------------------------------
-Outputs                                                                                                                                                                                                  
-----------------------------------------------------------------
-Key                 ContactsTableName                                                                                                                                                                    
-Description         Name of the Contacts DynamoDB table                                                                                                                                                 
-Value               SharpCRM-Contacts-development                                                                                                                                                        
-
-Key                 UsersTableName                                                                                                                                                                       
-Description         Name of the Users DynamoDB table                                                                                                                                                    
-Value               SharpCRM-Users-development                                                                                                                                                           
-----------------------------------------------------------------
-```
-
-## Step 4: View in AWS Console
-
-1. Go to AWS Console → DynamoDB → Tables
-2. You should see all your tables created:
-   - `SharpCRM-Users-development`
-   - `SharpCRM-RefreshTokens-development`
-   - `SharpCRM-Contacts-development`
-   - `SharpCRM-Leads-development`
-   - `SharpCRM-Deals-development`
-   - `SharpCRM-Tasks-development`
-   - `SharpCRM-Subsidiaries-development`
-   - `SharpCRM-Dealers-development`
-   - `SharpCRM-Notifications-development`
-   - `SharpCRM-Reports-development`
-
-## Step 5: Update Your Backend Configuration
-
-After deployment, update your backend's `.env` file:
-
-```env
-# DynamoDB Configuration
-DYNAMODB_LOCAL=false
-NODE_ENV=production
-AWS_REGION=us-east-1
-
-# Table Names (use actual names from deployment output)
-USERS_TABLE_NAME=SharpCRM-Users-development
-REFRESH_TOKENS_TABLE_NAME=SharpCRM-RefreshTokens-development
-CONTACTS_TABLE_NAME=SharpCRM-Contacts-development
-LEADS_TABLE_NAME=SharpCRM-Leads-development
-DEALS_TABLE_NAME=SharpCRM-Deals-development
-TASKS_TABLE_NAME=SharpCRM-Tasks-development
-SUBSIDIARIES_TABLE_NAME=SharpCRM-Subsidiaries-development
-DEALERS_TABLE_NAME=SharpCRM-Dealers-development
-NOTIFICATIONS_TABLE_NAME=SharpCRM-Notifications-development
-REPORTS_TABLE_NAME=SharpCRM-Reports-development
-```
-
-## Step 6: Test Connection
-
-Create a simple test script to verify your backend can connect to DynamoDB:
-
-```javascript
-// test-dynamodb.js
-const AWS = require('aws-sdk');
-const dynamodb = new AWS.DynamoDB.DocumentClient({
-  region: process.env.AWS_REGION || 'us-east-1'
-});
-
-async function testConnection() {
-  try {
-    const params = {
-      TableName: 'SharpCRM-Users-development',
-      Limit: 1
-    };
-    
-    const result = await dynamodb.scan(params).promise();
-    console.log('✅ DynamoDB connection successful!');
-    console.log('Table scan result:', result);
-  } catch (error) {
-    console.error('❌ DynamoDB connection failed:', error);
-  }
-}
-
-testConnection();
-```
-
-Run the test:
-```bash
-node test-dynamodb.js
-```
-
-## Common Issues and Solutions
-
-### Issue 1: "Unable to locate credentials"
-**Solution**: Run `aws configure` to set up your credentials.
-
-### Issue 2: "Access Denied"
-**Solution**: Make sure your AWS user has the necessary permissions:
-- DynamoDB full access
-- CloudFormation full access
-- IAM role creation permissions
-
-### Issue 3: "Stack already exists"
-**Solution**: Use `sam deploy` without `--guided` for updates, or delete the stack first:
-```bash
+# Delete the stack
 aws cloudformation delete-stack --stack-name sharp-crm-infrastructure
+
+# Or rollback to previous version
+aws cloudformation cancel-update-stack --stack-name sharp-crm-infrastructure
 ```
 
-### Issue 4: "Table already exists"
-**Solution**: Change the `TablePrefix` parameter or `Environment` parameter to use different table names.
+## Clean Up
 
-## Cost Monitoring
+To remove all resources:
 
-Monitor your costs in AWS Console:
-1. Go to AWS Console → Billing → Cost Explorer
-2. Filter by Service: DynamoDB
-3. Set up billing alerts if needed
-
-With PAY_PER_REQUEST billing, you'll only pay for:
-- Read/write operations
-- Storage
-- Backup (if enabled)
-
-## Cleanup
-
-To delete all resources:
 ```bash
+# Delete CloudFormation stack
 aws cloudformation delete-stack --stack-name sharp-crm-infrastructure
+
+# Clean up SAM artifacts (optional)
+aws s3 rm s3://aws-sam-cli-managed-default-samclisourcebucket-* --recursive
 ```
 
-Or using SAM:
-```bash
-sam delete --stack-name sharp-crm-infrastructure
-```
+## Architecture Overview
 
-## Next Steps
+The deployment creates:
+- **API Gateway** - REST API endpoints
+- **Lambda Functions** - Backend logic and email service
+- **DynamoDB Tables** - Data storage (created via init script)
+- **IAM Roles** - Permissions for Lambda functions
+- **CloudWatch Logs** - Application logging
 
-1. **Update your backend code** to use the deployed table names
-2. **Test your application** with the real DynamoDB tables
-3. **Set up monitoring** and alerts
-4. **Create a production deployment** when ready
-5. **Set up CI/CD** for automated deployments
+## Security Notes
 
-## Environment Variables for Backend
+1. **JWT Secrets** - Use strong, unique secrets for production
+2. **IAM Roles** - Follow principle of least privilege
+3. **SES Configuration** - Verify sender identities
+4. **API Access** - Consider adding API keys for production
+5. **Environment Variables** - Never commit secrets to version control
 
-Add these to your backend `.env` file:
+## Support
 
-```env
-# AWS Configuration
-AWS_REGION=us-east-1
-NODE_ENV=production
-DYNAMODB_LOCAL=false
+For deployment issues:
+1. Check AWS CloudFormation console for detailed error messages
+2. Review CloudWatch logs for runtime errors
+3. Verify all prerequisites are met
+4. Ensure AWS CLI and SAM CLI are up to date
 
-# DynamoDB Table Names (update with actual deployed names)
-USERS_TABLE=SharpCRM-Users-development
-REFRESH_TOKENS_TABLE=SharpCRM-RefreshTokens-development
-CONTACTS_TABLE=SharpCRM-Contacts-development
-LEADS_TABLE=SharpCRM-Leads-development
-DEALS_TABLE=SharpCRM-Deals-development
-TASKS_TABLE=SharpCRM-Tasks-development
-SUBSIDIARIES_TABLE=SharpCRM-Subsidiaries-development
-DEALERS_TABLE=SharpCRM-Dealers-development
-NOTIFICATIONS_TABLE=SharpCRM-Notifications-development
-REPORTS_TABLE=SharpCRM-Reports-development
-```
+## Version Information
+
+- **SAM CLI Version**: 1.58.0+
+- **Node.js Version**: 18.x
+- **AWS CLI Version**: 2.x
+- **CloudFormation Template Version**: 2010-09-09
