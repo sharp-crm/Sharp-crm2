@@ -2,6 +2,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { docClient, TABLES } from '../services/dynamoClient';
+import { leadsRBACService, RBACUser } from './leadsRBAC';
 
 // Lead interface based on AddNewModal fields + auditing
 export interface Lead {
@@ -180,6 +181,18 @@ export class LeadsService {
     return (result.Items || []) as Lead[];
   }
 
+  // RBAC-aware method: Get leads for user based on role and permissions
+  async getLeadsForUser(user: RBACUser, includeDeleted = false): Promise<Lead[]> {
+    console.log(`🔐 [LeadsService.getLeadsForUser] Getting leads for user: ${user.email} (${user.role})`);
+    return leadsRBACService.getLeadsForUser(user, includeDeleted);
+  }
+
+  // RBAC-aware method: Get lead by ID with role-based access control
+  async getLeadByIdForUser(id: string, user: RBACUser): Promise<Lead | null> {
+    console.log(`🔐 [LeadsService.getLeadByIdForUser] Getting lead ${id} for user: ${user.email} (${user.role})`);
+    return leadsRBACService.getLeadByIdForUser(id, user);
+  }
+
   // Get leads by owner
   async getLeadsByOwner(leadOwner: string, tenantId: string, userId: string): Promise<Lead[]> {
     const result = await docClient.send(new ScanCommand({
@@ -193,6 +206,12 @@ export class LeadsService {
     }));
 
     return (result.Items || []) as Lead[];
+  }
+
+  // RBAC-aware method: Get leads by owner with role-based access control
+  async getLeadsByOwnerForUser(leadOwner: string, user: RBACUser): Promise<Lead[]> {
+    console.log(`🔐 [LeadsService.getLeadsByOwnerForUser] Getting leads for owner ${leadOwner} by user: ${user.email} (${user.role})`);
+    return leadsRBACService.getLeadsByOwnerForUser(leadOwner, user);
   }
 
   // Get lead by email (returns first match - multiple leads can have the same email)
@@ -377,6 +396,12 @@ export class LeadsService {
     }));
 
     return (result.Items || []) as Lead[];
+  }
+
+  // RBAC-aware method: Search leads with role-based access control
+  async searchLeadsForUser(user: RBACUser, searchTerm: string): Promise<Lead[]> {
+    console.log(`🔐 [LeadsService.searchLeadsForUser] Searching leads for term "${searchTerm}" by user: ${user.email} (${user.role})`);
+    return leadsRBACService.searchLeadsForUser(user, searchTerm);
   }
 
   // Get leads stats for analytics

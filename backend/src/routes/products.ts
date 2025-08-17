@@ -1,5 +1,6 @@
 import { Router, RequestHandler } from 'express';
 import { productsService } from '../services/products';
+import { RBACUser } from '../services/productsRBAC';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -18,95 +19,103 @@ function validateRequiredFields(data: any, requiredFields: string[]): string[] |
   return missingFields.length > 0 ? missingFields : null;
 }
 
-// Get all products for tenant
+// Helper function to convert authenticated request user to RBACUser format
+function convertToRBACUser(user: any): RBACUser {
+  return {
+    userId: user.userId,
+    email: user.email,
+    role: normalizeRole(user.role),
+    tenantId: user.tenantId,
+    reportingTo: user.reportingTo
+  };
+}
+
+// Helper function to normalize role string
+function normalizeRole(role: string): 'ADMIN' | 'SALES_MANAGER' | 'SALES_REP' {
+  const normalized = role.toUpperCase();
+  if (normalized === 'ADMIN' || normalized === 'SUPER_ADMIN') return 'ADMIN';
+  if (normalized === 'SALES_MANAGER' || normalized === 'MANAGER') return 'SALES_MANAGER';
+  if (normalized === 'SALES_REP' || normalized === 'REP') return 'SALES_REP';
+  return 'SALES_REP'; // Default to SALES_REP
+}
+
+// Get all products for tenant (RBAC-aware)
 const getAllProducts: RequestHandler = async (req: any, res) => {
-  const operation = 'getAllProducts';
-  const { tenantId, userId } = req.user || {};
+  const operation = 'getAllProducts_RBAC';
+  const user = req.user;
   
-  console.log(`🔍 [${operation}] Starting request - TenantId: ${tenantId}, UserId: ${userId}`);
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), TenantId: ${user?.tenantId}`);
   
   try {
     const includeDeleted = req.query.includeDeleted === 'true';
     
-    if (!tenantId) {
-      console.log(`❌ [${operation}] Missing tenant ID`);
-      res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
 
-    console.log(`📊 [${operation}] Fetching products - TenantId: ${tenantId}, IncludeDeleted: ${includeDeleted}`);
-    const products = await productsService.getProductsByTenant(tenantId, userId, includeDeleted);
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), TenantId: ${rbacUser.tenantId}`);
     
-    console.log(`✅ [${operation}] Successfully retrieved ${products.length} products`);
+    const products = await productsService.getProductsForUser(rbacUser, includeDeleted);
+    
+    console.log(`✅ [${operation}] Successfully retrieved ${products.length} products for user ${rbacUser.email} (${rbacUser.role})`);
     res.json({ 
       data: products,
       total: products.length,
-      message: `Retrieved ${products.length} products`
+      message: `Retrieved ${products.length} products`,
+      rbac: {
+        userRole: rbacUser.role,
+        appliedFilter: `Role-based access control applied for ${rbacUser.role}`
+      }
     });
   } catch (error) {
     console.error(`❌ [${operation}] Error occurred:`);
     console.error(`   - Error message: ${error instanceof Error ? error.message : 'Unknown error'}`);
     console.error(`   - Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
-    if (error && typeof error === 'object' && 'code' in error) {
-      console.error(`   - DynamoDB error code: ${(error as any).code}`);
-      console.error(`   - DynamoDB error details: ${JSON.stringify(error, null, 2)}`);
-    }
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// Get product by ID
+// Get product by ID (RBAC-aware)
 const getProductById: RequestHandler = async (req: any, res) => {
-  const operation = 'getProductById';
-  const { tenantId, userId } = req.user || {};
+  const operation = 'getProductById_RBAC';
+  const user = req.user;
   const { id } = req.params;
   
-  console.log(`🔍 [${operation}] Starting request - TenantId: ${tenantId}, UserId: ${userId}, ProductId: ${id}`);
-  console.log(`🔍 [${operation}] Request params:`, req.params);
-  console.log(`🔍 [${operation}] Request user:`, req.user);
-  console.log(`🔍 [${operation}] Request headers:`, req.headers);
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), ProductId: ${id}`);
   
   try {
-    if (!tenantId) {
-      console.log(`❌ [${operation}] Missing tenant ID`);
-      res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
 
-    if (!userId) {
-      console.log(`❌ [${operation}] Missing user ID`);
-      res.status(400).json({ error: "User ID required" });
-      return;
-    }
-
-    if (!id) {
-      console.log(`❌ [${operation}] Missing product ID`);
-      res.status(400).json({ error: "Product ID required" });
-      return;
-    }
-
-    console.log(`📊 [${operation}] Calling productsService.getProductById - ProductId: ${id}, TenantId: ${tenantId}, UserId: ${userId}`);
-    const product = await productsService.getProductById(id, tenantId, userId);
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), ProductId: ${id}`);
     
-    console.log(`📊 [${operation}] productsService.getProductById result:`, product ? 'Product found' : 'Product not found');
+    const product = await productsService.getProductByIdForUser(id, rbacUser);
     
     if (!product) {
-      console.log(`❌ [${operation}] Product not found - ProductId: ${id}`);
-      res.status(404).json({ message: "Product not found" });
+      console.log(`❌ [${operation}] Product not found or access denied - ProductId: ${id}, User: ${rbacUser.email} (${rbacUser.role})`);
+      res.status(404).json({ message: "Product not found or you don't have permission to access it" });
       return;
     }
 
-    console.log(`✅ [${operation}] Successfully retrieved product - ProductId: ${id}`);
-    console.log(`✅ [${operation}] Product data:`, JSON.stringify(product, null, 2));
-    res.json({ data: product });
+    console.log(`✅ [${operation}] Successfully retrieved product - ProductId: ${id}, User: ${rbacUser.email} (${rbacUser.role})`);
+    res.json({ 
+      data: product,
+      rbac: {
+        userRole: rbacUser.role,
+        accessGranted: true
+      }
+    });
   } catch (error) {
     console.error(`❌ [${operation}] Error occurred:`);
     console.error(`   - Error message: ${error instanceof Error ? error.message : 'Unknown error'}`);
     console.error(`   - Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
-    if (error && typeof error === 'object' && 'code' in error) {
-      console.error(`   - DynamoDB error code: ${(error as any).code}`);
-      console.error(`   - DynamoDB error details: ${JSON.stringify(error, null, 2)}`);
-    }
     res.status(500).json({ message: "Internal server error" });
   }
 };

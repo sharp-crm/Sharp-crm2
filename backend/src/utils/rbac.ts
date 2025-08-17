@@ -53,7 +53,7 @@ const PERMISSIONS: Record<'ADMIN' | 'SALES_MANAGER' | 'SALES_REP', Record<Resour
     task: ['view', 'edit', 'delete', 'create'],
     subsidiary: ['view'], // Can only view subsidiaries
     dealer: ['view'], // Can only view dealers
-    user: [] // Cannot manage users
+    user: ['view'] // Can view users for dropdowns and team management
   },
   SALES_REP: {
     lead: ['view', 'edit', 'delete', 'create'],
@@ -64,7 +64,7 @@ const PERMISSIONS: Record<'ADMIN' | 'SALES_MANAGER' | 'SALES_REP', Record<Resour
     task: ['view', 'edit', 'delete', 'create'],
     subsidiary: [], // Cannot access subsidiaries
     dealer: [], // Cannot access dealers
-    user: [] // Cannot manage users
+    user: ['view'] // Can view users for dropdowns and display names
   }
 };
 

@@ -2,6 +2,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { docClient, TABLES } from '../services/dynamoClient';
+import { dealsRBACService, RBACUser } from './dealsRBAC';
 
 // Deal interface based on AddNewModal fields + auditing
 export interface Deal {
@@ -202,6 +203,24 @@ export class DealsService {
     return (result.Items || []) as Deal[];
   }
 
+  // RBAC-aware method: Get deals for user based on role and permissions
+  async getDealsForUser(user: RBACUser, includeDeleted = false): Promise<Deal[]> {
+    console.log(`🔐 [DealsService.getDealsForUser] Getting deals for user: ${user.email} (${user.role})`);
+    return dealsRBACService.getDealsForUser(user, includeDeleted);
+  }
+
+  // RBAC-aware method: Get deal by ID with role-based access control
+  async getDealByIdForUser(id: string, user: RBACUser): Promise<Deal | null> {
+    console.log(`🔐 [DealsService.getDealByIdForUser] Getting deal ${id} for user: ${user.email} (${user.role})`);
+    return dealsRBACService.getDealByIdForUser(id, user);
+  }
+
+  // RBAC-aware method: Get deals by owner with role-based access control
+  async getDealsByOwnerForUser(dealOwner: string, user: RBACUser): Promise<Deal[]> {
+    console.log(`🔐 [DealsService.getDealsByOwnerForUser] Getting deals for owner ${dealOwner} by user: ${user.email} (${user.role})`);
+    return dealsRBACService.getDealsByOwnerForUser(dealOwner, user);
+  }
+
   // Get deals by owner
   async getDealsByOwner(dealOwner: string, tenantId: string, userId: string): Promise<Deal[]> {
     const result = await docClient.send(new ScanCommand({
@@ -230,6 +249,18 @@ export class DealsService {
     }));
 
     return (result.Items || []) as Deal[];
+  }
+
+  // RBAC-aware method: Search deals with role-based access control
+  async searchDealsForUser(user: RBACUser, query: string): Promise<Deal[]> {
+    console.log(`🔐 [DealsService.searchDealsForUser] Searching deals for query "${query}" by user: ${user.email} (${user.role})`);
+    return dealsRBACService.searchDealsForUser(user, query);
+  }
+
+  // RBAC-aware method: Get deals by stage with role-based access control
+  async getDealsByStageForUser(stage: string, user: RBACUser): Promise<Deal[]> {
+    console.log(`🔐 [DealsService.getDealsByStageForUser] Getting deals for stage ${stage} by user: ${user.email} (${user.role})`);
+    return dealsRBACService.getDealsByStageForUser(stage, user);
   }
 
   // Search deals
@@ -396,6 +427,19 @@ export class DealsService {
       }
       throw error;
     }
+  }
+
+  // RBAC-aware method: Get deals stats with role-based access control
+  async getDealsStatsForUser(user: RBACUser): Promise<{
+    total: number;
+    byStage: Record<string, number>;
+    bySource: Record<string, number>;
+    totalValue: number;
+    avgValue: number;
+    recentCount: number;
+  }> {
+    console.log(`🔐 [DealsService.getDealsStatsForUser] Getting deals stats for user: ${user.email} (${user.role})`);
+    return dealsRBACService.getDealsStatsForUser(user);
   }
 
   // Get deals stats for analytics
