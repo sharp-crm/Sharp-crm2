@@ -1,6 +1,6 @@
 import { Router, RequestHandler } from 'express';
 import { contactsService, CreateContactInput, UpdateContactInput } from '../services/contacts';
-import { logError, logOperationStart, logOperationSuccess, logOperationInfo, logValidationError } from '../utils/routeLogger';
+import { RBACUser } from '../services/contactsRBAC';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -24,106 +24,181 @@ const validateEmail = (email: string) => {
   return emailRegex.test(email);
 };
 
-// Get all contacts for tenant
+// Helper function to convert authenticated request user to RBACUser format
+function convertToRBACUser(user: any): RBACUser {
+  return {
+    userId: user.userId,
+    email: user.email,
+    role: normalizeRole(user.role),
+    tenantId: user.tenantId,
+    reportingTo: user.reportingTo
+  };
+}
+
+// Helper function to normalize role string
+function normalizeRole(role: string): 'ADMIN' | 'SALES_MANAGER' | 'SALES_REP' {
+  const normalized = role.toUpperCase();
+  if (normalized === 'ADMIN' || normalized === 'SUPER_ADMIN') return 'ADMIN';
+  if (normalized === 'SALES_MANAGER' || normalized === 'MANAGER') return 'SALES_MANAGER';
+  if (normalized === 'SALES_REP' || normalized === 'REP') return 'SALES_REP';
+  return 'SALES_REP'; // Default to SALES_REP
+}
+
+// Get all contacts for tenant (RBAC-aware)
 const getAllContacts: RequestHandler = async (req: any, res) => {
-  const { tenantId, userId } = req.user || {};
-  const includeDeleted = req.query.includeDeleted === 'true';
+  const operation = 'getAllContacts_RBAC';
+  const user = req.user;
+  
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), TenantId: ${user?.tenantId}`);
   
   try {
-    if (!tenantId) {
-      res.status(400).json({ error: "Tenant ID required" });
+    const includeDeleted = req.query.includeDeleted === 'true';
+    
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
 
-    const contacts = await contactsService.getContactsByTenant(tenantId, userId, includeDeleted);
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), TenantId: ${rbacUser.tenantId}`);
     
+    const contacts = await contactsService.getContactsForUser(rbacUser, includeDeleted);
+    
+    console.log(`✅ [${operation}] Successfully retrieved ${contacts.length} contacts for user ${rbacUser.email} (${rbacUser.role})`);
     res.json({ 
       data: contacts,
       total: contacts.length,
-      message: `Retrieved ${contacts.length} contacts`
+      message: `Retrieved ${contacts.length} contacts`,
+      rbac: {
+        userRole: rbacUser.role,
+        appliedFilter: `Role-based access control applied for ${rbacUser.role}`
+      }
     });
   } catch (error) {
-    logError('getAllContacts', error, { tenantId, userId, includeDeleted });
+    console.error(`❌ [${operation}] Error occurred:`);
+    console.error(`   - Error message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error(`   - Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// Get contact by ID
+// Get contact by ID (RBAC-aware)
 const getContactById: RequestHandler = async (req: any, res) => {
-  const { tenantId, userId } = req.user || {};
+  const operation = 'getContactById_RBAC';
+  const user = req.user;
   const { id } = req.params;
   
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), ContactId: ${id}`);
+  
   try {
-    
-    if (!tenantId) {
-      res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
 
-    const contact = await contactsService.getContactById(id, tenantId, userId);
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), ContactId: ${id}`);
+    
+    const contact = await contactsService.getContactByIdForUser(id, rbacUser);
     
     if (!contact) {
-      res.status(404).json({ message: "Contact not found" });
+      console.log(`❌ [${operation}] Contact not found or access denied - ContactId: ${id}, User: ${rbacUser.email} (${rbacUser.role})`);
+      res.status(404).json({ message: "Contact not found or you don't have permission to access it" });
       return;
     }
 
-    res.json({ data: contact });
-  } catch (error) {
-    logError('getContactById', error, { tenantId, userId, contactId: id });
-    res.status(500).json({ message: "Internal server error" });
-  }
-};
-
-// Get contacts by owner
-const getContactsByOwner: RequestHandler = async (req: any, res) => {
-  const { tenantId, userId } = req.user || {};
-  const { owner } = req.params;
-  
-  try {
-    
-    if (!tenantId) {
-      res.status(400).json({ error: "Tenant ID required" });
-      return;
-    }
-
-    const contacts = await contactsService.getContactsByOwner(owner, tenantId, userId);
-    
+    console.log(`✅ [${operation}] Successfully retrieved contact - ContactId: ${id}, User: ${rbacUser.email} (${rbacUser.role})`);
     res.json({ 
-      data: contacts,
-      total: contacts.length 
+      data: contact,
+      rbac: {
+        userRole: rbacUser.role,
+        accessGranted: true
+      }
     });
   } catch (error) {
-    logError('getContactsByOwner', error, { tenantId, userId, owner });
+    console.error(`❌ [${operation}] Error occurred:`);
+    console.error(`   - Error message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error(`   - Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// Search contacts
-const searchContacts: RequestHandler = async (req: any, res) => {
-  const { tenantId, userId } = req.user || {};
-  const { q } = req.query;
+// Get contacts by owner (RBAC-aware)
+const getContactsByOwner: RequestHandler = async (req: any, res) => {
+  const operation = 'getContactsByOwner_RBAC';
+  const user = req.user;
+  const { owner } = req.params;
+  
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), TargetOwner: ${owner}`);
   
   try {
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
+      return;
+    }
+
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), TargetOwner: ${owner}`);
     
-    if (!tenantId) {
-      res.status(400).json({ error: "Tenant ID required" });
+    const contacts = await contactsService.getContactsByOwnerForUser(owner, rbacUser);
+    
+    console.log(`✅ [${operation}] Successfully retrieved ${contacts.length} contacts for owner ${owner}, requested by ${rbacUser.email} (${rbacUser.role})`);
+    res.json({ 
+      data: contacts,
+      total: contacts.length,
+      rbac: {
+        userRole: rbacUser.role,
+        targetOwner: owner,
+        accessGranted: true
+      }
+    });
+  } catch (error) {
+    console.error(`❌ [${operation}] Error occurred:`, error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// Search contacts (RBAC-aware)
+const searchContacts: RequestHandler = async (req: any, res) => {
+  const operation = 'searchContacts_RBAC';
+  const user = req.user;
+  const { q } = req.query;
+  
+  console.log(`🔍 [${operation}] Starting RBAC search - User: ${user?.email} (${user?.role}), Query: "${q}"`);
+  
+  try {
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
 
     if (!q || typeof q !== 'string') {
+      console.log(`❌ [${operation}] Missing or invalid search query`);
       res.status(400).json({ error: "Search query required" });
       return;
     }
 
-    const contacts = await contactsService.searchContacts(tenantId, userId, q);
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), Query: "${q}"`);
     
+    const contacts = await contactsService.searchContactsForUser(rbacUser, q);
+    
+    console.log(`✅ [${operation}] Successfully found ${contacts.length} contacts for query "${q}", User: ${rbacUser.email} (${rbacUser.role})`);
     res.json({ 
       data: contacts,
       total: contacts.length,
-      query: q
+      query: q,
+      rbac: {
+        userRole: rbacUser.role,
+        appliedFilter: `Search results filtered for ${rbacUser.role}`
+      }
     });
   } catch (error) {
-    logError('searchContacts', error, { tenantId, userId, query: q });
+    console.error(`❌ [${operation}] Error occurred:`, error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -194,7 +269,7 @@ const createContact: RequestHandler = async (req: any, res) => {
       data: contact 
     });
   } catch (error) {
-    logError('createContact', error, { tenantId, userId, email: req.body.email });
+    console.error('❌ Error creating contact:', error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -253,7 +328,7 @@ const updateContact: RequestHandler = async (req: any, res) => {
       data: updatedContact 
     });
   } catch (error) {
-    logError('updateContact', error, { tenantId, userId, contactId: id });
+    console.error('❌ Error updating contact:', error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -279,7 +354,7 @@ const deleteContact: RequestHandler = async (req: any, res) => {
 
     res.json({ message: "Contact deleted successfully" });
   } catch (error) {
-    logError('deleteContact', error, { tenantId, userId, contactId: id });
+    console.error('❌ Error deleting contact:', error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -305,7 +380,7 @@ const restoreContact: RequestHandler = async (req: any, res) => {
 
     res.json({ message: "Contact restored successfully" });
   } catch (error) {
-    logError('restoreContact', error, { tenantId, userId, contactId: id });
+    console.error('❌ Error restoring contact:', error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -337,7 +412,7 @@ const hardDeleteContact: RequestHandler = async (req: any, res) => {
 
     res.json({ message: "Contact permanently deleted" });
   } catch (error) {
-    logError('hardDeleteContact', error, { tenantId, userId, contactId: id });
+    console.error('❌ Error hard deleting contact:', error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -357,7 +432,7 @@ const getContactsStats: RequestHandler = async (req: any, res) => {
     
     res.json({ data: stats });
   } catch (error) {
-    logError('getContactsStats', error, { tenantId, userId });
+    console.error('❌ Error getting contacts stats:', error);
     res.status(500).json({ message: "Internal server error" });
   }
 };

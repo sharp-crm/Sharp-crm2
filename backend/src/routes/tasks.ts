@@ -1,468 +1,458 @@
-import express, { Response, NextFunction } from "express";
-import { PutCommand, GetCommand, QueryCommand, UpdateCommand, DeleteCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
-import { docClient, TABLES } from "../services/dynamoClient";
-import { v4 as uuidv4 } from "uuid";
-import { AuthenticatedRequest } from "../middlewares/authenticate";
+import { Router, RequestHandler } from 'express';
+import { tasksService, CreateTaskInput, UpdateTaskInput } from '../services/tasks';
+import { RBACUser } from '../services/tasksRBAC';
 
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  priority: string;
-  status: string;
-  dueDate: string;
-  assignee: string;
-  type: string;
-  tenantId: string;
-  createdAt: string;
-  notes?: string;
-  // New fields for related records
-  contactLeadId?: string;
-  contactLeadType?: string; // 'contact' or 'lead'
-  relatedRecordId?: string;
-  relatedRecordType?: string; // 'deal', 'product', or 'quote'
-  visibleTo?: string[];
-  // Auditing fields
-  createdBy?: string;
-  updatedAt?: string;
-  updatedBy?: string;
-  deletedAt?: string;
-  deletedBy?: string;
-  isDeleted?: boolean;
-  userId?: string;
+interface AuthenticatedRequest extends Request {
+  user?: {
+    userId: string;
+    email: string;
+    tenantId: string;
+    role: string;
+    reportingTo?: string;
+  };
 }
 
-const router = express.Router();
+const router = Router();
 
-// Test route to verify tasks router is working
-router.get("/test", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+// Validation helpers
+const validateRequiredFields = (data: any, fields: string[]): string[] | null => {
+  const missing = fields.filter(field => !data[field] || data[field].toString().trim() === '');
+  return missing.length > 0 ? missing : null;
+};
+
+// Helper function to convert authenticated request user to RBACUser format
+function convertToRBACUser(user: any): RBACUser {
+  return {
+    userId: user.userId,
+    email: user.email,
+    role: normalizeRole(user.role),
+    tenantId: user.tenantId,
+    reportingTo: user.reportingTo
+  };
+}
+
+// Helper function to normalize role string
+function normalizeRole(role: string): 'ADMIN' | 'SALES_MANAGER' | 'SALES_REP' {
+  const normalized = role.toUpperCase();
+  if (normalized === 'ADMIN' || normalized === 'SUPER_ADMIN') return 'ADMIN';
+  if (normalized === 'SALES_MANAGER' || normalized === 'MANAGER') return 'SALES_MANAGER';
+  if (normalized === 'SALES_REP' || normalized === 'REP') return 'SALES_REP';
+  return 'SALES_REP'; // Default to SALES_REP
+}
+
+// Get all tasks for tenant (RBAC-aware)
+const getAllTasks: RequestHandler = async (req: any, res) => {
+  const operation = 'getAllTasks_RBAC';
+  const user = req.user;
+  
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), TenantId: ${user?.tenantId}`);
+  
   try {
-    res.json({ message: "Tasks router is working", timestamp: new Date().toISOString() });
-  } catch (error) {
-    next(error);
-  }
-}) as express.RequestHandler);
-
-// Test route to check filtering
-router.get("/test-filter", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  try {
-    const tenantId = req.user?.tenantId;
-    const { recordType, recordId } = req.query;
-    
-    console.log('Test filter called with:', { recordType, recordId, tenantId });
-    
-    if (!tenantId) {
-      return res.status(400).json({ error: "Tenant ID required" });
-    }
-
-    // Get all tasks for this tenant to see what's in the database
-    const allTasks = await docClient.send(
-      new ScanCommand({
-        TableName: TABLES.TASKS,
-        FilterExpression: "tenantId = :tenantId AND (attribute_not_exists(isDeleted) OR isDeleted = :isDeleted)",
-        ExpressionAttributeValues: {
-          ":tenantId": tenantId,
-          ":isDeleted": false
-        }
-      })
-    );
-
-    console.log('All tasks for tenant:', allTasks.Items);
-
-    // If recordType and recordId are provided, also test the filter
-    if (recordType && recordId) {
-      const filteredTasks = await docClient.send(
-        new ScanCommand({
-          TableName: TABLES.TASKS,
-          FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId AND (attribute_not_exists(isDeleted) OR isDeleted = :isDeleted)",
-          ExpressionAttributeValues: {
-            ":tenantId": tenantId,
-            ":recordType": recordType,
-            ":recordId": recordId,
-            ":isDeleted": false
-          }
-        })
-      );
-
-      console.log('Filtered tasks:', filteredTasks.Items);
-
-      return res.json({ 
-        message: "Filter test completed",
-        allTasks: allTasks.Items,
-        filteredTasks: filteredTasks.Items,
-        filterParams: { recordType, recordId, tenantId }
-      });
-    }
-
-    res.json({ 
-      message: "All tasks retrieved",
-      allTasks: allTasks.Items,
-      tenantId
-    });
-  } catch (error) {
-    console.error('Test filter error:', error);
-    next(error);
-  }
-}) as express.RequestHandler);
-
-// Get all tasks for tenant
-router.get("/", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  try {
-    const tenantId = req.user?.tenantId;
+    const includeDeleted = req.query.includeDeleted === 'true';
     const { recordType, recordId, contactLeadType, contactLeadId } = req.query;
     
-    if (!tenantId) {
-      return res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
+      return;
     }
 
-    // If recordType and recordId are provided, filter by related record
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), TenantId: ${rbacUser.tenantId}`);
+    
+    let tasks;
+    
+    // Handle filtering by related record
     if (recordType && recordId) {
-      console.log('Filtering tasks by related record:', { recordType, recordId, tenantId });
-      
-      const result = await docClient.send(
-        new ScanCommand({
-          TableName: TABLES.TASKS,
-          FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId AND (attribute_not_exists(isDeleted) OR isDeleted = :isDeleted)",
-          ExpressionAttributeValues: {
-            ":tenantId": tenantId,
-            ":recordType": recordType,
-            ":recordId": recordId,
-            ":isDeleted": false
-          }
-        })
-      );
-
-      console.log('DynamoDB result for related record filter:', { 
-        count: result.Count, 
-        scannedCount: result.ScannedCount,
-        items: result.Items?.length || 0 
-      });
-
-      return res.json({ data: (result.Items as Task[]) || [] });
+      console.log(`🔍 [${operation}] Filtering by related record: ${recordType}:${recordId}`);
+      tasks = await tasksService.getTasksByRelatedRecordForUser(recordType as string, recordId as string, rbacUser);
+    } else {
+      tasks = await tasksService.getTasksForUser(rbacUser, includeDeleted);
     }
-
-    // If contactLeadType and contactLeadId are provided, filter by contact/lead
-    if (contactLeadType && contactLeadId) {
-      console.log('Filtering tasks by contact/lead:', { contactLeadType, contactLeadId, tenantId });
-      
-      const result = await docClient.send(
-        new ScanCommand({
-          TableName: TABLES.TASKS,
-          FilterExpression: "tenantId = :tenantId AND contactLeadType = :contactLeadType AND contactLeadId = :contactLeadId AND (attribute_not_exists(isDeleted) OR isDeleted = :isDeleted)",
-          ExpressionAttributeValues: {
-            ":tenantId": tenantId,
-            ":contactLeadType": contactLeadType,
-            ":contactLeadId": contactLeadId,
-            ":isDeleted": false
-          }
-        })
-      );
-
-      console.log('DynamoDB result for contact/lead filter:', { 
-        count: result.Count, 
-        scannedCount: result.ScannedCount,
-        items: result.Items?.length || 0 
-      });
-
-      return res.json({ data: (result.Items as Task[]) || [] });
-    }
-
-    // Otherwise, get all tasks for tenant
-    const result = await docClient.send(
-      new ScanCommand({
-        TableName: TABLES.TASKS,
-        FilterExpression: "tenantId = :tenantId AND (attribute_not_exists(isDeleted) OR isDeleted = :isDeleted)",
-        ExpressionAttributeValues: {
-          ":tenantId": tenantId,
-          ":isDeleted": false
-        }
-      })
-    );
-
-    res.json({ data: (result.Items as Task[]) || [] });
-  } catch (error) {
-    next(error);
-  }
-}) as express.RequestHandler);
-
-// Get tasks by related record - MUST BE BEFORE /:id route
-router.get("/by-related-record", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  try {
-    const tenantId = req.user?.tenantId;
-    const { recordType, recordId } = req.query;
     
-    console.log('GET /by-related-record called with:', { recordType, recordId, tenantId });
-    
-    if (!tenantId) {
-      console.log('Error: Tenant ID required');
-      return res.status(400).json({ error: "Tenant ID required" });
-    }
-
-    if (!recordType || !recordId) {
-      console.log('Error: Record type and record ID are required');
-      return res.status(400).json({ error: "Record type and record ID are required" });
-    }
-
-    console.log('Querying DynamoDB with:', {
-      TableName: TABLES.TASKS,
-      FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId AND (attribute_not_exists(isDeleted) OR isDeleted = :isDeleted)",
-      ExpressionAttributeValues: {
-        ":tenantId": tenantId,
-        ":recordType": recordType,
-        ":recordId": recordId,
-        ":isDeleted": false
+    console.log(`✅ [${operation}] Successfully retrieved ${tasks.length} tasks for user ${rbacUser.email} (${rbacUser.role})`);
+    res.json({ 
+      data: tasks,
+      total: tasks.length,
+      message: `Retrieved ${tasks.length} tasks`,
+      rbac: {
+        userRole: rbacUser.role,
+        appliedFilter: `Role-based access control applied for ${rbacUser.role}`
       }
     });
-
-    const result = await docClient.send(
-      new ScanCommand({
-        TableName: TABLES.TASKS,
-        FilterExpression: "tenantId = :tenantId AND relatedRecordType = :recordType AND relatedRecordId = :recordId AND (attribute_not_exists(isDeleted) OR isDeleted = :isDeleted)",
-        ExpressionAttributeValues: {
-          ":tenantId": tenantId,
-          ":recordType": recordType,
-          ":recordId": recordId,
-          ":isDeleted": false
-        }
-      })
-    );
-
-    console.log('DynamoDB result:', { 
-      count: result.Count, 
-      scannedCount: result.ScannedCount,
-      items: result.Items?.length || 0 
-    });
-
-    res.json({ data: (result.Items as Task[]) || [] });
   } catch (error) {
-    console.error('Error in /by-related-record:', error);
-    next(error);
+    console.error(`❌ [${operation}] Error occurred:`);
+    console.error(`   - Error message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error(`   - Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
+    res.status(500).json({ message: "Internal server error" });
   }
-}) as express.RequestHandler);
+};
 
-// Get task by ID
-router.get("/:id", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+// Get task by ID (RBAC-aware)
+const getTaskById: RequestHandler = async (req: any, res) => {
+  const operation = 'getTaskById_RBAC';
+  const user = req.user;
+  const { id } = req.params;
+  
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), TaskId: ${id}`);
+  
   try {
-    const { id } = req.params;
-    const tenantId = req.user?.tenantId;
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
+      return;
+    }
+
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), TaskId: ${id}`);
     
-    if (!tenantId) {
-      return res.status(400).json({ error: "Tenant ID required" });
+    const task = await tasksService.getTaskByIdForUser(id, rbacUser);
+    
+    if (!task) {
+      console.log(`❌ [${operation}] Task not found or access denied - TaskId: ${id}, User: ${rbacUser.email} (${rbacUser.role})`);
+      res.status(404).json({ message: "Task not found or you don't have permission to access it" });
+      return;
     }
 
-    const result = await docClient.send(
-      new GetCommand({
-        TableName: TABLES.TASKS,
-        Key: { id }
-      })
-    );
-
-    if (!result.Item) {
-      return res.status(404).json({ error: "Task not found" });
-    }
-
-    // Check if task belongs to the same tenant
-    if (result.Item.tenantId !== tenantId) {
-      return res.status(403).json({ error: "Access denied" });
-    }
-
-    // Check if task is soft deleted
-    if (result.Item.isDeleted) {
-      return res.status(404).json({ error: "Task not found" });
-    }
-
-    res.json({ data: result.Item as Task });
+    console.log(`✅ [${operation}] Successfully retrieved task - TaskId: ${id}, User: ${rbacUser.email} (${rbacUser.role})`);
+    res.json({ 
+      data: task,
+      rbac: {
+        userRole: rbacUser.role,
+        accessGranted: true
+      }
+    });
   } catch (error) {
-    next(error);
+    console.error(`❌ [${operation}] Error occurred:`);
+    console.error(`   - Error message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error(`   - Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
+    res.status(500).json({ message: "Internal server error" });
   }
-}) as express.RequestHandler);
+};
+
+// Get tasks by assignee (RBAC-aware)
+const getTasksByAssignee: RequestHandler = async (req: any, res) => {
+  const operation = 'getTasksByAssignee_RBAC';
+  const user = req.user;
+  const { assignee } = req.params;
+  
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), TargetAssignee: ${assignee}`);
+  
+  try {
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
+      return;
+    }
+
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), TargetAssignee: ${assignee}`);
+    
+    const tasks = await tasksService.getTasksByAssigneeForUser(assignee, rbacUser);
+    
+    console.log(`✅ [${operation}] Successfully retrieved ${tasks.length} tasks for assignee ${assignee}, requested by ${rbacUser.email} (${rbacUser.role})`);
+    res.json({ 
+      data: tasks,
+      total: tasks.length,
+      rbac: {
+        userRole: rbacUser.role,
+        targetAssignee: assignee,
+        accessGranted: true
+      }
+    });
+  } catch (error) {
+    console.error(`❌ [${operation}] Error occurred:`, error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// Get tasks by status (RBAC-aware)
+const getTasksByStatus: RequestHandler = async (req: any, res) => {
+  const operation = 'getTasksByStatus_RBAC';
+  const user = req.user;
+  const { status } = req.params;
+  
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), Status: ${status}`);
+  
+  try {
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
+      return;
+    }
+
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), Status: ${status}`);
+    
+    const tasks = await tasksService.getTasksByStatusForUser(status, rbacUser);
+    
+    console.log(`✅ [${operation}] Successfully retrieved ${tasks.length} tasks for status ${status}, User: ${rbacUser.email} (${rbacUser.role})`);
+    res.json({ 
+      data: tasks,
+      total: tasks.length,
+      rbac: {
+        userRole: rbacUser.role,
+        targetStatus: status,
+        accessGranted: true
+      }
+    });
+  } catch (error) {
+    console.error(`❌ [${operation}] Error occurred:`, error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// Search tasks (RBAC-aware)
+const searchTasks: RequestHandler = async (req: any, res) => {
+  const operation = 'searchTasks_RBAC';
+  const user = req.user;
+  const { q } = req.query;
+  
+  console.log(`🔍 [${operation}] Starting RBAC search - User: ${user?.email} (${user?.role}), Query: "${q}"`);
+  
+  try {
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
+      return;
+    }
+
+    if (!q || typeof q !== 'string') {
+      console.log(`❌ [${operation}] Missing or invalid search query`);
+      res.status(400).json({ error: "Search query required" });
+      return;
+    }
+
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), Query: "${q}"`);
+    
+    const tasks = await tasksService.searchTasksForUser(rbacUser, q);
+    
+    console.log(`✅ [${operation}] Successfully found ${tasks.length} tasks for query "${q}", User: ${rbacUser.email} (${rbacUser.role})`);
+    res.json({ 
+      data: tasks,
+      total: tasks.length,
+      query: q,
+      rbac: {
+        userRole: rbacUser.role,
+        appliedFilter: `Search results filtered for ${rbacUser.role}`
+      }
+    });
+  } catch (error) {
+    console.error(`❌ [${operation}] Error occurred:`, error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// Get task statistics (RBAC-aware)
+const getTasksStats: RequestHandler = async (req: any, res) => {
+  const operation = 'getTasksStats_RBAC';
+  const user = req.user;
+  
+  console.log(`🔍 [${operation}] Starting RBAC stats request - User: ${user?.email} (${user?.role})`);
+  
+  try {
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
+      return;
+    }
+
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role})`);
+    
+    const stats = await tasksService.getTasksStatsForUser(rbacUser);
+    
+    console.log(`✅ [${operation}] Successfully calculated stats for ${stats.total} tasks, User: ${rbacUser.email} (${rbacUser.role})`);
+    res.json({ 
+      data: stats,
+      rbac: {
+        userRole: rbacUser.role,
+        appliedFilter: `Statistics calculated for ${rbacUser.role} accessible tasks`
+      }
+    });
+  } catch (error) {
+    console.error(`❌ [${operation}] Error occurred:`, error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
 
 // Create new task
-router.post("/", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+const createTask: RequestHandler = async (req: any, res) => {
+  const operation = 'createTask';
+  const user = req.user;
+  
+  console.log(`🔍 [${operation}] Starting request - User: ${user?.email} (${user?.role})`);
+  
   try {
-    const { 
-      title, 
-      description, 
-      priority = "Medium", 
-      status = "Open", 
-      dueDate, 
-      assignee,
-      type = "Follow-up",
-      contactLeadId,
-      contactLeadType,
-      relatedRecordId,
-      relatedRecordType,
-      visibleTo = [],
-      notes
-    } = req.body;
-    const tenantId = req.user?.tenantId;
-    const userId = req.user?.userId;
-    const userEmail = req.user?.email;
+    const requiredFields = ['title', 'description', 'priority', 'dueDate', 'assignee', 'type'];
+    const missingFields = validateRequiredFields(req.body, requiredFields);
     
-    if (!tenantId) {
-      return res.status(400).json({ error: "Tenant ID required" });
+    if (missingFields) {
+      console.error(`❌ [${operation}] Missing required fields: ${missingFields.join(', ')}`);
+      res.status(400).json({ 
+        error: "Missing required fields", 
+        missing: missingFields 
+      });
+      return;
     }
 
-    const id = uuidv4();
-    const createdAt = new Date().toISOString();
+    if (!user || !user.tenantId) {
+      res.status(400).json({ error: "User authentication required" });
+      return;
+    }
 
-    const task: Task = {
-      id,
-      title,
-      description,
-      priority,
-      status,
-      dueDate,
-      assignee,
-      type,
-      tenantId,
-      createdAt,
-      // Add new fields if provided
-      ...(contactLeadId && { contactLeadId }),
-      ...(contactLeadType && { contactLeadType }),
-      ...(relatedRecordId && { relatedRecordId }),
-      ...(relatedRecordType && { relatedRecordType }),
-      ...(visibleTo && visibleTo.length > 0 && { visibleTo }),
-      ...(notes && { notes }),
-      // Auditing fields
-      createdBy: userEmail || userId || 'Unknown',
-      updatedAt: createdAt,
-      updatedBy: userEmail || userId || 'Unknown',
-      isDeleted: false,
-      userId: userId || 'Unknown'
+    const taskInput: CreateTaskInput = {
+      title: req.body.title,
+      description: req.body.description,
+      priority: req.body.priority,
+      status: req.body.status || 'Open',
+      dueDate: req.body.dueDate,
+      assignee: req.body.assignee,
+      type: req.body.type,
+      notes: req.body.notes,
+      contactLeadId: req.body.contactLeadId,
+      contactLeadType: req.body.contactLeadType,
+      relatedRecordId: req.body.relatedRecordId,
+      relatedRecordType: req.body.relatedRecordType
     };
 
-    await docClient.send(
-      new PutCommand({
-        TableName: TABLES.TASKS,
-        Item: task
-      })
-    );
+    console.log(`📊 [${operation}] Creating task for user: ${user.userId}`);
+    const task = await tasksService.createTask(taskInput, user.userId, user.email, user.tenantId);
 
-    res.status(201).json({ data: task });
+    console.log(`✅ [${operation}] Task created successfully: ${task.id}`);
+    res.status(201).json({ 
+      data: task,
+      message: "Task created successfully"
+    });
   } catch (error) {
-    next(error);
+    console.error(`❌ [${operation}] Error creating task:`, error);
+    res.status(500).json({ message: "Internal server error" });
   }
-}) as express.RequestHandler);
+};
 
 // Update task
-router.put("/:id", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+const updateTask: RequestHandler = async (req: any, res) => {
+  const operation = 'updateTask';
+  const user = req.user;
+  const { id } = req.params;
+  
+  console.log(`🔍 [${operation}] Starting update - TaskId: ${id}, User: ${user?.email}`);
+  
   try {
-    const { id } = req.params;
-    const updates = req.body;
-    const tenantId = req.user?.tenantId;
-    const userId = req.user?.userId;
-    const userEmail = req.user?.email;
-    
-    if (!tenantId) {
-      return res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      res.status(400).json({ error: "User authentication required" });
+      return;
     }
 
-    // First check if task exists and belongs to tenant
-    const existingTask = await docClient.send(
-      new GetCommand({
-        TableName: TABLES.TASKS,
-        Key: { id }
-      })
-    );
+    const updateInput: UpdateTaskInput = {
+      title: req.body.title,
+      description: req.body.description,
+      priority: req.body.priority,
+      status: req.body.status,
+      dueDate: req.body.dueDate,
+      assignee: req.body.assignee,
+      type: req.body.type,
+      notes: req.body.notes,
+      contactLeadId: req.body.contactLeadId,
+      contactLeadType: req.body.contactLeadType,
+      relatedRecordId: req.body.relatedRecordId,
+      relatedRecordType: req.body.relatedRecordType
+    };
 
-    if (!existingTask.Item || existingTask.Item.tenantId !== tenantId) {
-      return res.status(404).json({ error: "Task not found" });
-    }
-    
-    // Build update expression
-    const updateExpressions = [];
-    const expressionAttributeNames: Record<string, string> = {};
-    const expressionAttributeValues: Record<string, any> = {};
-    
-    for (const [key, value] of Object.entries(updates)) {
-      if (key !== 'id' && key !== 'tenantId') {
-        updateExpressions.push(`#${key} = :${key}`);
-        expressionAttributeNames[`#${key}`] = key;
-        expressionAttributeValues[`:${key}`] = value;
-      }
+    console.log(`📊 [${operation}] Updating task for user: ${user.userId}`);
+    const task = await tasksService.updateTask(id, updateInput, user.userId, user.email, user.tenantId);
+
+    if (!task) {
+      res.status(404).json({ message: "Task not found" });
+      return;
     }
 
-    if (updateExpressions.length === 0) {
-      return res.status(400).json({ error: "No valid fields to update" });
-    }
-
-    // Add auditing fields
-    updateExpressions.push('#updatedAt = :updatedAt', '#updatedBy = :updatedBy');
-    expressionAttributeNames['#updatedAt'] = 'updatedAt';
-    expressionAttributeNames['#updatedBy'] = 'updatedBy';
-    expressionAttributeValues[':updatedAt'] = new Date().toISOString();
-    expressionAttributeValues[':updatedBy'] = userEmail || userId || 'Unknown';
-
-    const result = await docClient.send(
-      new UpdateCommand({
-        TableName: TABLES.TASKS,
-        Key: { id },
-        UpdateExpression: `SET ${updateExpressions.join(', ')}`,
-        ExpressionAttributeNames: expressionAttributeNames,
-        ExpressionAttributeValues: expressionAttributeValues,
-        ReturnValues: "ALL_NEW"
-      })
-    );
-
-    res.json({ data: result.Attributes as Task });
+    console.log(`✅ [${operation}] Task updated successfully: ${id}`);
+    res.json({ 
+      data: task,
+      message: "Task updated successfully"
+    });
   } catch (error) {
-    next(error);
+    console.error(`❌ [${operation}] Error:`, error);
+    res.status(500).json({ message: "Internal server error" });
   }
-}) as express.RequestHandler);
+};
 
 // Delete task (soft delete)
-router.delete("/:id", (async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+const deleteTask: RequestHandler = async (req: any, res) => {
+  const operation = 'deleteTask';
+  const user = req.user;
+  const { id } = req.params;
+  
+  console.log(`🔍 [${operation}] Starting - TaskId: ${id}, User: ${user?.email}`);
+  
   try {
-    const { id } = req.params;
-    const tenantId = req.user?.tenantId;
-    const userId = req.user?.userId;
-    const userEmail = req.user?.email;
-    
-    if (!tenantId) {
-      return res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      res.status(400).json({ error: "User authentication required" });
+      return;
     }
 
-    // First check if task exists and belongs to tenant
-    const existingTask = await docClient.send(
-      new GetCommand({
-        TableName: TABLES.TASKS,
-        Key: { id }
-      })
-    );
+    const success = await tasksService.deleteTask(id, user.userId, user.email, user.tenantId);
 
-    if (!existingTask.Item || existingTask.Item.tenantId !== tenantId) {
-      return res.status(404).json({ error: "Task not found" });
+    if (!success) {
+      res.status(404).json({ message: "Task not found" });
+      return;
     }
 
-    // Soft delete by updating the task
-    const result = await docClient.send(
-      new UpdateCommand({
-        TableName: TABLES.TASKS,
-        Key: { id },
-        UpdateExpression: 'SET #isDeleted = :isDeleted, #deletedAt = :deletedAt, #deletedBy = :deletedBy, #updatedAt = :updatedAt, #updatedBy = :updatedBy',
-        ExpressionAttributeNames: {
-          '#isDeleted': 'isDeleted',
-          '#deletedAt': 'deletedAt',
-          '#deletedBy': 'deletedBy',
-          '#updatedAt': 'updatedAt',
-          '#updatedBy': 'updatedBy'
-        },
-        ExpressionAttributeValues: {
-          ':isDeleted': true,
-          ':deletedAt': new Date().toISOString(),
-          ':deletedBy': userEmail || userId || 'Unknown',
-          ':updatedAt': new Date().toISOString(),
-          ':updatedBy': userEmail || userId || 'Unknown'
-        },
-        ReturnValues: "ALL_NEW"
-      })
-    );
-
-    res.json({ message: "Task deleted successfully", data: result.Attributes as Task });
+    console.log(`✅ [${operation}] Task updated successfully: ${id}`);
+    res.json({ message: "Task deleted successfully" });
   } catch (error) {
-    next(error);
+    console.error(`❌ [${operation}] Error:`, error);
+    res.status(500).json({ message: "Internal server error" });
   }
-}) as express.RequestHandler);
+};
+
+// Hard delete task (permanent removal)
+const hardDeleteTask: RequestHandler = async (req: any, res) => {
+  const operation = 'hardDeleteTask';
+  const user = req.user;
+  const { id } = req.params;
+  
+  console.log(`🔍 [${operation}] Starting - TaskId: ${id}, User: ${user?.email}`);
+  
+  try {
+    if (!user || !user.tenantId) {
+      res.status(400).json({ error: "User authentication required" });
+      return;
+    }
+
+    // Only allow admins to hard delete
+    if (user.role !== 'ADMIN') {
+      res.status(403).json({ error: "Only administrators can permanently delete tasks" });
+      return;
+    }
+
+    const success = await tasksService.hardDeleteTask(id, user.tenantId);
+
+    if (!success) {
+      res.status(404).json({ message: "Task not found" });
+      return;
+    }
+
+    console.log(`✅ [${operation}] Task updated successfully: ${id}`);
+    res.json({ message: "Task permanently deleted" });
+  } catch (error) {
+    console.error(`❌ [${operation}] Error:`, error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// Routes
+router.get('/', getAllTasks);
+router.get('/stats', getTasksStats);
+router.get('/search', searchTasks);
+router.get('/assignee/:assignee', getTasksByAssignee);
+router.get('/status/:status', getTasksByStatus);
+router.get('/:id', getTaskById);
+router.post('/', createTask);
+router.put('/:id', updateTask);
+router.delete('/:id', deleteTask);
+router.delete('/:id/hard', hardDeleteTask);
 
 export default router;

@@ -1,6 +1,6 @@
 import { Router, RequestHandler } from 'express';
 import { dealsService, CreateDealInput, UpdateDealInput } from '../services/deals';
-import { logError, logOperationStart, logOperationSuccess, logOperationInfo, logValidationError } from '../utils/routeLogger';
+import { RBACUser } from '../services/dealsRBAC';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -24,137 +24,217 @@ const validateEmail = (email: string): boolean => {
   return emailRegex.test(email);
 };
 
-// Get all deals for tenant
+// Helper function to convert authenticated request user to RBACUser format
+function convertToRBACUser(user: any): RBACUser {
+  return {
+    userId: user.userId,
+    email: user.email,
+    role: normalizeRole(user.role),
+    tenantId: user.tenantId,
+    reportingTo: user.reportingTo
+  };
+}
+
+// Helper function to normalize role string
+function normalizeRole(role: string): 'ADMIN' | 'SALES_MANAGER' | 'SALES_REP' {
+  const normalized = role.toUpperCase();
+  if (normalized === 'ADMIN' || normalized === 'SUPER_ADMIN') return 'ADMIN';
+  if (normalized === 'SALES_MANAGER' || normalized === 'MANAGER') return 'SALES_MANAGER';
+  if (normalized === 'SALES_REP' || normalized === 'REP') return 'SALES_REP';
+  return 'SALES_REP'; // Default to SALES_REP
+}
+
+// Get all deals for tenant (RBAC-aware)
 const getAllDeals: RequestHandler = async (req: any, res) => {
-  const operation = 'getAllDeals';
-  const { tenantId, userId } = req.user || {};
+  const operation = 'getAllDeals_RBAC';
+  const user = req.user;
   
-  logOperationStart(operation, { tenantId, userId });
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), TenantId: ${user?.tenantId}`);
   
   try {
     const includeDeleted = req.query.includeDeleted === 'true';
     
-    if (!tenantId) {
-      logValidationError(operation, 'Missing tenant ID');
-      res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
 
-    logOperationInfo(operation, { tenantId, includeDeleted });
-    const deals = await dealsService.getDealsByTenant(tenantId, userId, includeDeleted);
-
-    logOperationSuccess(operation, { count: deals.length });
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), TenantId: ${rbacUser.tenantId}`);
+    
+    const deals = await dealsService.getDealsForUser(rbacUser, includeDeleted);
+    
+    console.log(`✅ [${operation}] Successfully retrieved ${deals.length} deals for user ${rbacUser.email} (${rbacUser.role})`);
     res.json({ 
       data: deals,
       total: deals.length,
-      message: `Retrieved ${deals.length} deals`
+      message: `Retrieved ${deals.length} deals`,
+      rbac: {
+        userRole: rbacUser.role,
+        appliedFilter: `Role-based access control applied for ${rbacUser.role}`
+      }
     });
   } catch (error) {
-    logError(operation, error, { tenantId, userId });
+    console.error(`❌ [${operation}] Error occurred:`);
+    console.error(`   - Error message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error(`   - Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// Get deal by ID
+// Get deal by ID (RBAC-aware)
 const getDealById: RequestHandler = async (req: any, res) => {
-  const { tenantId, userId } = req.user || {};
+  const operation = 'getDealById_RBAC';
+  const user = req.user;
   const { id } = req.params;
   
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), DealId: ${id}`);
+  
   try {
-    
-    if (!tenantId) {
-      res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
+
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), DealId: ${id}`);
     
-    const deal = await dealsService.getDealById(id, tenantId, userId);
+    const deal = await dealsService.getDealByIdForUser(id, rbacUser);
     
     if (!deal) {
-      res.status(404).json({ message: "Deal not found" });
+      console.log(`❌ [${operation}] Deal not found or access denied - DealId: ${id}, User: ${rbacUser.email} (${rbacUser.role})`);
+      res.status(404).json({ message: "Deal not found or you don't have permission to access it" });
       return;
     }
 
-    res.json({ data: deal });
+    console.log(`✅ [${operation}] Successfully retrieved deal - DealId: ${id}, User: ${rbacUser.email} (${rbacUser.role})`);
+    res.json({ 
+      data: deal,
+      rbac: {
+        userRole: rbacUser.role,
+        accessGranted: true
+      }
+    });
   } catch (error) {
-    logError('getDealById', error, { tenantId, userId, dealId: id });
+    console.error(`❌ [${operation}] Error occurred:`);
+    console.error(`   - Error message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error(`   - Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// Get deals by owner
+// Get deals by owner (RBAC-aware)
 const getDealsByOwner: RequestHandler = async (req: any, res) => {
-  const { tenantId, userId } = req.user || {};
+  const operation = 'getDealsByOwner_RBAC';
+  const user = req.user;
   const { owner } = req.params;
   
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), TargetOwner: ${owner}`);
+  
   try {
-    
-    if (!tenantId) {
-      res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
 
-    const deals = await dealsService.getDealsByOwner(owner, tenantId, userId);
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), TargetOwner: ${owner}`);
     
+    const deals = await dealsService.getDealsByOwnerForUser(owner, rbacUser);
+    
+    console.log(`✅ [${operation}] Successfully retrieved ${deals.length} deals for owner ${owner}, requested by ${rbacUser.email} (${rbacUser.role})`);
     res.json({ 
       data: deals,
-      total: deals.length 
+      total: deals.length,
+      rbac: {
+        userRole: rbacUser.role,
+        targetOwner: owner,
+        accessGranted: true
+      }
     });
   } catch (error) {
-    logError('getDealsByOwner', error, { tenantId, userId, owner });
+    console.error(`❌ [${operation}] Error occurred:`, error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// Get deals by stage
+// Get deals by stage (RBAC-aware)
 const getDealsByStage: RequestHandler = async (req: any, res) => {
-  const { tenantId, userId } = req.user || {};
+  const operation = 'getDealsByStage_RBAC';
+  const user = req.user;
   const { stage } = req.params;
   
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), Stage: ${stage}`);
+  
   try {
-    
-    if (!tenantId) {
-      res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
 
-    const deals = await dealsService.getDealsByStage(stage, tenantId, userId);
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), Stage: ${stage}`);
     
+    const deals = await dealsService.getDealsByStageForUser(stage, rbacUser);
+    
+    console.log(`✅ [${operation}] Successfully retrieved ${deals.length} deals for stage ${stage}, User: ${rbacUser.email} (${rbacUser.role})`);
     res.json({ 
       data: deals,
-      total: deals.length 
+      total: deals.length,
+      rbac: {
+        userRole: rbacUser.role,
+        targetStage: stage,
+        accessGranted: true
+      }
     });
   } catch (error) {
-    logError('getDealsByStage', error, { tenantId, userId, stage });
+    console.error(`❌ [${operation}] Error occurred:`, error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// Search deals
+// Search deals (RBAC-aware)
 const searchDeals: RequestHandler = async (req: any, res) => {
-  const { tenantId, userId } = req.user || {};
+  const operation = 'searchDeals_RBAC';
+  const user = req.user;
   const { q } = req.query;
   
+  console.log(`🔍 [${operation}] Starting RBAC search - User: ${user?.email} (${user?.role}), Query: "${q}"`);
+  
   try {
-    
-    if (!tenantId) {
-      res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
 
     if (!q || typeof q !== 'string') {
+      console.log(`❌ [${operation}] Missing or invalid search query`);
       res.status(400).json({ error: "Search query required" });
       return;
     }
 
-    const deals = await dealsService.searchDeals(tenantId, userId, q);
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), Query: "${q}"`);
     
+    const deals = await dealsService.searchDealsForUser(rbacUser, q);
+    
+    console.log(`✅ [${operation}] Successfully found ${deals.length} deals for query "${q}", User: ${rbacUser.email} (${rbacUser.role})`);
     res.json({ 
       data: deals,
       total: deals.length,
-      query: q
+      query: q,
+      rbac: {
+        userRole: rbacUser.role,
+        appliedFilter: `Search results filtered for ${rbacUser.role}`
+      }
     });
   } catch (error) {
-    logError('searchDeals', error, { tenantId, userId, query: q });
+    console.error(`❌ [${operation}] Error occurred:`, error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -244,7 +324,7 @@ const createDeal: RequestHandler = async (req: any, res) => {
       data: deal 
     });
   } catch (error) {
-    logError('createDeal', error, { tenantId, userId, dealName: req.body.dealName });
+    console.error('❌ Error creating deal:', error);
     if (error instanceof Error) {
       res.status(400).json({ error: error.message });
     } else {
@@ -336,7 +416,7 @@ const updateDeal: RequestHandler = async (req: any, res) => {
       data: updatedDeal 
     });
   } catch (error) {
-    logError('updateDeal', error, { tenantId, userId, dealId: id });
+    console.error('❌ Error updating deal:', error);
     if (error instanceof Error) {
       res.status(400).json({ error: error.message });
     } else {
@@ -373,7 +453,7 @@ const deleteDeal: RequestHandler = async (req: any, res) => {
 
     res.json({ message: "Deal deleted successfully" });
   } catch (error) {
-    logError('deleteDeal', error, { tenantId, userId, dealId: id });
+    console.error('❌ Error deleting deal:', error);
     if (error instanceof Error) {
       res.status(400).json({ error: error.message });
     } else {
@@ -403,7 +483,7 @@ const restoreDeal: RequestHandler = async (req: any, res) => {
 
     res.json({ message: "Deal restored successfully" });
   } catch (error) {
-    logError('restoreDeal', error, { tenantId, userId, dealId: id });
+    console.error('❌ Error restoring deal:', error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -435,27 +515,40 @@ const hardDeleteDeal: RequestHandler = async (req: any, res) => {
 
     res.json({ message: "Deal permanently deleted" });
   } catch (error) {
-    logError('hardDeleteDeal', error, { tenantId, userId, dealId: id });
+    console.error('❌ Error hard deleting deal:', error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// Get deals statistics
+// Get deals statistics (RBAC-aware)
 const getDealsStats: RequestHandler = async (req: any, res) => {
-  const { tenantId, userId } = req.user || {};
+  const operation = 'getDealsStats_RBAC';
+  const user = req.user;
+  
+  console.log(`🔍 [${operation}] Starting RBAC stats request - User: ${user?.email} (${user?.role})`);
   
   try {
-    
-    if (!tenantId) {
-      res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
 
-    const stats = await dealsService.getDealsStats(tenantId, userId);
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role})`);
     
-    res.json({ data: stats });
+    const stats = await dealsService.getDealsStatsForUser(rbacUser);
+    
+    console.log(`✅ [${operation}] Successfully calculated stats for ${stats.total} deals, User: ${rbacUser.email} (${rbacUser.role})`);
+    res.json({ 
+      data: stats,
+      rbac: {
+        userRole: rbacUser.role,
+        appliedFilter: `Statistics calculated for ${rbacUser.role} accessible deals`
+      }
+    });
   } catch (error) {
-    logError('getDealsStats', error, { tenantId, userId });
+    console.error(`❌ [${operation}] Error occurred:`, error);
     res.status(500).json({ message: "Internal server error" });
   }
 };

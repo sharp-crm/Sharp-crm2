@@ -1,5 +1,6 @@
 import { Router, RequestHandler } from 'express';
 import { quotesService } from '../services/quotes';
+import { RBACUser } from '../services/quotesRBAC';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -12,55 +13,110 @@ interface AuthenticatedRequest extends Request {
 
 const router = Router();
 
-// Get all quotes
+// Helper function to convert authenticated request user to RBACUser format
+function convertToRBACUser(user: any): RBACUser {
+  return {
+    userId: user.userId,
+    email: user.email,
+    role: normalizeRole(user.role),
+    tenantId: user.tenantId,
+    reportingTo: user.reportingTo
+  };
+}
+
+// Helper function to normalize role string
+function normalizeRole(role: string): 'ADMIN' | 'SALES_MANAGER' | 'SALES_REP' {
+  const normalized = role.toUpperCase();
+  if (normalized === 'ADMIN' || normalized === 'SUPER_ADMIN') return 'ADMIN';
+  if (normalized === 'SALES_MANAGER' || normalized === 'MANAGER') return 'SALES_MANAGER';
+  if (normalized === 'SALES_REP' || normalized === 'REP') return 'SALES_REP';
+  return 'SALES_REP'; // Default to SALES_REP
+}
+
+// Get all quotes (RBAC-aware)
 const getAllQuotes: RequestHandler = async (req: any, res) => {
+  const operation = 'getAllQuotes_RBAC';
+  const user = req.user;
+  
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), TenantId: ${user?.tenantId}`);
+  
   try {
-    const { userId, tenantId } = req.user || {};
+    const includeDeleted = req.query.includeDeleted === 'true';
     
-    if (!req.user) {
-      res.status(401).json({ success: false, message: 'User not authenticated' });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
+
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), TenantId: ${rbacUser.tenantId}`);
     
-    const quotes = await quotesService.getAllQuotes(userId, tenantId);
-    res.json({
+    const quotes = await quotesService.getQuotesForUser(rbacUser, includeDeleted);
+    
+    console.log(`✅ [${operation}] Successfully retrieved ${quotes.length} quotes for user ${rbacUser.email} (${rbacUser.role})`);
+    res.json({ 
       success: true,
       data: quotes,
-      message: 'Quotes retrieved successfully'
+      total: quotes.length,
+      message: `Retrieved ${quotes.length} quotes`,
+      rbac: {
+        userRole: rbacUser.role,
+        appliedFilter: `Role-based access control applied for ${rbacUser.role}`
+      }
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Internal server error' });
+    console.error(`❌ [${operation}] Error occurred:`);
+    console.error(`   - Error message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error(`   - Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
-// Get quote by ID
+// Get quote by ID (RBAC-aware)
 const getQuoteById: RequestHandler = async (req: any, res) => {
+  const operation = 'getQuoteById_RBAC';
+  const user = req.user;
+  const { id } = req.params;
+  
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), QuoteId: ${id}`);
+  
   try {
-    const { id } = req.params;
-    const { userId, tenantId } = req.user || {};
-    
-    if (!req.user) {
-      res.status(401).json({ success: false, message: 'User not authenticated' });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
+
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), QuoteId: ${id}`);
     
-    const quote = await quotesService.getQuoteById(id, userId, tenantId);
+    const quote = await quotesService.getQuoteByIdForUser(id, rbacUser);
     
     if (!quote) {
-      res.status(404).json({
-        success: false,
-        message: 'Quote not found'
+      console.log(`❌ [${operation}] Quote not found or access denied - QuoteId: ${id}, User: ${rbacUser.email} (${rbacUser.role})`);
+      res.status(404).json({ 
+        success: false, 
+        message: "Quote not found or you don't have permission to access it" 
       });
       return;
     }
-    
-    res.json({
+
+    console.log(`✅ [${operation}] Successfully retrieved quote - QuoteId: ${id}, User: ${rbacUser.email} (${rbacUser.role})`);
+    res.json({ 
       success: true,
       data: quote,
-      message: 'Quote retrieved successfully'
+      message: 'Quote retrieved successfully',
+      rbac: {
+        userRole: rbacUser.role,
+        accessGranted: true
+      }
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Internal server error' });
+    console.error(`❌ [${operation}] Error occurred:`);
+    console.error(`   - Error message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error(`   - Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 
@@ -164,26 +220,43 @@ const deleteQuote: RequestHandler = async (req: any, res) => {
   }
 };
 
-// Get quotes by status
+// Get quotes by status (RBAC-aware)
 const getQuotesByStatus: RequestHandler = async (req: any, res) => {
+  const operation = 'getQuotesByStatus_RBAC';
+  const user = req.user;
+  const { status } = req.params;
+  
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), Status: ${status}`);
+  
   try {
-    const { status } = req.params;
-    const { userId, tenantId } = req.user || {};
-    
-    if (!req.user) {
-      res.status(401).json({ success: false, message: 'User not authenticated' });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
+
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), Status: ${status}`);
     
-    const quotes = await quotesService.getQuotesByStatus(status, userId, tenantId);
+    const quotes = await quotesService.getQuotesByStatusForUser(status, rbacUser);
     
+    console.log(`✅ [${operation}] Successfully retrieved ${quotes.length} quotes with status ${status} for user ${rbacUser.email} (${rbacUser.role})`);
     res.json({
       success: true,
       data: quotes,
-      message: `Quotes with status ${status} retrieved successfully`
+      total: quotes.length,
+      message: `Retrieved ${quotes.length} quotes with status ${status}`,
+      rbac: {
+        userRole: rbacUser.role,
+        targetStatus: status,
+        appliedFilter: `Role-based access control applied for ${rbacUser.role}`
+      }
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Internal server error' });
+    console.error(`❌ [${operation}] Error occurred:`);
+    console.error(`   - Error message: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error(`   - Error stack: ${error instanceof Error ? error.stack : 'No stack trace'}`);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
 

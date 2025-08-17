@@ -2,6 +2,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { docClient, TABLES } from '../services/dynamoClient';
+import { contactsRBACService, RBACUser } from './contactsRBAC';
 
 // Contact interface based on AddNewModal fields + auditing
 export interface Contact {
@@ -175,6 +176,18 @@ export class ContactsService {
     return (result.Items || []) as Contact[];
   }
 
+  // RBAC-aware method: Get contacts for user based on role and permissions
+  async getContactsForUser(user: RBACUser, includeDeleted = false): Promise<Contact[]> {
+    console.log(`🔐 [ContactsService.getContactsForUser] Getting contacts for user: ${user.email} (${user.role})`);
+    return contactsRBACService.getContactsForUser(user, includeDeleted);
+  }
+
+  // RBAC-aware method: Get contact by ID with role-based access control
+  async getContactByIdForUser(id: string, user: RBACUser): Promise<Contact | null> {
+    console.log(`🔐 [ContactsService.getContactByIdForUser] Getting contact ${id} for user: ${user.email} (${user.role})`);
+    return contactsRBACService.getContactByIdForUser(id, user);
+  }
+
   // Get contacts by owner
   async getContactsByOwner(contactOwner: string, tenantId: string, userId: string): Promise<Contact[]> {
     const result = await docClient.send(new QueryCommand({
@@ -190,6 +203,12 @@ export class ContactsService {
     }));
 
     return (result.Items || []) as Contact[];
+  }
+
+  // RBAC-aware method: Get contacts by owner with role-based access control
+  async getContactsByOwnerForUser(contactOwner: string, user: RBACUser): Promise<Contact[]> {
+    console.log(`🔐 [ContactsService.getContactsByOwnerForUser] Getting contacts for owner ${contactOwner} by user: ${user.email} (${user.role})`);
+    return contactsRBACService.getContactsByOwnerForUser(contactOwner, user);
   }
 
   // Get contact by email
@@ -354,6 +373,12 @@ export class ContactsService {
     }));
 
     return (result.Items || []) as Contact[];
+  }
+
+  // RBAC-aware method: Search contacts with role-based access control
+  async searchContactsForUser(user: RBACUser, searchTerm: string): Promise<Contact[]> {
+    console.log(`🔐 [ContactsService.searchContactsForUser] Searching contacts for term "${searchTerm}" by user: ${user.email} (${user.role})`);
+    return contactsRBACService.searchContactsForUser(user, searchTerm);
   }
 
   // Get contacts stats for analytics

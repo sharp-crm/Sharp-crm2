@@ -2,6 +2,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { docClient, TABLES } from './dynamoClient';
+import { productsRBACService, RBACUser } from './productsRBAC';
 
 // Product interface
 export interface Product {
@@ -298,6 +299,18 @@ export class ProductsService {
     }
   }
 
+  // RBAC-aware method: Get products for user based on role and permissions
+  async getProductsForUser(user: RBACUser, includeDeleted = false): Promise<Product[]> {
+    console.log(`🔐 [ProductsService.getProductsForUser] Getting products for user: ${user.email} (${user.role})`);
+    return productsRBACService.getProductsForUser(user, includeDeleted);
+  }
+
+  // RBAC-aware method: Get product by ID with role-based access control
+  async getProductByIdForUser(id: string, user: RBACUser): Promise<Product | null> {
+    console.log(`🔐 [ProductsService.getProductByIdForUser] Getting product ${id} for user: ${user.email} (${user.role})`);
+    return productsRBACService.getProductByIdForUser(id, user);
+  }
+
   // Update product
   async updateProduct(id: string, input: UpdateProductInput & { updatedBy: string }, tenantId: string, userId: string): Promise<Product | null> {
     try {
@@ -386,6 +399,45 @@ export class ProductsService {
       console.error(`❌ Error deleting product:`, error);
       throw error;
     }
+  }
+
+  // RBAC-aware method: Get products by owner with role-based access control
+  async getProductsByOwnerForUser(productOwner: string, user: RBACUser): Promise<Product[]> {
+    console.log(`🔐 [ProductsService.getProductsByOwnerForUser] Getting products for owner ${productOwner} by user: ${user.email} (${user.role})`);
+    return productsRBACService.getProductsByOwnerForUser(productOwner, user);
+  }
+
+  // RBAC-aware method: Get products by category with role-based access control
+  async getProductsByCategoryForUser(category: string, user: RBACUser): Promise<Product[]> {
+    console.log(`🔐 [ProductsService.getProductsByCategoryForUser] Getting products for category ${category} by user: ${user.email} (${user.role})`);
+    return productsRBACService.getProductsByCategoryForUser(category, user);
+  }
+
+  // RBAC-aware method: Get product by code with role-based access control
+  async getProductByCodeForUser(productCode: string, user: RBACUser): Promise<Product | null> {
+    console.log(`🔐 [ProductsService.getProductByCodeForUser] Getting product by code ${productCode} by user: ${user.email} (${user.role})`);
+    return productsRBACService.getProductByCodeForUser(productCode, user);
+  }
+
+  // RBAC-aware method: Search products with role-based access control
+  async searchProductsForUser(user: RBACUser, searchTerm: string): Promise<Product[]> {
+    console.log(`🔐 [ProductsService.searchProductsForUser] Searching products for term "${searchTerm}" by user: ${user.email} (${user.role})`);
+    return productsRBACService.searchProductsForUser(user, searchTerm);
+  }
+
+  // RBAC-aware method: Get product statistics with role-based access control
+  async getProductsStatsForUser(user: RBACUser): Promise<{
+    total: number;
+    byCategory: Record<string, number>;
+    byStatus: Record<string, number>;
+    totalValue: number;
+    avgPrice: number;
+    inStock: number;
+    outOfStock: number;
+    lowStock: number;
+  }> {
+    console.log(`🔐 [ProductsService.getProductsStatsForUser] Getting product stats for user: ${user.email} (${user.role})`);
+    return productsRBACService.getProductsStatsForUser(user);
   }
 
   // Search products

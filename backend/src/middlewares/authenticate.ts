@@ -22,6 +22,7 @@ export interface AuthenticatedRequest extends Request {
     role: string;
     originalRole?: string; // Optional original role
     tenantId: string;
+    reportingTo?: string; // For RBAC hierarchy
     isDeleted?: boolean;
   };
   tokenInfo?: {
@@ -83,6 +84,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
           role: userResult.Item.role || 'SALES_REP',
           originalRole: userResult.Item.role || 'SALES_REP', // Keep original role for display
           tenantId: userResult.Item.tenantId || 'DEFAULT_TENANT',
+          reportingTo: userResult.Item.reportingTo, // Include reportingTo for RBAC
           isDeleted: userResult.Item.isDeleted || false
         };
         

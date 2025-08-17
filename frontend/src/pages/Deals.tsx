@@ -142,7 +142,10 @@ const Deals: React.FC = () => {
       key: 'dealOwner',
       label: 'Owner',
       sortable: true,
-      render: (value: string, row: Deal) => value || row.owner
+      render: (value: string, row: Deal) => {
+        const ownerId = value || row.owner;
+        return getUserName(ownerId) !== 'Unknown User' ? getUserName(ownerId) : ownerId;
+      }
     }
   ];
 
@@ -191,39 +194,58 @@ const Deals: React.FC = () => {
     }
   };
 
-  // Permission logic based on role structure
-  const canEditOrDelete = user?.role === 'ADMIN';
-  const canCreate = user?.role === 'ADMIN';
+  // Permission logic based on role structure - Updated for RBAC
+  const canEditOrDelete = user?.role === 'ADMIN' || user?.role === 'SALES_MANAGER' || user?.role === 'SALES_REP';
+  const canCreate = user?.role === 'ADMIN' || user?.role === 'SALES_MANAGER' || user?.role === 'SALES_REP';
   const canView = user?.role === 'ADMIN' || user?.role === 'SALES_MANAGER' || user?.role === 'SALES_REP';
 
-  const actions = (row: any) => (
-    <div className="flex items-center space-x-2">
-      {canEditOrDelete && (
-        <>
-          <button
-            className="p-1 text-gray-400 hover:text-green-600"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleEdit(row);
-            }}
-            title="Edit Deal"
-          >
-            <Icons.Edit2 className="w-4 h-4" />
-          </button>
-          <button 
-            className="p-1 text-gray-400 hover:text-red-600"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDelete(row.id);
-            }}
-            title="Delete Deal"
-          >
-            <Icons.Trash2 className="w-4 h-4" />
-          </button>
-        </>
-      )}
-    </div>
-  );
+  const actions = (row: any) => {
+    // Check if user can edit/delete this specific deal
+    const isOwner = row.dealOwner === user?.userId || row.owner === user?.userId;
+    const canEditThisDeal = user?.role === 'ADMIN' || 
+                           (user?.role === 'SALES_MANAGER') || 
+                           (user?.role === 'SALES_REP' && isOwner);
+    
+    return (
+      <div className="flex items-center space-x-2">
+        {canEditThisDeal && (
+          <>
+            <button
+              className="p-1 text-gray-400 hover:text-green-600"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleEdit(row);
+              }}
+              title="Edit Deal"
+            >
+              <Icons.Edit2 className="w-4 h-4" />
+            </button>
+            <button 
+              className="p-1 text-gray-400 hover:text-red-600"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDelete(row.id);
+              }}
+              title="Delete Deal"
+            >
+              <Icons.Trash2 className="w-4 h-4" />
+            </button>
+          </>
+        )}
+        {/* Always show view button for accessible deals */}
+        <button
+          className="p-1 text-gray-400 hover:text-blue-600"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleView(row);
+          }}
+          title="View Deal"
+        >
+          <Icons.Eye className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  };
 
   const handleDealMove = async (dealId: string, newStage: Deal['stage']) => {
     try {

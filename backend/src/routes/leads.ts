@@ -1,5 +1,6 @@
 import { Router, RequestHandler } from 'express';
 import { leadsService, CreateLeadInput, UpdateLeadInput } from '../services/leads';
+import { RBACUser } from '../services/leadsRBAC';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -23,30 +24,56 @@ function validateEmail(email: string): boolean {
   return emailRegex.test(email);
 }
 
-// Get all leads for tenant
+// Helper function to convert authenticated request user to RBACUser format
+function convertToRBACUser(user: any): RBACUser {
+  return {
+    userId: user.userId,
+    email: user.email,
+    role: normalizeRole(user.role),
+    tenantId: user.tenantId,
+    reportingTo: user.reportingTo
+  };
+}
+
+// Helper function to normalize role string
+function normalizeRole(role: string): 'ADMIN' | 'SALES_MANAGER' | 'SALES_REP' {
+  const normalized = role.toUpperCase();
+  if (normalized === 'ADMIN' || normalized === 'SUPER_ADMIN') return 'ADMIN';
+  if (normalized === 'SALES_MANAGER' || normalized === 'MANAGER') return 'SALES_MANAGER';
+  if (normalized === 'SALES_REP' || normalized === 'REP') return 'SALES_REP';
+  return 'SALES_REP'; // Default to SALES_REP
+}
+
+// Get all leads for tenant (RBAC-aware)
 const getAllLeads: RequestHandler = async (req: any, res) => {
-  const operation = 'getAllLeads';
-  const { tenantId, userId } = req.user || {};
+  const operation = 'getAllLeads_RBAC';
+  const user = req.user;
   
-  console.log(`🔍 [${operation}] Starting request - TenantId: ${tenantId}, UserId: ${userId}`);
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), TenantId: ${user?.tenantId}`);
   
   try {
     const includeDeleted = req.query.includeDeleted === 'true';
     
-    if (!tenantId) {
-      console.log(`❌ [${operation}] Missing tenant ID`);
-      res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
 
-    console.log(`📊 [${operation}] Fetching leads - TenantId: ${tenantId}, IncludeDeleted: ${includeDeleted}`);
-    const leads = await leadsService.getLeadsByTenant(tenantId, userId, includeDeleted);
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), TenantId: ${rbacUser.tenantId}`);
     
-    console.log(`✅ [${operation}] Successfully retrieved ${leads.length} leads`);
+    const leads = await leadsService.getLeadsForUser(rbacUser, includeDeleted);
+    
+    console.log(`✅ [${operation}] Successfully retrieved ${leads.length} leads for user ${rbacUser.email} (${rbacUser.role})`);
     res.json({ 
       data: leads,
       total: leads.length,
-      message: `Retrieved ${leads.length} leads`
+      message: `Retrieved ${leads.length} leads`,
+      rbac: {
+        userRole: rbacUser.role,
+        appliedFilter: `Role-based access control applied for ${rbacUser.role}`
+      }
     });
   } catch (error) {
     console.error(`❌ [${operation}] Error occurred:`);
@@ -60,32 +87,40 @@ const getAllLeads: RequestHandler = async (req: any, res) => {
   }
 };
 
-// Get lead by ID
+// Get lead by ID (RBAC-aware)
 const getLeadById: RequestHandler = async (req: any, res) => {
-  const operation = 'getLeadById';
-  const { tenantId, userId } = req.user || {};
+  const operation = 'getLeadById_RBAC';
+  const user = req.user;
   const { id } = req.params;
   
-  console.log(`🔍 [${operation}] Starting request - TenantId: ${tenantId}, UserId: ${userId}, LeadId: ${id}`);
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), LeadId: ${id}`);
   
   try {
-    if (!tenantId) {
-      console.log(`❌ [${operation}] Missing tenant ID`);
-      res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
 
-    console.log(`📊 [${operation}] Fetching lead by ID - LeadId: ${id}`);
-    const lead = await leadsService.getLeadById(id, tenantId, userId);
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), LeadId: ${id}`);
+    
+    const lead = await leadsService.getLeadByIdForUser(id, rbacUser);
     
     if (!lead) {
-      console.log(`❌ [${operation}] Lead not found - LeadId: ${id}`);
-      res.status(404).json({ message: "Lead not found" });
+      console.log(`❌ [${operation}] Lead not found or access denied - LeadId: ${id}, User: ${rbacUser.email} (${rbacUser.role})`);
+      res.status(404).json({ message: "Lead not found or you don't have permission to access it" });
       return;
     }
 
-    console.log(`✅ [${operation}] Successfully retrieved lead - LeadId: ${id}`);
-    res.json({ data: lead });
+    console.log(`✅ [${operation}] Successfully retrieved lead - LeadId: ${id}, User: ${rbacUser.email} (${rbacUser.role})`);
+    res.json({ 
+      data: lead,
+      rbac: {
+        userRole: rbacUser.role,
+        accessGranted: true
+      }
+    });
   } catch (error) {
     console.error(`❌ [${operation}] Error occurred:`);
     console.error(`   - Error message: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -98,54 +133,80 @@ const getLeadById: RequestHandler = async (req: any, res) => {
   }
 };
 
-// Get leads by owner
+// Get leads by owner (RBAC-aware)
 const getLeadsByOwner: RequestHandler = async (req: any, res) => {
+  const operation = 'getLeadsByOwner_RBAC';
+  const user = req.user;
+  const { owner } = req.params;
+  
+  console.log(`🔍 [${operation}] Starting RBAC request - User: ${user?.email} (${user?.role}), TargetOwner: ${owner}`);
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { owner } = req.params;
-    
-    if (!tenantId) {
-      res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
 
-    const leads = await leadsService.getLeadsByOwner(owner, tenantId, userId);
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), TargetOwner: ${owner}`);
     
+    const leads = await leadsService.getLeadsByOwnerForUser(owner, rbacUser);
+    
+    console.log(`✅ [${operation}] Successfully retrieved ${leads.length} leads for owner ${owner}, requested by ${rbacUser.email} (${rbacUser.role})`);
     res.json({ 
       data: leads,
-      total: leads.length 
+      total: leads.length,
+      rbac: {
+        userRole: rbacUser.role,
+        targetOwner: owner,
+        accessGranted: true
+      }
     });
   } catch (error) {
-    console.error('Get leads by owner error:', error);
+    console.error(`❌ [${operation}] Error occurred:`, error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// Search leads
+// Search leads (RBAC-aware)
 const searchLeads: RequestHandler = async (req: any, res) => {
+  const operation = 'searchLeads_RBAC';
+  const user = req.user;
+  const { q } = req.query;
+  
+  console.log(`🔍 [${operation}] Starting RBAC search - User: ${user?.email} (${user?.role}), Query: "${q}"`);
+  
   try {
-    const { tenantId, userId } = req.user;
-    const { q } = req.query;
-    
-    if (!tenantId) {
-      res.status(400).json({ error: "Tenant ID required" });
+    if (!user || !user.tenantId) {
+      console.log(`❌ [${operation}] Missing user context or tenant ID`);
+      res.status(400).json({ error: "User authentication required" });
       return;
     }
 
     if (!q || typeof q !== 'string') {
+      console.log(`❌ [${operation}] Missing or invalid search query`);
       res.status(400).json({ error: "Search query required" });
       return;
     }
 
-    const leads = await leadsService.searchLeads(tenantId, userId, q);
+    const rbacUser = convertToRBACUser(user);
+    console.log(`🔐 [${operation}] Using RBAC - User: ${rbacUser.email} (${rbacUser.role}), Query: "${q}"`);
     
+    const leads = await leadsService.searchLeadsForUser(rbacUser, q);
+    
+    console.log(`✅ [${operation}] Successfully found ${leads.length} leads for query "${q}", User: ${rbacUser.email} (${rbacUser.role})`);
     res.json({ 
       data: leads,
       total: leads.length,
-      query: q
+      query: q,
+      rbac: {
+        userRole: rbacUser.role,
+        appliedFilter: `Search results filtered for ${rbacUser.role}`
+      }
     });
   } catch (error) {
-    console.error('Search leads error:', error);
+    console.error(`❌ [${operation}] Error occurred:`, error);
     res.status(500).json({ message: "Internal server error" });
   }
 };

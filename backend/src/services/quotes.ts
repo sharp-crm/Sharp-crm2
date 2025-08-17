@@ -2,6 +2,7 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { TABLES } from './dynamoClient';
+import { quotesRBACService, RBACUser } from './quotesRBAC';
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
@@ -201,6 +202,57 @@ class QuotesService {
 
   private mapDynamoItemToQuote(item: any): Quote {
     return item as Quote;
+  }
+
+  // RBAC-aware method: Get quotes for user based on role and permissions
+  async getQuotesForUser(user: RBACUser, includeDeleted = false): Promise<Quote[]> {
+    console.log(`🔐 [QuotesService.getQuotesForUser] Getting quotes for user: ${user.email} (${user.role})`);
+    return quotesRBACService.getQuotesForUser(user, includeDeleted);
+  }
+
+  // RBAC-aware method: Get quote by ID with role-based access control
+  async getQuoteByIdForUser(id: string, user: RBACUser): Promise<Quote | null> {
+    console.log(`🔐 [QuotesService.getQuoteByIdForUser] Getting quote ${id} for user: ${user.email} (${user.role})`);
+    return quotesRBACService.getQuoteByIdForUser(id, user);
+  }
+
+  // RBAC-aware method: Get quotes by owner with role-based access control
+  async getQuotesByOwnerForUser(quoteOwner: string, user: RBACUser): Promise<Quote[]> {
+    console.log(`🔐 [QuotesService.getQuotesByOwnerForUser] Getting quotes for owner ${quoteOwner} by user: ${user.email} (${user.role})`);
+    return quotesRBACService.getQuotesByOwnerForUser(quoteOwner, user);
+  }
+
+  // RBAC-aware method: Get quotes by status with role-based access control
+  async getQuotesByStatusForUser(status: string, user: RBACUser): Promise<Quote[]> {
+    console.log(`🔐 [QuotesService.getQuotesByStatusForUser] Getting quotes for status ${status} by user: ${user.email} (${user.role})`);
+    return quotesRBACService.getQuotesByStatusForUser(status, user);
+  }
+
+  // RBAC-aware method: Get quotes by validity with role-based access control
+  async getQuotesByValidityForUser(isValid: boolean, user: RBACUser): Promise<Quote[]> {
+    console.log(`🔐 [QuotesService.getQuotesByValidityForUser] Getting ${isValid ? 'valid' : 'expired'} quotes by user: ${user.email} (${user.role})`);
+    return quotesRBACService.getQuotesByValidityForUser(isValid, user);
+  }
+
+  // RBAC-aware method: Search quotes with role-based access control
+  async searchQuotesForUser(user: RBACUser, searchTerm: string): Promise<Quote[]> {
+    console.log(`🔐 [QuotesService.searchQuotesForUser] Searching quotes for term "${searchTerm}" by user: ${user.email} (${user.role})`);
+    return quotesRBACService.searchQuotesForUser(user, searchTerm);
+  }
+
+  // RBAC-aware method: Get quote statistics with role-based access control
+  async getQuotesStatsForUser(user: RBACUser): Promise<{
+    total: number;
+    byStatus: Record<string, number>;
+    totalValue: number;
+    avgValue: number;
+    validQuotes: number;
+    expiredQuotes: number;
+    activeQuotes: number;
+    inactiveQuotes: number;
+  }> {
+    console.log(`🔐 [QuotesService.getQuotesStatsForUser] Getting quote stats for user: ${user.email} (${user.role})`);
+    return quotesRBACService.getQuotesStatsForUser(user);
   }
 }
 

@@ -8,7 +8,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key';
 
 // Token expiry settings
-const ACCESS_TOKEN_EXPIRY = '60m'; // 60 minutes
+const ACCESS_TOKEN_EXPIRY = '120m'; // 60 minutes
 const REFRESH_TOKEN_EXPIRY = '7d'; // 7 days
 const REFRESH_THRESHOLD = 5 * 60 * 1000; // 5 minutes in milliseconds
 
