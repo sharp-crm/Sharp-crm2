@@ -11,6 +11,7 @@ export interface EmailRecord {
   status: 'sent' | 'failed' | 'pending';
   errorMessage?: string;
   sentAt: string;
+  updatedAt?: string;
   userId: string;
   tenantId?: string;
   metadata?: {
@@ -47,11 +48,13 @@ export class EmailHistoryModel {
 
   async createEmailRecord(emailRecord: EmailRecord): Promise<EmailRecord> {
     try {
+      const now = new Date().toISOString();
       const command = new PutCommand({
         TableName: this.tableName,
         Item: {
           ...emailRecord,
-          sentAt: emailRecord.sentAt || new Date().toISOString(),
+          sentAt: emailRecord.sentAt || now,
+          updatedAt: now,
         },
       });
 
@@ -179,15 +182,24 @@ export class EmailHistoryModel {
 
   async updateEmailStatus(id: string, status: 'sent' | 'failed' | 'pending', messageId?: string, errorMessage?: string): Promise<void> {
     try {
+      // First get the existing record
+      const existingRecord = await this.getEmailRecord(id);
+      if (!existingRecord) {
+        throw new Error(`Email record with id ${id} not found`);
+      }
+
+      // Update the record with new status and optional fields
+      const updatedRecord: EmailRecord = {
+        ...existingRecord,
+        status,
+        messageId: messageId || existingRecord.messageId,
+        errorMessage: errorMessage || existingRecord.errorMessage,
+        updatedAt: new Date().toISOString(),
+      };
+
       const command = new PutCommand({
         TableName: this.tableName,
-        Item: {
-          id,
-          status,
-          messageId,
-          errorMessage,
-          updatedAt: new Date().toISOString(),
-        },
+        Item: updatedRecord,
       });
 
       await this.client.send(command);

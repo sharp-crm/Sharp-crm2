@@ -27,6 +27,8 @@ import SuperAdminAccessControl from './pages/Settings/SuperAdminAccessControl';
 import OrgTree from './pages/Settings/OrgTree';
 import SuperAdminOrgTree from './pages/Settings/SuperAdminOrgTree';
 import EmailIntegration from './pages/Integration/EmailIntegration';
+import EmailHistoryPage from './pages/EmailHistoryPage';
+import EmailDetailsPage from './pages/EmailDetailsPage';
 import TeamChat from './pages/TeamChat';
 import Profile from './pages/Profile';
 import AllReports from './pages/Reports/AllReports';
@@ -109,6 +111,8 @@ const App: React.FC = () => {
             
             {/* Integration and Chat routes - SuperAdmin can access */}
             <Route path="integrations/email" element={<EmailIntegration />} />
+            <Route path="integrations/email/history" element={<EmailHistoryPage />} />
+            <Route path="integrations/email/history/:id" element={<EmailDetailsPage />} />
             <Route path="team-chat" element={<TeamChat />} />
             
             {/* Reports routes - SuperAdmin cannot access */}

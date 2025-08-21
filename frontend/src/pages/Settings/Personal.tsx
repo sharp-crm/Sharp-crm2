@@ -27,10 +27,12 @@ const Personal: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [passwordTouched, setPasswordTouched] = useState(false);
+  const [formKey, setFormKey] = useState(0); // Add key to force form re-render
 
   // Load user data when component mounts or user changes
   React.useEffect(() => {
     if (user) {
+      console.log('Personal: User data updated, syncing form:', user);
       setFormData({
         firstName: user?.firstName || '',
         lastName: user?.lastName || '',
@@ -40,6 +42,16 @@ const Personal: React.FC = () => {
         confirmPassword: '',
       });
     }
+  }, [user]);
+
+  // Debug effect to track form data changes
+  React.useEffect(() => {
+    console.log('Personal: Form data changed:', formData);
+  }, [formData]);
+
+  // Debug effect to track user changes
+  React.useEffect(() => {
+    console.log('Personal: User object changed:', user);
   }, [user]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -56,39 +68,99 @@ const Personal: React.FC = () => {
     setError('');
     setSuccess('');
 
-    try {
-      const response = await API.put('/users/profile', formData);
-      setSuccess('Profile updated successfully.');
+    console.log('Personal: Submitting form with data:', formData);
+    console.log('Personal: Current user before update:', user);
 
-      // Use the actual response data from the server
-      if (response.data?.user) {
-        const updatedUser = {
-          ...user!,
-          ...response.data.user, // Use all data from server response
-          firstName: response.data.user.firstName,
-          lastName: response.data.user.lastName,
-          phoneNumber: response.data.user.phoneNumber,
-          updatedAt: response.data.user.updatedAt
-        };
-        updateUser(updatedUser);
-        
-        // Also update local storage to persist the changes
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-        sessionStorage.setItem('user', JSON.stringify(updatedUser));
-        
-        // Update form data to reflect the saved changes
-        setFormData({
-          firstName: response.data.user.firstName || '',
-          lastName: response.data.user.lastName || '', 
-          email: response.data.user.email || '',
-          phoneNumber: response.data.user.phoneNumber || '',
-          password: '',
-          confirmPassword: '',
-        });
+    try {
+      // Prepare the payload - only include fields that have values
+      const payload: any = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phoneNumber: formData.phoneNumber
+      };
+
+      // Only include password if it's provided
+      if (formData.password && formData.password.length > 0) {
+        payload.password = formData.password;
+      }
+
+      console.log('Personal: Sending payload to API:', payload);
+
+      const response = await API.put('/users/profile', payload);
+      
+      console.log('Personal: API response:', response);
+      
+      if (response.status === 200) {
+        setSuccess('Profile updated successfully.');
+
+        // Use the response data from the server to ensure accuracy
+        const serverUserData = response.data?.data;
+        if (serverUserData) {
+          // Create updated user object using server response data
+          const updatedUser = {
+            ...user!,
+            firstName: serverUserData.firstName,
+            lastName: serverUserData.lastName,
+            phoneNumber: serverUserData.phoneNumber,
+            updatedAt: serverUserData.updatedAt
+          };
+
+          console.log('Personal: Created updated user object from server data:', updatedUser);
+
+          // Update the user in the auth store
+          updateUser(updatedUser);
+          
+          console.log('Personal: Called updateUser, checking if store was updated...');
+          
+          // Update local storage to persist the changes
+          localStorage.setItem('user', JSON.stringify(updatedUser));
+          sessionStorage.setItem('user', JSON.stringify(updatedUser));
+          
+          // Clear password fields after successful update
+          setFormData(prev => ({
+            ...prev,
+            password: '',
+            confirmPassword: ''
+          }));
+
+          // Update form data to reflect the server response
+          setFormData(prev => ({
+            ...prev,
+            firstName: serverUserData.firstName,
+            lastName: serverUserData.lastName,
+            phoneNumber: serverUserData.phoneNumber
+          }));
+
+          // Force form re-render by updating the key
+          setFormKey(prev => prev + 1);
+
+          // Show success toast
+          addToast({
+            type: 'success',
+            title: 'Profile Updated',
+            message: 'Your profile has been updated successfully!'
+          });
+
+          // Log the final state
+          console.log('Personal: Profile update completed. Final form data:', formData);
+          console.log('Personal: Final user object:', updatedUser);
+        } else {
+          throw new Error('No user data received from server');
+        }
       }
 
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to update profile');
+      console.error('Profile update error:', err);
+      const errorMessage = err.response?.data?.error || 
+                          err.response?.data?.message || 
+                          'Failed to update profile. Please try again.';
+      setError(errorMessage);
+      
+      addToast({
+        type: 'error',
+        title: 'Update Failed',
+        message: errorMessage
+      });
     }
   };
 
@@ -131,8 +203,11 @@ const Personal: React.FC = () => {
       if (response.data?.imageUrl) {
         const updatedUser = {
           ...user,
-          profileImage: response.data.imageUrl
+          profileImage: response.data.imageUrl,
+          updatedAt: new Date().toISOString()
         };
+        
+        // Update the user in the auth store
         updateUser(updatedUser);
 
         // Update local storage
@@ -144,16 +219,24 @@ const Personal: React.FC = () => {
           title: 'Success',
           message: 'Profile picture updated successfully'
         });
+      } else {
+        throw new Error('No image URL received from server');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error uploading image:', error);
+      const errorMessage = error.response?.data?.error || 
+                          error.response?.data?.message || 
+                          'Failed to upload profile picture. Please try again.';
+      
       addToast({
         type: 'error',
         title: 'Upload Failed',
-        message: 'Failed to upload profile picture. Please try again.'
+        message: errorMessage
       });
     } finally {
       setIsUploading(false);
+      // Reset the file input
+      event.target.value = '';
     }
   };
 
@@ -176,7 +259,7 @@ const Personal: React.FC = () => {
             <p className="text-sm text-gray-600">Update your personal details and preferences.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <form key={formKey} onSubmit={handleSubmit} className="p-6 space-y-6">
             {/* Profile Picture */}
             <div className="flex items-center space-x-6">
               <div className="relative group">

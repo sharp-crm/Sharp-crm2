@@ -2,8 +2,10 @@ import express, { Request, Response } from 'express';
 import { EmailData } from '../services/emailService';
 import emailService from '../services/emailService';
 import { AuthenticatedRequest } from '../middlewares/authenticate';
+import { EmailHistoryModel } from '../models/emailHistory';
 
 const router = express.Router();
+const emailHistoryModel = new EmailHistoryModel();
 
 // Route to check email configuration
 router.get('/config', async (req: Request, res: Response) => {
@@ -97,13 +99,27 @@ router.get('/history', async (req: Request, res: Response) => {
 
     const { limit = '50', status, startDate, endDate } = req.query;
     
-    // For now, return empty history - can be implemented later
+    // Parse query parameters
+    const queryLimit = parseInt(limit as string) || 50;
+    const queryStatus = status as string;
+    const queryStartDate = startDate as string;
+    const queryEndDate = endDate as string;
+    
+    // Query email history using the model
+    const result = await emailHistoryModel.queryEmailHistory({
+      userId,
+      status: queryStatus,
+      startDate: queryStartDate,
+      endDate: queryEndDate,
+      limit: queryLimit,
+    });
+    
     res.json({
       success: true,
-      emails: [],
-      nextToken: null,
-      total: 0,
-      message: 'Email history feature coming soon',
+      emails: result.emails,
+      nextToken: result.nextToken,
+      total: result.emails.length,
+      message: 'Email history retrieved successfully',
     });
   } catch (error) {
     console.error('❌ Error getting email history:', error);
@@ -128,10 +144,30 @@ router.get('/history/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    // For now, return not found - can be implemented later
-    res.status(404).json({
-      success: false,
-      error: 'Email record not found - history feature coming soon',
+    // Get the specific email record
+    const emailRecord = await emailHistoryModel.getEmailRecord(id);
+    
+    if (!emailRecord) {
+      res.status(404).json({
+        success: false,
+        error: 'Email record not found',
+      });
+      return;
+    }
+    
+    // Check if user has access to this email record
+    if (emailRecord.userId !== userId) {
+      res.status(403).json({
+        success: false,
+        error: 'Access denied to this email record',
+      });
+      return;
+    }
+    
+    res.json({
+      success: true,
+      email: emailRecord,
+      message: 'Email record retrieved successfully',
     });
   } catch (error) {
     console.error('❌ Error getting email record:', error);

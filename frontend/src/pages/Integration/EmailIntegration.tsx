@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, CheckCircle2, Mail, Settings, Link2, AlertCircle } from 'lucide-react';
+import { Loader2, CheckCircle2, Mail, Settings, Link2, AlertCircle, Send } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import API from '../../api/client';
 
 const EmailIntegration: React.FC = () => {
+  const navigate = useNavigate();
   const [isConnected, setIsConnected] = useState(false);
   const [autoSend, setAutoSend] = useState(true);
   const [emailSent, setEmailSent] = useState(false);
@@ -20,6 +22,8 @@ const EmailIntegration: React.FC = () => {
     verified: boolean;
     status: 'checking' | 'verified' | 'unverified' | 'error';
   } | null>(null);
+  
+
 
   const [formData, setFormData] = useState({
     to: '',
@@ -130,6 +134,8 @@ const EmailIntegration: React.FC = () => {
         setEmailSent(true);
         setFormData({ to: '', subject: '', message: '' });
         setTimeout(() => setEmailSent(false), 3000);
+        
+
       } else {
         setEmailError(data.error || 'Failed to send email');
       }
@@ -141,12 +147,25 @@ const EmailIntegration: React.FC = () => {
     }
   };
 
+
+
+
+
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-        <Mail className="w-6 h-6 text-blue-600" />
-        Email Integration
-      </h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+          <Mail className="w-6 h-6 text-blue-600" />
+          Email Integration
+        </h1>
+        <button
+          onClick={() => navigate('/integrations/email/history')}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Send className="w-4 h-4" />
+          View History
+        </button>
+      </div>
 
       <div className="bg-white shadow rounded-xl p-6 space-y-6 max-w-3xl">
         {/* Status Section */}
@@ -349,6 +368,8 @@ const EmailIntegration: React.FC = () => {
                 )}
               </div>
             </div>
+
+
           </>
         )}
       </div>
