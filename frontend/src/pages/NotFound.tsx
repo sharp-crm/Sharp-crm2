@@ -22,7 +22,7 @@ const NotFound: React.FC = () => {
             <div className="flex items-start">
               <Icons.Info className="w-5 h-5 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
               <div className="text-sm text-blue-700">
-                <p className="font-medium mb-1">Using Sharp CRM?</p>
+                <p className="font-medium mb-1">Using Spark CRM?</p>
                 <p>Make sure you're using the correct hash-based URL format:</p>
                 <code className="bg-blue-100 px-2 py-1 rounded text-xs mt-1 block">
                   /#/your-route

@@ -7,7 +7,7 @@ export interface User {
   email: string;
   firstName: string;
   lastName: string;
-  role: 'ADMIN' | 'SALES_MANAGER' | 'SALES_REP';
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'SALES_MANAGER' | 'SALES_REP';
   tenantId: string;
   reportingTo?: string;
   createdBy?: string;
@@ -26,13 +26,25 @@ export type ResourceType = 'lead' | 'contact' | 'deal' | 'product' | 'quote' | '
 
 // Role hierarchy and permissions
 const ROLE_HIERARCHY = {
+  SUPER_ADMIN: 4,
   ADMIN: 3,
   SALES_MANAGER: 2,
   SALES_REP: 1
 };
 
 // Permission matrix - defines what each role can do
-const PERMISSIONS: Record<'ADMIN' | 'SALES_MANAGER' | 'SALES_REP', Record<ResourceType, Action[]>> = {
+const PERMISSIONS: Record<'SUPER_ADMIN' | 'ADMIN' | 'SALES_MANAGER' | 'SALES_REP', Record<ResourceType, Action[]>> = {
+  SUPER_ADMIN: {
+    lead: ['view', 'edit', 'delete', 'create'],
+    contact: ['view', 'edit', 'delete', 'create'],
+    deal: ['view', 'edit', 'delete', 'create'],
+    product: ['view', 'edit', 'delete', 'create'],
+    quote: ['view', 'edit', 'delete', 'create'],
+    task: ['view', 'edit', 'delete', 'create'],
+    subsidiary: ['view', 'edit', 'delete', 'create'],
+    dealer: ['view', 'edit', 'delete', 'create'],
+    user: ['view', 'edit', 'delete', 'create']
+  },
   ADMIN: {
     lead: ['view', 'edit', 'delete', 'create'],
     contact: ['view', 'edit', 'delete', 'create'],
@@ -94,6 +106,11 @@ export async function checkPermission(
     // Check if user has permission for this resource type and action
     if (!PERMISSIONS[userRole]?.[actualResourceType]?.includes(action)) {
       return false;
+    }
+
+    // SUPER_ADMIN has full access to all resources across all tenants
+    if (userRole === 'SUPER_ADMIN') {
+      return true;
     }
 
     // Admin has full access to all resources in their tenant
@@ -170,9 +187,10 @@ async function getReportingReps(managerId: string): Promise<User[]> {
 /**
  * Normalize role string to our internal format
  */
-function normalizeRole(role: string): 'ADMIN' | 'SALES_MANAGER' | 'SALES_REP' {
+function normalizeRole(role: string): 'SUPER_ADMIN' | 'ADMIN' | 'SALES_MANAGER' | 'SALES_REP' {
   const normalized = role.toUpperCase();
-  if (normalized === 'ADMIN' || normalized === 'SUPER_ADMIN') return 'ADMIN';
+  if (normalized === 'SUPER_ADMIN') return 'SUPER_ADMIN';
+  if (normalized === 'ADMIN') return 'ADMIN';
   if (normalized === 'SALES_MANAGER' || normalized === 'MANAGER') return 'SALES_MANAGER';
   if (normalized === 'SALES_REP' || normalized === 'REP') return 'SALES_REP';
   return 'SALES_REP'; // Default to SALES_REP
@@ -230,6 +248,11 @@ export async function canDelete(user: User, resource: Resource, resourceType?: R
 export async function getAccessibleResources(user: User, resourceType: ResourceType): Promise<string[]> {
   const userRole = normalizeRole(user.role);
   
+  if (userRole === 'SUPER_ADMIN') {
+    // SUPER_ADMIN can access all resources across all tenants
+    return ['*']; // Special marker for all resources
+  }
+  
   if (userRole === 'ADMIN') {
     // Admin can access all resources in their tenant
     return ['*']; // Special marker for all resources
@@ -261,7 +284,7 @@ export async function createPermissionFilter(user: User, resourceType: ResourceT
   const accessibleResources = await getAccessibleResources(user, resourceType);
   
   if (accessibleResources.includes('*')) {
-    // Admin - no filter needed (all resources accessible)
+    // SUPER_ADMIN or Admin - no filter needed (all resources accessible)
     return {};
   }
   

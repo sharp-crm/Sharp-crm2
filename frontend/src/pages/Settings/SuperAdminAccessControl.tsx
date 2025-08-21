@@ -3,6 +3,7 @@ import * as Icons from 'lucide-react';
 import { usersApi, User } from '../../api/services';
 import { useAuthStore } from '../../store/useAuthStore';
 import PageHeader from '../../components/Common/PageHeader';
+import AddNewUserModal from '../../components/AddNewUserModal';
 
 interface SuperAdminUser {
   id: string;
@@ -24,38 +25,44 @@ const SuperAdminAccessControl: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState<string>('ALL');
+  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const { user: currentUser } = useAuthStore();
 
-  useEffect(() => {
-    const fetchUsers = async () => {
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      let allUsers;
       try {
-        setLoading(true);
-        let allUsers;
-        try {
-          allUsers = await usersApi.getAllUsers();
-        } catch (error) {
-          allUsers = await usersApi.getAll();
-        }
-        
-        // Filter only SUPER_ADMIN and ADMIN users
-        const filteredUsers = allUsers.filter(user => {
-          const userRole = user.role?.toUpperCase();
-          const userOriginalRole = user.originalRole?.toUpperCase();
-          return userRole === 'SUPER_ADMIN' || userRole === 'ADMIN' || 
-                 userOriginalRole === 'SUPER_ADMIN' || userOriginalRole === 'ADMIN';
-        });
-        
-        setUsers(filteredUsers);
+        allUsers = await usersApi.getAllUsers();
       } catch (error) {
-        console.error('Failed to fetch users:', error);
-        setError('Failed to load users');
-      } finally {
-        setLoading(false);
+        allUsers = await usersApi.getAll();
       }
-    };
+      
+      // Filter only SUPER_ADMIN and ADMIN users
+      const filteredUsers = allUsers.filter(user => {
+        const userRole = user.role?.toUpperCase();
+        const userOriginalRole = user.originalRole?.toUpperCase();
+        return userRole === 'SUPER_ADMIN' || userRole === 'ADMIN' || 
+               userOriginalRole === 'SUPER_ADMIN' || userOriginalRole === 'ADMIN';
+      });
+      
+      setUsers(filteredUsers);
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
+      setError('Failed to load users');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchUsers();
   }, []);
+
+  const handleUserAdded = () => {
+    // Refresh the users list after adding a new user
+    fetchUsers();
+  };
 
   const getUserFullName = (user: SuperAdminUser) => {
     if (user.firstName && user.lastName) {
@@ -260,6 +267,20 @@ const SuperAdminAccessControl: React.FC = () => {
               </select>
             </div>
           </div>
+          
+          {/* Add New Client Button */}
+          <div className="mt-6 pt-6 border-t border-gray-200/50">
+            <button
+              onClick={() => setIsAddUserModalOpen(true)}
+              className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+            >
+              <Icons.Plus className="w-5 h-5 mr-2" />
+              Add New Client
+            </button>
+            <p className="text-sm text-gray-600 mt-2">
+              Create new user accounts with appropriate role assignments
+            </p>
+          </div>
         </div>
 
         {/* Users List */}
@@ -283,12 +304,12 @@ const SuperAdminAccessControl: React.FC = () => {
                 </p>
               </div>
             ) : (
-                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                 {filteredUsers.map((user, index) => (
-                   <div
-                     key={`${user.id}-${user.email}-${index}`}
-                     className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-200 hover:border-gray-300"
-                   >
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredUsers.map((user, index) => (
+                  <div
+                    key={`${user.id}-${user.email}-${index}`}
+                    className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-200 hover:border-gray-300"
+                  >
                     <div className="flex items-start justify-between mb-4">
                       <div className={`w-12 h-12 ${getRoleColor(user.role)} rounded-lg flex items-center justify-center`}>
                         {getRoleIcon(user.role)}
@@ -354,7 +375,7 @@ const SuperAdminAccessControl: React.FC = () => {
           <div className="flex items-start gap-4">
             <Icons.Info className="w-6 h-6 text-purple-600 mt-1 flex-shrink-0" />
             <div>
-                              <h4 className="text-lg font-semibold text-purple-800 mb-2">Admin Access Control</h4>
+              <h4 className="text-lg font-semibold text-purple-800 mb-2">Admin Access Control</h4>
               <ul className="text-sm text-purple-700 space-y-1">
                 <li>• Manage Super Admin and Admin user accounts</li>
                 <li>• Control access permissions for administrative functions</li>
@@ -366,6 +387,13 @@ const SuperAdminAccessControl: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Add New User Modal */}
+      <AddNewUserModal
+        isOpen={isAddUserModalOpen}
+        onClose={() => setIsAddUserModalOpen(false)}
+        onUserAdded={handleUserAdded}
+      />
     </div>
   );
 };

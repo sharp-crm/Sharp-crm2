@@ -1,5 +1,7 @@
 import { SESClient, SendEmailCommand, SendEmailCommandInput } from '@aws-sdk/client-ses';
 import { AuthenticatedRequest } from '../middlewares/authenticate';
+import { EmailHistoryModel, EmailRecord } from '../models/emailHistory';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface EmailData {
   to: string;
@@ -16,9 +18,11 @@ export interface EmailResponse {
 class EmailService {
   private sesClient: SESClient;
   private region: string;
+  private emailHistoryModel: EmailHistoryModel;
 
   constructor() {
     this.region = process.env.AWS_REGION || 'us-east-1';
+    this.emailHistoryModel = new EmailHistoryModel();
     
     // When running in AWS Lambda, credentials are automatically provided by IAM role
     // When running locally, use environment variables
@@ -41,8 +45,12 @@ class EmailService {
     req: AuthenticatedRequest,
     emailData: EmailData
   ): Promise<EmailResponse> {
+    let emailId: string | undefined;
+    
     try {
       const senderEmail = req.user.email;
+      const userId = req.user.userId;
+      const tenantId = req.user.tenantId;
       
       // Validate sender email
       if (!senderEmail) {
@@ -62,6 +70,29 @@ class EmailService {
       if (!emailData.message.trim()) {
         throw new Error('Email message is required');
       }
+
+      // Create email record ID
+      emailId = uuidv4();
+
+      // Create initial email record with pending status
+      const emailRecord: EmailRecord = {
+        id: emailId,
+        senderEmail,
+        recipientEmail: emailData.to,
+        subject: emailData.subject,
+        message: emailData.message,
+        status: 'pending',
+        sentAt: new Date().toISOString(),
+        userId,
+        tenantId,
+        metadata: {
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent'),
+        },
+      };
+
+      // Store the email record
+      await this.emailHistoryModel.createEmailRecord(emailRecord);
 
       const params: SendEmailCommandInput = {
         Source: senderEmail,
@@ -93,12 +124,33 @@ class EmailService {
 
       console.log(`✅ Email sent successfully. Message ID: ${result.MessageId}`);
 
+      // Update email record with success status and message ID
+      await this.emailHistoryModel.updateEmailStatus(
+        emailId, 
+        'sent', 
+        result.MessageId
+      );
+
       return {
         success: true,
         messageId: result.MessageId,
       };
     } catch (error) {
       console.error('❌ Failed to send email:', error);
+      
+      // Update email record with failed status if we have an emailId
+      if (emailId) {
+        try {
+          await this.emailHistoryModel.updateEmailStatus(
+            emailId, 
+            'failed', 
+            undefined, 
+            error instanceof Error ? error.message : 'Unknown error'
+          );
+        } catch (updateError) {
+          console.error('❌ Failed to update email status:', updateError);
+        }
+      }
       
       // Handle specific AWS SES errors
       if (error instanceof Error) {

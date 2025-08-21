@@ -110,7 +110,7 @@ Resources:
           # JWT Configuration
           JWT_SECRET: !Ref JWTSecret
           JWT_REFRESH_SECRET: !Ref JWTRefreshSecret
-          ACCESS_TOKEN_EXPIRY: "120m"
+          ACCESS_TOKEN_EXPIRY: "180m"
           REFRESH_TOKEN_EXPIRY: "7d"
           REFRESH_THRESHOLD: "300000"
           

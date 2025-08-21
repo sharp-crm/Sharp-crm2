@@ -70,7 +70,7 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">Sharp CRM</h2>
+        <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">Spark CRM</h2>
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded mb-4">
             {error}
