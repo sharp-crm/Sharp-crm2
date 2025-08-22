@@ -92,7 +92,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
   };
 
   return (
-    <div className={`bg-white border-r border-gray-200 h-full flex flex-col transition-width duration-300 ${isCollapsed ? 'w-16' : 'w-64'
+    <div className={`bg-white border-r border-gray-200 h-full flex flex-col transition-all duration-300 ease-in-out z-50 ${isCollapsed ? 'w-16' : 'w-64'
       }`}>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200">
@@ -111,6 +111,19 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
         <button 
           onClick={onToggle}
           className="p-1 rounded-lg hover:bg-gray-100 transition-colors"
+          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {isCollapsed ? (
+            <Icons.PanelRightOpen className="w-5 h-5 text-gray-600" />
+          ) : (
+            <Icons.PanelLeftClose className="w-5 h-5 text-gray-600" />
+          )}
+        </button>
+        {/* Mobile toggle button - always visible */}
+        <button 
+          onClick={onToggle}
+          className="md:hidden p-1 rounded-lg hover:bg-gray-100 transition-colors ml-2"
+          title="Toggle sidebar"
         >
           <Icons.Menu className="w-5 h-5 text-gray-600" />
         </button>
