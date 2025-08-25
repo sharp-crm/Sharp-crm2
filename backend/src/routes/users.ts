@@ -68,10 +68,14 @@ function normalizeRole(role: string): 'ADMIN' | 'SALES_MANAGER' | 'SALES_REP' {
 // Helper function to get reporting reps for a manager
 async function getReportingReps(managerId: string) {
   try {
+    // Use ReportingToIndex GSI for efficient reporting hierarchy queries
+    // Assumption: ReportingToIndex exists with reportingTo as partition key
     const result = await docClient.send(
-      new ScanCommand({
+      new QueryCommand({
         TableName: TABLES.USERS,
-        FilterExpression: 'reportingTo = :managerId AND (#role = :originalRole OR #role = :normalizedRole) AND isDeleted = :isDeleted',
+        IndexName: 'ReportingToIndex',
+        KeyConditionExpression: 'reportingTo = :managerId',
+        FilterExpression: '(#role = :originalRole OR #role = :normalizedRole) AND isDeleted = :isDeleted',
         ExpressionAttributeNames: {
           '#role': 'role'
         },
@@ -140,14 +144,29 @@ router.get("/managers", authenticate, requirePermission('view', 'user'), async (
       };
     }
     
+    // Use TenantRoleIndex GSI for efficient tenant and role-based queries
+    // Assumption: TenantRoleIndex exists with tenantId as partition key and role as sort key
     const result = await docClient.send(
-      new ScanCommand({
+      new QueryCommand({
         TableName: TABLES.USERS,
-        FilterExpression: filterExpression,
+        IndexName: 'TenantRoleIndex',
+        KeyConditionExpression: currentUser.originalRole?.toUpperCase() === 'SUPER_ADMIN' 
+          ? 'role = :role'
+          : 'tenantId = :tenantId AND role = :role',
+        FilterExpression: 'isDeleted = :isDeleted',
         ExpressionAttributeNames: {
           "#role": "role"
         },
-        ExpressionAttributeValues: expressionAttributeValues
+        ExpressionAttributeValues: currentUser.originalRole?.toUpperCase() === 'SUPER_ADMIN'
+          ? {
+              ":role": "SALES_MANAGER",
+              ":isDeleted": false
+            }
+          : {
+              ":tenantId": currentUser.tenantId,
+              ":role": "SALES_MANAGER",
+              ":isDeleted": false
+            }
       })
     );
 
@@ -177,38 +196,77 @@ router.get("/tenant-users", authenticate, requirePermission('view', 'user'), asy
       throw createError("User not found in token", 401);
     }
 
-    // Scan all users
-    const result = await docClient.send(
-      new ScanCommand({
-        TableName: TABLES.USERS
-      })
-    );
-
-    let users = result.Items || [];
-
-    // Filter out deleted users first
-    users = users.filter(user => !user.isDeleted);
-
-    // User filtering logic based on RBAC requirements
+    // Use TenantRoleIndex GSI for efficient tenant-based queries
+    // Assumption: TenantRoleIndex exists with tenantId as partition key and role as sort key
+    let users: any[] = [];
+    
     if (currentUser.role.toUpperCase() === 'ADMIN') {
-      // Admin sees all users in their tenant
-      users = users.filter(user => 
-        user.tenantId === currentUser.tenantId
+      // Admin sees all users in their tenant - use TenantRoleIndex
+      const result = await docClient.send(
+        new QueryCommand({
+          TableName: TABLES.USERS,
+          IndexName: 'TenantRoleIndex',
+          KeyConditionExpression: 'tenantId = :tenantId',
+          FilterExpression: 'isDeleted = :isDeleted',
+          ExpressionAttributeValues: {
+            ':tenantId': currentUser.tenantId,
+            ':isDeleted': false
+          }
+        })
       );
+      users = result.Items || [];
     } else if (currentUser.role.toUpperCase() === 'SALES_MANAGER') {
       // Manager sees themselves and their reporting reps
       const reportingReps = await getReportingReps(currentUser.userId);
       const repIds = reportingReps.map(rep => rep.userId);
-      users = users.filter(user => 
-        user.userId === currentUser.userId || 
-        repIds.includes(user.userId)
+      
+      // Get manager's own user record
+      const managerResult = await docClient.send(
+        new QueryCommand({
+          TableName: TABLES.USERS,
+          IndexName: 'UserIdIndex',
+          KeyConditionExpression: 'userId = :userId',
+          FilterExpression: 'isDeleted = :isDeleted',
+          ExpressionAttributeValues: {
+            ':userId': currentUser.userId,
+            ':isDeleted': false
+          }
+        })
       );
+      
+      // Get reporting reps using ReportingToIndex (once it's ready)
+      const repsResult = await docClient.send(
+        new QueryCommand({
+          TableName: TABLES.USERS,
+          IndexName: 'ReportingToIndex',
+          KeyConditionExpression: 'reportingTo = :managerId',
+          FilterExpression: 'isDeleted = :isDeleted',
+          ExpressionAttributeValues: {
+            ':managerId': currentUser.userId,
+            ':isDeleted': false
+          }
+        })
+      );
+      
+      users = [...(managerResult.Items || []), ...(repsResult.Items || [])];
     } else {
-      // Rep only sees themselves
-      users = users.filter(user => 
-        user.userId === currentUser.userId
+      // Rep only sees themselves - use UserIdIndex
+      const result = await docClient.send(
+        new QueryCommand({
+          TableName: TABLES.USERS,
+          IndexName: 'UserIdIndex',
+          KeyConditionExpression: 'userId = :userId',
+          FilterExpression: 'isDeleted = :isDeleted',
+          ExpressionAttributeValues: {
+            ':userId': currentUser.userId,
+            ':isDeleted': false
+          }
+        })
       );
+      users = result.Items || [];
     }
+
+    // RBAC filtering is now handled in the queries above for efficiency
 
     const mappedUsers = users.map(user => ({
       id: user.userId,
@@ -252,17 +310,20 @@ router.get("/super-admin/all", authenticate, async (req: any, res, next) => {
       throw createError("Access denied. SUPER_ADMIN role required.", 403);
     }
     
-    // Scan all users from the database
+    // For SUPER_ADMIN, we need to get users from all tenants
+    // Since we don't have a global index for this, we'll use a scan but with a filter
+    // In production, consider adding a global index or using a different strategy
     const result = await docClient.send(
       new ScanCommand({
-        TableName: TABLES.USERS
+        TableName: TABLES.USERS,
+        FilterExpression: 'isDeleted = :isDeleted',
+        ExpressionAttributeValues: {
+          ':isDeleted': false
+        }
       })
     );
     
     let users = result.Items || [];
-    
-    // Filter out deleted users
-    users = users.filter(user => !user.isDeleted);
     
     const mappedUsers = users.map(user => ({
       id: user.userId,
@@ -326,21 +387,37 @@ router.get("/", authenticate, async (req: any, res, next) => {
       throw createError("Access denied. Admin role or SUPER_ADMIN required.", 403);
     }
 
-    const result = await docClient.send(
-      new ScanCommand({
-        TableName: TABLES.USERS
-      })
-    );
-
-    let users = result.Items || [];
-
-    // Filter out deleted users
-    users = users.filter(user => !user.isDeleted);
-
-    // For SUPER_ADMIN, return all users from all tenants
-    // For regular admin, return only users from their tenant
-    if (userOriginalRole?.toUpperCase() !== 'SUPER_ADMIN') {
-      users = users.filter(user => user.tenantId === req.user.tenantId);
+    let users: any[] = [];
+    
+    if (userOriginalRole?.toUpperCase() === 'SUPER_ADMIN') {
+      // SUPER_ADMIN gets all users from all tenants
+      // Use scan with filter for deleted users
+      const result = await docClient.send(
+        new ScanCommand({
+          TableName: TABLES.USERS,
+          FilterExpression: 'isDeleted = :isDeleted',
+          ExpressionAttributeValues: {
+            ':isDeleted': false
+          }
+        })
+      );
+      users = result.Items || [];
+    } else {
+      // Regular admin gets users from their tenant only
+      // Use TenantRoleIndex for efficiency
+      const result = await docClient.send(
+        new QueryCommand({
+          TableName: TABLES.USERS,
+          IndexName: 'TenantRoleIndex',
+          KeyConditionExpression: 'tenantId = :tenantId',
+          FilterExpression: 'isDeleted = :isDeleted',
+          ExpressionAttributeValues: {
+            ':tenantId': req.user.tenantId,
+            ':isDeleted': false
+          }
+        })
+      );
+      users = result.Items || [];
     }
 
     const mappedUsers = users.map(user => ({
@@ -369,11 +446,13 @@ router.get("/:id", authenticate, requirePermission('view', 'user'), async (req: 
   try {
     const { id } = req.params;
     
-    // First find the user by userId to get their email (since email is the primary key)
+    // Use UserIdIndex GSI for efficient user lookup by userId
+    // Assumption: UserIdIndex exists with userId as partition key
     const scanResult = await docClient.send(
-      new ScanCommand({
+      new QueryCommand({
         TableName: TABLES.USERS,
-        FilterExpression: "userId = :userId",
+        IndexName: 'UserIdIndex',
+        KeyConditionExpression: "userId = :userId",
         ExpressionAttributeValues: {
           ":userId": id
         }
@@ -499,10 +578,14 @@ router.post("/", authenticate, requireCreatePermission('user'), async (req: any,
         tenantId: currentUser.tenantId
       });
       
+      // Use UserIdIndex GSI for efficient user lookup by userId
+      // Assumption: UserIdIndex exists with userId as partition key
       const managerResult = await docClient.send(
-        new ScanCommand({
+        new QueryCommand({
           TableName: TABLES.USERS,
-          FilterExpression: "userId = :userId AND tenantId = :tenantId AND (#role = :originalRole OR #role = :normalizedRole OR #role = :managerRole) AND isDeleted = :isDeleted",
+          IndexName: 'UserIdIndex',
+          KeyConditionExpression: "userId = :userId",
+          FilterExpression: "tenantId = :tenantId AND (#role = :originalRole OR #role = :normalizedRole OR #role = :managerRole) AND isDeleted = :isDeleted",
           ExpressionAttributeNames: {
             "#role": "role"
           },
@@ -604,11 +687,13 @@ router.put("/:id/soft-delete", authenticate, requireDeletePermission('user'), as
 
     const { id } = req.params;
     
-    // First find the user by userId to get their email (since email is the primary key)
+    // Use UserIdIndex GSI for efficient user lookup by userId
+    // Assumption: UserIdIndex exists with userId as partition key
     const scanResult = await docClient.send(
-      new ScanCommand({
+      new QueryCommand({
         TableName: TABLES.USERS,
-        FilterExpression: "userId = :userId",
+        IndexName: 'UserIdIndex',
+        KeyConditionExpression: "userId = :userId",
         ExpressionAttributeValues: {
           ":userId": id
         }
@@ -655,11 +740,13 @@ router.put("/profile", authenticate, async (req, res, next) => {
 
     const { firstName, lastName, phoneNumber, password } = req.body;
 
-    // Get current user data to find their email (primary key)
+    // Use UserIdIndex GSI for efficient user lookup by userId
+    // Assumption: UserIdIndex exists with userId as partition key
     const getUserResult = await docClient.send(
-      new ScanCommand({
+      new QueryCommand({
         TableName: TABLES.USERS,
-        FilterExpression: "userId = :userId",
+        IndexName: 'UserIdIndex',
+        KeyConditionExpression: "userId = :userId",
         ExpressionAttributeValues: {
           ":userId": currentUser.userId
         }
@@ -738,11 +825,13 @@ router.put("/:id", authenticate, requireEditPermission('user'), async (req: any,
     const currentUser = req.user;
     const { id } = req.params;
     
-    // First find the user by userId to get their email (since email is the primary key)
+    // Use UserIdIndex GSI for efficient user lookup by userId
+    // Assumption: UserIdIndex exists with userId as partition key
     const scanResult = await docClient.send(
-      new ScanCommand({
+      new QueryCommand({
         TableName: TABLES.USERS,
-        FilterExpression: "userId = :userId",
+        IndexName: 'UserIdIndex',
+        KeyConditionExpression: "userId = :userId",
         ExpressionAttributeValues: {
           ":userId": id
         }
@@ -761,6 +850,8 @@ router.put("/:id", authenticate, requireEditPermission('user'), async (req: any,
 
     // Check if phone number is being updated and validate uniqueness
     if (req.body.phoneNumber && req.body.phoneNumber !== user.phoneNumber) {
+      // Note: This still uses ScanCommand as we don't have a phoneNumber index
+      // Consider adding a PhoneNumberIndex GSI for larger deployments
       const phoneCheckResult = await docClient.send(
         new ScanCommand({
           TableName: TABLES.USERS,

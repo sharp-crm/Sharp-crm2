@@ -46,6 +46,8 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [showUserSearch, setShowUserSearch] = useState(false);
+  const [userSearchTerm, setUserSearchTerm] = useState('');
   const currentUser = useAuthStore((s) => s.user);
 
   const leadSourceOptions = [
@@ -114,6 +116,37 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
     });
   };
 
+  // Helper function to safely get user ID
+  const getUserId = (user: User) => user.userId || user.id || '';
+
+  // Get filtered users based on search term
+  const getFilteredUsers = () => {
+    if (!userSearchTerm.trim()) {
+      return users;
+    }
+    
+    const searchTerm = userSearchTerm.toLowerCase();
+    return users.filter((user: User) => {
+      const firstName = user.firstName?.toLowerCase() || '';
+      const lastName = user.lastName?.toLowerCase() || '';
+      const email = user.email?.toLowerCase() || '';
+      const role = user.role?.toLowerCase() || '';
+      
+      return firstName.includes(searchTerm) || 
+             lastName.includes(searchTerm) || 
+             email.includes(searchTerm) || 
+             role.includes(searchTerm) ||
+             `${firstName} ${lastName}`.includes(searchTerm);
+    });
+  };
+
+  // Get display name for selected lead owner
+  const getSelectedLeadOwnerName = () => {
+    if (!formData.leadOwner) return '';
+    const user = users.find(u => getUserId(u) === formData.leadOwner);
+    return user ? `${user.firstName} ${user.lastName} (${user.role})` : formData.leadOwner;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!lead) return;
@@ -171,6 +204,8 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
       visibleTo: []
     });
     setError(null);
+    setShowUserSearch(false);
+    setUserSearchTerm('');
     onClose();
   };
 
@@ -204,232 +239,289 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
 
           <div className="flex-1 overflow-y-auto p-6">
             <form id="editLeadForm" onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Basic Information */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
+              {/* Form Fields - Clean Layout */}
+              <div className="space-y-8">
+                {/* Basic Information Section */}
+                <div className="bg-gray-50 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                    Basic Information
+                  </h3>
                   
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Lead Owner *</label>
-                    <input
-                      type="text"
-                      value={formData.leadOwner || ''}
-                      onChange={(e) => handleInputChange('leadOwner', e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">First Name *</label>
-                    <input
-                      type="text"
-                      value={formData.firstName || ''}
-                      onChange={(e) => handleInputChange('firstName', e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Last Name *</label>
-                    <input
-                      type="text"
-                      value={formData.lastName || ''}
-                      onChange={(e) => handleInputChange('lastName', e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Company *</label>
-                    <input
-                      type="text"
-                      value={formData.company || ''}
-                      onChange={(e) => handleInputChange('company', e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Title</label>
-                    <input
-                      type="text"
-                      value={formData.title || ''}
-                      onChange={(e) => handleInputChange('title', e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Contact Information */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-gray-900">Contact Information</h3>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Email *</label>
-                    <input
-                      type="email"
-                      value={formData.email || ''}
-                      onChange={(e) => handleInputChange('email', e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Phone *</label>
-                    <PhoneNumberInput
-                      value={formData.phone || ''}
-                      onChange={(value) => handleInputChange('phone', value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Lead Source *</label>
-                    <select
-                      value={formData.leadSource || ''}
-                      onChange={(e) => handleInputChange('leadSource', e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="">Select Source</option>
-                      {leadSourceOptions.map(source => (
-                        <option key={source} value={source}>{source}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Lead Status *</label>
-                    <select
-                      value={formData.leadStatus || ''}
-                      onChange={(e) => handleInputChange('leadStatus', e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="">Select Status</option>
-                      {leadStatusOptions.map(status => (
-                        <option key={status} value={status}>{status}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Value</label>
-                    <input
-                      type="number"
-                      value={formData.value || ''}
-                      onChange={(e) => handleInputChange('value', parseFloat(e.target.value))}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Address Information */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-gray-900">Address Information</h3>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Street</label>
-                    <input
-                      type="text"
-                      value={formData.street || ''}
-                      onChange={(e) => handleInputChange('street', e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Area</label>
-                    <input
-                      type="text"
-                      value={formData.area || ''}
-                      onChange={(e) => handleInputChange('area', e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">City</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Lead Owner
+                        <span className="text-red-500 ml-1">*</span>
+                      </label>
+                      <div className="flex items-center">
+                        <select
+                          value={formData.leadOwner || ''}
+                          onChange={(e) => handleInputChange('leadOwner', e.target.value)}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-sm"
+                          required
+                        >
+                          <option value="">Select Lead Owner</option>
+                          {users.map(user => (
+                            <option key={getUserId(user)} value={getUserId(user)}>
+                              {user.firstName} {user.lastName} ({user.role})
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setShowUserSearch(true)}
+                          className="ml-2 p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                          title="Search users"
+                        >
+                          <Icons.Search className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {formData.leadOwner && (
+                        <p className="mt-1 text-sm text-blue-600">
+                          ✓ {getSelectedLeadOwnerName()}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        First Name
+                        <span className="text-red-500 ml-1">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.firstName || ''}
+                        onChange={(e) => handleInputChange('firstName', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Last Name
+                        <span className="text-red-500 ml-1">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.lastName || ''}
+                        onChange={(e) => handleInputChange('lastName', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Company
+                        <span className="text-red-500 ml-1">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.company || ''}
+                        onChange={(e) => handleInputChange('company', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Title
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.title || ''}
+                        onChange={(e) => handleInputChange('title', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Contact Information Section */}
+                <div className="bg-gray-50 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                    Contact Information
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Email
+                        <span className="text-red-500 ml-1">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        value={formData.email || ''}
+                        onChange={(e) => handleInputChange('email', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Phone
+                        <span className="text-red-500 ml-1">*</span>
+                      </label>
+                      <PhoneNumberInput
+                        value={formData.phone || ''}
+                        onChange={(value) => handleInputChange('phone', value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Lead Source
+                        <span className="text-red-500 ml-1">*</span>
+                      </label>
+                      <select
+                        value={formData.leadSource || ''}
+                        onChange={(e) => handleInputChange('leadSource', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        required
+                      >
+                        <option value="">Select Source</option>
+                        {leadSourceOptions.map(source => (
+                          <option key={source} value={source}>{source}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Lead Status
+                        <span className="text-red-500 ml-1">*</span>
+                      </label>
+                      <select
+                        value={formData.leadStatus || ''}
+                        onChange={(e) => handleInputChange('leadStatus', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                        required
+                      >
+                        <option value="">Select Status</option>
+                        {leadStatusOptions.map(status => (
+                          <option key={status} value={status}>{status}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Value
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.value || ''}
+                        onChange={(e) => handleInputChange('value', parseFloat(e.target.value))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Address Information Section */}
+                <div className="bg-gray-50 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                    Address Information
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Street
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.street || ''}
+                        onChange={(e) => handleInputChange('street', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Area
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.area || ''}
+                        onChange={(e) => handleInputChange('area', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        City
+                      </label>
                       <input
                         type="text"
                         value={formData.city || ''}
                         onChange={(e) => handleInputChange('city', e.target.value)}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">State</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        State
+                      </label>
                       <input
                         type="text"
                         value={formData.state || ''}
                         onChange={(e) => handleInputChange('state', e.target.value)}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                       />
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Country</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Country
+                      </label>
                       <input
                         type="text"
                         value={formData.country || ''}
                         onChange={(e) => handleInputChange('country', e.target.value)}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">ZIP Code</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        ZIP Code
+                      </label>
                       <input
                         type="text"
                         value={formData.zipCode || ''}
                         onChange={(e) => handleInputChange('zipCode', e.target.value)}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Visibility Settings */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-gray-900">Visibility Settings</h3>
+                {/* Description Section */}
+                <div className="bg-gray-50 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
+                    Description Information
+                  </h3>
                   
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">Visible To</label>
-                    <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-md p-2">
-                      {users.map(user => (
-                        <label key={user.id} className="flex items-center p-2 hover:bg-gray-50">
-                          <input
-                            type="checkbox"
-                            checked={formData.visibleTo?.includes(user.id)}
-                            onChange={() => handleVisibilityChange(user.id)}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">
-                            {user.firstName} {user.lastName} ({user.role})
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {formData.visibleTo?.length === 0 
-                        ? "Lead will be visible to all users" 
-                        : `Lead will be visible to ${formData.visibleTo?.length} selected user(s)`}
-                    </p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Description
+                    </label>
+                    <textarea
+                      value={formData.description || ''}
+                      onChange={(e) => handleInputChange('description', e.target.value)}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
+                      placeholder="Enter description..."
+                    />
                   </div>
                 </div>
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Description</label>
-                <textarea
-                  value={formData.description || ''}
-                  onChange={(e) => handleInputChange('description', e.target.value)}
-                  rows={4}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
               </div>
             </form>
           </div>
@@ -455,6 +547,176 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
           </div>
         </Dialog.Panel>
       </div>
+
+      {/* User Search Modal */}
+      {showUserSearch && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div 
+            className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="overflow-x-auto">
+              <div className="sticky top-0 bg-white border-b border-gray-200 z-10 min-w-[800px]">
+                <div className="flex items-center justify-between p-6">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Search Users
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setShowUserSearch(false);
+                      setUserSearchTerm('');
+                    }}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <Icons.X className="w-5 h-5 text-gray-500" />
+                  </button>
+                </div>
+                {/* Search Bar */}
+                <div className="px-6 pb-4">
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Icons.Search className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      value={userSearchTerm}
+                      onChange={(e) => setUserSearchTerm(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setUserSearchTerm('');
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      placeholder="Search users by name, email, or role..."
+                      autoFocus
+                    />
+                    {userSearchTerm && (
+                      <button
+                        onClick={() => setUserSearchTerm('')}
+                        className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+                      >
+                        Clear search
+                      </button>
+                    )}
+                  </div>
+                  {/* Search Results Count */}
+                  {userSearchTerm ? (
+                    <div className="mt-2 text-sm text-gray-500">
+                      Found {getFilteredUsers().length} user{getFilteredUsers().length !== 1 ? 's' : ''} matching "{userSearchTerm}"
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-sm text-gray-500">
+                      {users.length} total user{users.length !== 1 ? 's' : ''} available
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="overflow-y-auto max-h-[calc(80vh-80px)]">
+                <div className="bg-white min-w-[800px]">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center">
+                            USER
+                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
+                          </div>
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center">
+                            EMAIL
+                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
+                          </div>
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center">
+                            ROLE
+                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
+                          </div>
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <div className="flex items-center">
+                            STATUS
+                            <Icons.ArrowUpDown className="w-4 h-4 ml-1 text-gray-400" />
+                          </div>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {getFilteredUsers().length > 0 ? (
+                        getFilteredUsers().map((userItem: User) => (
+                          <tr
+                            key={getUserId(userItem)}
+                            onClick={() => {
+                              const userName = `${userItem.firstName} ${userItem.lastName}`;
+                              setFormData(prev => ({
+                                ...prev,
+                                leadOwner: getUserId(userItem)
+                              }));
+                              setShowUserSearch(false);
+                              setUserSearchTerm('');
+                            }}
+                            className="hover:bg-blue-50 cursor-pointer transition-colors"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
+                                  <Icons.User className="w-4 h-4 text-blue-600" />
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {userItem.firstName} {userItem.lastName}
+                                    {getUserId(userItem) === currentUser?.userId && ' (You)'}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {getUserId(userItem)}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {userItem.email || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {userItem.role || 'N/A'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                                Active
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-8 text-center">
+                            <div className="flex flex-col items-center">
+                              <Icons.Search className="w-8 h-8 text-gray-400 mb-2" />
+                              <p className="text-gray-500 text-sm">
+                                {userSearchTerm ? `No users found matching "${userSearchTerm}"` : 'No users available'}
+                              </p>
+                              {userSearchTerm && (
+                                <button
+                                  onClick={() => setUserSearchTerm('')}
+                                  className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+                                >
+                                  Clear search
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Dialog>
   );
 };

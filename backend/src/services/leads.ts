@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { docClient, TABLES } from '../services/dynamoClient';
 import { leadsRBACService, RBACUser } from './leadsRBAC';
@@ -167,11 +167,13 @@ export class LeadsService {
 
   // Get leads by tenant
   async getLeadsByTenant(tenantId: string, userId: string, includeDeleted = false): Promise<Lead[]> {
-    const result = await docClient.send(new ScanCommand({
+    // Use TenantIndex GSI for efficient tenant-based queries
+    // Assumption: TenantIndex exists with tenantId as partition key
+    const result = await docClient.send(new QueryCommand({
       TableName: this.tableName,
-      FilterExpression: includeDeleted 
-        ? 'tenantId = :tenantId'
-        : 'tenantId = :tenantId AND isDeleted = :isDeleted',
+      IndexName: 'TenantIndex',
+      KeyConditionExpression: 'tenantId = :tenantId',
+      FilterExpression: includeDeleted ? undefined : 'isDeleted = :isDeleted',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ...(includeDeleted ? {} : { ':isDeleted': false })
@@ -195,9 +197,13 @@ export class LeadsService {
 
   // Get leads by owner
   async getLeadsByOwner(leadOwner: string, tenantId: string, userId: string): Promise<Lead[]> {
-    const result = await docClient.send(new ScanCommand({
+    // Use LeadOwnerIndex GSI for efficient owner-based queries
+    // Assumption: LeadOwnerIndex exists with leadOwner as partition key
+    const result = await docClient.send(new QueryCommand({
       TableName: this.tableName,
-      FilterExpression: 'leadOwner = :leadOwner AND tenantId = :tenantId AND isDeleted = :isDeleted',
+      IndexName: 'LeadOwnerIndex',
+      KeyConditionExpression: 'leadOwner = :leadOwner',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted',
       ExpressionAttributeValues: {
         ':leadOwner': leadOwner,
         ':tenantId': tenantId,
@@ -216,9 +222,13 @@ export class LeadsService {
 
   // Get lead by email (returns first match - multiple leads can have the same email)
   async getLeadByEmail(email: string, tenantId: string, userId?: string): Promise<Lead | null> {
-    const result = await docClient.send(new ScanCommand({
+    // Use EmailIndex GSI for efficient email-based queries
+    // Assumption: EmailIndex exists with email as partition key
+    const result = await docClient.send(new QueryCommand({
       TableName: this.tableName,
-      FilterExpression: 'email = :email AND tenantId = :tenantId AND isDeleted = :isDeleted',
+      IndexName: 'EmailIndex',
+      KeyConditionExpression: 'email = :email',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted',
       ExpressionAttributeValues: {
         ':email': email,
         ':tenantId': tenantId,
@@ -232,9 +242,13 @@ export class LeadsService {
 
   // Get all leads by email (useful when multiple leads can have the same email)
   async getAllLeadsByEmail(email: string, tenantId: string, userId?: string): Promise<Lead[]> {
-    const result = await docClient.send(new ScanCommand({
+    // Use EmailIndex GSI for efficient email-based queries
+    // Assumption: EmailIndex exists with email as partition key
+    const result = await docClient.send(new QueryCommand({
       TableName: this.tableName,
-      FilterExpression: 'email = :email AND tenantId = :tenantId AND isDeleted = :isDeleted',
+      IndexName: 'EmailIndex',
+      KeyConditionExpression: 'email = :email',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted',
       ExpressionAttributeValues: {
         ':email': email,
         ':tenantId': tenantId,
@@ -385,9 +399,14 @@ export class LeadsService {
 
   // Search leads by various criteria
   async searchLeads(tenantId: string, userId: string, searchTerm: string): Promise<Lead[]> {
-    const result = await docClient.send(new ScanCommand({
+    // Use TenantIndex GSI for efficient tenant-based queries, then filter by search terms
+    // Assumption: TenantIndex exists with tenantId as partition key
+    // Note: Text search still requires filtering, but we avoid scanning the entire table
+    const result = await docClient.send(new QueryCommand({
       TableName: this.tableName,
-      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (contains(firstName, :searchTerm) OR contains(lastName, :searchTerm) OR contains(company, :searchTerm) OR contains(email, :searchTerm))',
+      IndexName: 'TenantIndex',
+      KeyConditionExpression: 'tenantId = :tenantId',
+      FilterExpression: 'isDeleted = :isDeleted AND (contains(firstName, :searchTerm) OR contains(lastName, :searchTerm) OR contains(company, :searchTerm) OR contains(email, :searchTerm))',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ':isDeleted': false,
@@ -413,9 +432,13 @@ export class LeadsService {
     avgValue: number;
     recentCount: number;
   }> {
-    const result = await docClient.send(new ScanCommand({
+    // Use TenantIndex GSI for efficient tenant-based queries
+    // Assumption: TenantIndex exists with tenantId as partition key
+    const result = await docClient.send(new QueryCommand({
       TableName: this.tableName,
-      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted',
+      IndexName: 'TenantIndex',
+      KeyConditionExpression: 'tenantId = :tenantId',
+      FilterExpression: 'isDeleted = :isDeleted',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ':isDeleted': false

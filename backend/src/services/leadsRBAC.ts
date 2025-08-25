@@ -12,7 +12,7 @@ export interface RBACUser {
 }
 
 export interface LeadAccessFilter {
-  filterExpression: string;
+  filterExpression: string | undefined;
   expressionAttributeValues: Record<string, any>;
   expressionAttributeNames?: Record<string, string>;
 }
@@ -40,18 +40,30 @@ export class LeadsRBACService {
       console.log(`🔐 [LeadsRBACService] Expression values:`, combinedFilter.expressionAttributeValues);
       console.log(`🔐 [LeadsRBACService] Expression names:`, combinedFilter.expressionAttributeNames);
       
-      const scanParams: any = {
+      // Use TenantIndex GSI for efficient tenant-based queries, then apply role-based filtering
+      // Assumption: TenantIndex exists with tenantId as partition key
+      // Note: tenantId is the partition key in TenantIndex, so it goes in KeyConditionExpression
+      const queryParams: any = {
         TableName: this.tableName,
-        FilterExpression: combinedFilter.filterExpression,
-        ExpressionAttributeValues: combinedFilter.expressionAttributeValues
+        IndexName: 'TenantIndex',
+        KeyConditionExpression: 'tenantId = :tenantId',
+        ExpressionAttributeValues: {
+          ':tenantId': user.tenantId,
+          ...combinedFilter.expressionAttributeValues
+        }
       };
+      
+      // Only add FilterExpression if it exists
+      if (combinedFilter.filterExpression) {
+        queryParams.FilterExpression = combinedFilter.filterExpression;
+      }
       
       // Only add ExpressionAttributeNames if it exists and has properties
       if (combinedFilter.expressionAttributeNames && Object.keys(combinedFilter.expressionAttributeNames).length > 0) {
-        scanParams.ExpressionAttributeNames = combinedFilter.expressionAttributeNames;
+        queryParams.ExpressionAttributeNames = combinedFilter.expressionAttributeNames;
       }
       
-      const result = await docClient.send(new ScanCommand(scanParams));
+      const result = await docClient.send(new QueryCommand(queryParams));
 
       const leads = (result.Items || []) as Lead[];
       console.log(`🔐 [LeadsRBACService] Retrieved ${leads.length} leads for user ${user.email}`);
@@ -223,12 +235,16 @@ export class LeadsRBACService {
 
   /**
    * Get all subordinates (sales reps) that report to a manager
+   * Now using ReportingToIndex GSI for efficient reporting hierarchy queries
+   * Assumption: ReportingToIndex exists with reportingTo as partition key
    */
   private async getSubordinates(managerId: string, tenantId: string): Promise<string[]> {
     try {
-      const result = await docClient.send(new ScanCommand({
+      const result = await docClient.send(new QueryCommand({
         TableName: TABLES.USERS,
-        FilterExpression: 'reportingTo = :managerId AND #role = :role AND tenantId = :tenantId AND isDeleted = :isDeleted',
+        IndexName: 'ReportingToIndex',
+        KeyConditionExpression: 'reportingTo = :managerId',
+        FilterExpression: '#role = :role AND tenantId = :tenantId AND isDeleted = :isDeleted',
         ExpressionAttributeNames: {
           '#role': 'role'
         },
@@ -252,14 +268,14 @@ export class LeadsRBACService {
 
   /**
    * Build tenant-based filter (always applied first)
+   * Note: tenantId is handled in KeyConditionExpression when using TenantIndex GSI
    */
   private buildTenantFilter(tenantId: string, includeDeleted: boolean): LeadAccessFilter {
     return {
       filterExpression: includeDeleted 
-        ? 'tenantId = :tenantId'
-        : 'tenantId = :tenantId AND isDeleted = :isDeleted',
+        ? undefined
+        : 'isDeleted = :isDeleted',
       expressionAttributeValues: {
-        ':tenantId': tenantId,
         ...(includeDeleted ? {} : { ':isDeleted': false })
       }
     };
@@ -327,11 +343,17 @@ export class LeadsRBACService {
    * Combine tenant filter and role filter
    */
   private combineFilters(tenantFilter: LeadAccessFilter, roleFilter: LeadAccessFilter): LeadAccessFilter {
+    // If no role filter, return tenant filter (or empty if no tenant filter)
     if (!roleFilter.filterExpression) {
-      // Admin case - only tenant filter applies
       return tenantFilter;
     }
 
+    // If no tenant filter, return role filter
+    if (!tenantFilter.filterExpression) {
+      return roleFilter;
+    }
+
+    // Combine both filters
     return {
       filterExpression: `(${tenantFilter.filterExpression}) AND (${roleFilter.filterExpression})`,
       expressionAttributeValues: {

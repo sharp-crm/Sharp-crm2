@@ -52,13 +52,35 @@ const tables = [
     ],
     AttributeDefinitions: [
       { AttributeName: "email", AttributeType: "S" },
-      { AttributeName: "userId", AttributeType: "S" }
+      { AttributeName: "userId", AttributeType: "S" },
+      { AttributeName: "reportingTo", AttributeType: "S" },
+      { AttributeName: "tenantId", AttributeType: "S" },
+      { AttributeName: "role", AttributeType: "S" }
     ],
     GlobalSecondaryIndexes: [
       {
         IndexName: "UserIdIndex",
         KeySchema: [
           { AttributeName: "userId", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "ReportingToIndex",
+        KeySchema: [
+          { AttributeName: "reportingTo", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "TenantRoleIndex",
+        KeySchema: [
+          { AttributeName: "tenantId", KeyType: "HASH" },
+          { AttributeName: "role", KeyType: "RANGE" }
         ],
         Projection: {
           ProjectionType: "ALL"
@@ -129,7 +151,8 @@ const tables = [
     AttributeDefinitions: [
       { AttributeName: "id", AttributeType: "S" },
       { AttributeName: "tenantId", AttributeType: "S" },
-      { AttributeName: "email", AttributeType: "S" }
+      { AttributeName: "email", AttributeType: "S" },
+      { AttributeName: "leadOwner", AttributeType: "S" }
     ],
     GlobalSecondaryIndexes: [
       {
@@ -145,6 +168,15 @@ const tables = [
         IndexName: "EmailIndex",
         KeySchema: [
           { AttributeName: "email", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "LeadOwnerIndex",
+        KeySchema: [
+          { AttributeName: "leadOwner", KeyType: "HASH" }
         ],
         Projection: {
           ProjectionType: "ALL"
