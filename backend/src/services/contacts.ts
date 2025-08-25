@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { docClient, TABLES } from '../services/dynamoClient';
 import { contactsRBACService, RBACUser } from './contactsRBAC';
@@ -161,12 +161,12 @@ export class ContactsService {
   async getContactsByTenant(tenantId: string, userId: string, includeDeleted = false): Promise<Contact[]> {
     console.log('🔍 getContactsByTenant called with:', { tenantId, userId, includeDeleted });
     
-    // Use ScanCommand instead of QueryCommand since TenantIdIndex doesn't exist
-    const result = await docClient.send(new ScanCommand({
+    // Use QueryCommand with TenantIndex GSI for better performance instead of ScanCommand
+    const result = await docClient.send(new QueryCommand({
       TableName: this.tableName,
-      FilterExpression: includeDeleted 
-        ? 'tenantId = :tenantId'
-        : 'tenantId = :tenantId AND isDeleted = :isDeleted',
+      IndexName: 'TenantIndex',
+      KeyConditionExpression: 'tenantId = :tenantId',
+      FilterExpression: includeDeleted ? undefined : 'isDeleted = :isDeleted',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ...(includeDeleted ? {} : { ':isDeleted': false })
@@ -362,9 +362,13 @@ export class ContactsService {
 
   // Search contacts by various criteria
   async searchContacts(tenantId: string, userId: string, searchTerm: string): Promise<Contact[]> {
-    const result = await docClient.send(new ScanCommand({
+    // Use QueryCommand with TenantIndex GSI for better performance instead of ScanCommand
+    // Search filtering is applied through FilterExpression after the efficient tenant-based query
+    const result = await docClient.send(new QueryCommand({
       TableName: this.tableName,
-      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted AND (contains(firstName, :searchTerm) OR contains(companyName, :searchTerm) OR contains(email, :searchTerm))',
+      IndexName: 'TenantIndex',
+      KeyConditionExpression: 'tenantId = :tenantId',
+      FilterExpression: 'isDeleted = :isDeleted AND (contains(firstName, :searchTerm) OR contains(companyName, :searchTerm) OR contains(email, :searchTerm))',
       ExpressionAttributeValues: {
         ':tenantId': tenantId,
         ':isDeleted': false,
@@ -389,9 +393,12 @@ export class ContactsService {
     byStatus: Record<string, number>;
     bySource: Record<string, number>;
   }> {
-    const result = await docClient.send(new ScanCommand({
+    // Use QueryCommand with TenantIndex GSI for better performance instead of ScanCommand
+    // Stats calculation is done in memory after efficient tenant-based query
+    const result = await docClient.send(new QueryCommand({
       TableName: this.tableName,
-      FilterExpression: 'tenantId = :tenantId',
+      IndexName: 'TenantIndex',
+      KeyConditionExpression: 'tenantId = :tenantId',
       ExpressionAttributeValues: {
         ':tenantId': tenantId
       }

@@ -436,9 +436,11 @@ async function generateReportData(reportType: string, tenantId: string, userId: 
     }
 
     case 'contact-engagement': {
-      const contacts = await docClient.send(new ScanCommand({
+      // Use QueryCommand with TenantIndex GSI for better performance instead of ScanCommand
+      const contacts = await docClient.send(new QueryCommand({
         TableName: TABLES.CONTACTS,
-        FilterExpression: 'tenantId = :tenantId',
+        IndexName: 'TenantIndex',
+        KeyConditionExpression: 'tenantId = :tenantId',
         ExpressionAttributeValues: {
           ':tenantId': tenantId
         }
@@ -904,9 +906,11 @@ const generateReport: RequestHandler = async (req: any, res) => {
       }
 
       case 'contact-engagement': {
-        const contacts = await docClient.send(new ScanCommand({
+        // Use QueryCommand with TenantIndex GSI for better performance instead of ScanCommand
+        const contacts = await docClient.send(new QueryCommand({
           TableName: TABLES.CONTACTS,
-          FilterExpression: 'tenantId = :tenantId',
+          IndexName: 'TenantIndex',
+          KeyConditionExpression: 'tenantId = :tenantId',
           ExpressionAttributeValues: {
             ':tenantId': tenantId
           }

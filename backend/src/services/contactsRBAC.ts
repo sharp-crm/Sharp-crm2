@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { docClient, TABLES } from './dynamoClient';
 import { Contact } from './contacts';
 
@@ -27,31 +27,49 @@ export class ContactsRBACService {
     console.log(`🔐 [ContactsRBACService] Getting contacts for user: ${user.email} (${user.role}) in tenant: ${user.tenantId}`);
     
     try {
-      // First ensure tenant-based segregation
-      const tenantFilter = this.buildTenantFilter(user.tenantId, includeDeleted);
-      
-      // Then build role-based access filter
-      const roleFilter = await this.buildRoleBasedFilter(user);
-      
-      // Combine filters
-      const combinedFilter = this.combineFilters(tenantFilter, roleFilter);
-      
-      console.log(`🔐 [ContactsRBACService] Filter expression: ${combinedFilter.filterExpression}`);
-      console.log(`🔐 [ContactsRBACService] Expression values:`, combinedFilter.expressionAttributeValues);
-      console.log(`🔐 [ContactsRBACService] Expression names:`, combinedFilter.expressionAttributeNames);
-      
-      const scanParams: any = {
+      // Use QueryCommand with TenantIndex GSI for efficient tenant-based querying
+      // RBAC filtering is applied through FilterExpression after the efficient partition key query
+      const baseQueryParams: any = {
         TableName: this.tableName,
-        FilterExpression: combinedFilter.filterExpression,
-        ExpressionAttributeValues: combinedFilter.expressionAttributeValues
+        IndexName: 'TenantIndex',
+        KeyConditionExpression: 'tenantId = :tenantId',
+        ExpressionAttributeValues: {
+          ':tenantId': user.tenantId
+        }
       };
-      
-      // Only add ExpressionAttributeNames if it exists and has properties
-      if (combinedFilter.expressionAttributeNames && Object.keys(combinedFilter.expressionAttributeNames).length > 0) {
-        scanParams.ExpressionAttributeNames = combinedFilter.expressionAttributeNames;
+
+      // Add soft delete filter if needed
+      if (!includeDeleted) {
+        baseQueryParams.FilterExpression = 'isDeleted = :isDeleted';
+        baseQueryParams.ExpressionAttributeValues[':isDeleted'] = false;
+      }
+
+      // Add role-based access filtering
+      const roleFilter = await this.buildRoleBasedFilter(user);
+      if (roleFilter.filterExpression) {
+        const currentFilter = baseQueryParams.FilterExpression || '';
+        const newFilter = currentFilter 
+          ? `(${currentFilter}) AND (${roleFilter.filterExpression})`
+          : roleFilter.filterExpression;
+        
+        baseQueryParams.FilterExpression = newFilter;
+        baseQueryParams.ExpressionAttributeValues = {
+          ...baseQueryParams.ExpressionAttributeValues,
+          ...roleFilter.expressionAttributeValues
+        };
+        
+        if (roleFilter.expressionAttributeNames) {
+          baseQueryParams.ExpressionAttributeNames = roleFilter.expressionAttributeNames;
+        }
       }
       
-      const result = await docClient.send(new ScanCommand(scanParams));
+      console.log(`🔐 [ContactsRBACService] Query params:`, {
+        filterExpression: baseQueryParams.FilterExpression,
+        expressionValues: baseQueryParams.ExpressionAttributeValues,
+        expressionNames: baseQueryParams.ExpressionAttributeNames
+      });
+      
+      const result = await docClient.send(new QueryCommand(baseQueryParams));
 
       const contacts = (result.Items || []) as Contact[];
       console.log(`🔐 [ContactsRBACService] Retrieved ${contacts.length} contacts for user ${user.email}`);
@@ -226,9 +244,13 @@ export class ContactsRBACService {
    */
   private async getSubordinates(managerId: string, tenantId: string): Promise<string[]> {
     try {
-      const result = await docClient.send(new ScanCommand({
+      // Use QueryCommand with ReportingToIndex GSI for better performance instead of ScanCommand
+      // Additional filtering for role and tenant is applied through FilterExpression
+      const result = await docClient.send(new QueryCommand({
         TableName: TABLES.USERS,
-        FilterExpression: 'reportingTo = :managerId AND #role = :role AND tenantId = :tenantId AND isDeleted = :isDeleted',
+        IndexName: 'ReportingToIndex',
+        KeyConditionExpression: 'reportingTo = :managerId',
+        FilterExpression: '#role = :role AND tenantId = :tenantId AND isDeleted = :isDeleted',
         ExpressionAttributeNames: {
           '#role': 'role'
         },
@@ -251,29 +273,15 @@ export class ContactsRBACService {
   }
 
   /**
-   * Build tenant-based filter (always applied first)
-   */
-  private buildTenantFilter(tenantId: string, includeDeleted: boolean): ContactAccessFilter {
-    return {
-      filterExpression: includeDeleted 
-        ? 'tenantId = :tenantId'
-        : 'tenantId = :tenantId AND isDeleted = :isDeleted',
-      expressionAttributeValues: {
-        ':tenantId': tenantId,
-        ...(includeDeleted ? {} : { ':isDeleted': false })
-      }
-    };
-  }
-
-  /**
    * Build role-based access filter
    */
   private async buildRoleBasedFilter(user: RBACUser): Promise<ContactAccessFilter> {
     switch (user.role) {
       case 'ADMIN':
         // Admin can see all contacts in tenant (no additional filter needed)
+        // Return a filter that always evaluates to true
         return {
-          filterExpression: '',
+          filterExpression: 'attribute_exists(id)',
           expressionAttributeValues: {}
         };
 
@@ -321,28 +329,6 @@ export class ContactsRBACService {
           }
         };
     }
-  }
-
-  /**
-   * Combine tenant filter and role filter
-   */
-  private combineFilters(tenantFilter: ContactAccessFilter, roleFilter: ContactAccessFilter): ContactAccessFilter {
-    if (!roleFilter.filterExpression) {
-      // Admin case - only tenant filter applies
-      return tenantFilter;
-    }
-
-    return {
-      filterExpression: `(${tenantFilter.filterExpression}) AND (${roleFilter.filterExpression})`,
-      expressionAttributeValues: {
-        ...tenantFilter.expressionAttributeValues,
-        ...roleFilter.expressionAttributeValues
-      },
-      expressionAttributeNames: {
-        ...tenantFilter.expressionAttributeNames,
-        ...roleFilter.expressionAttributeNames
-      }
-    };
   }
 }
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog } from '@headlessui/react';
 import * as Icons from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { Lead, leadsApi } from '../api/services';
 import PhoneNumberInput from './Common/PhoneNumberInput';
 import API from '../api/client';
@@ -549,11 +550,23 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
       </div>
 
       {/* User Search Modal */}
-      {showUserSearch && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+      {showUserSearch && createPortal(
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" 
+          onClick={(e) => {
+            // Only close if clicking the backdrop, not the content
+            if (e.target === e.currentTarget) {
+              setShowUserSearch(false);
+              setUserSearchTerm('');
+            }
+          }}
+        >
           <div 
             className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              // Prevent clicks inside the modal from bubbling up
+              e.stopPropagation();
+            }}
           >
             <div className="overflow-x-auto">
               <div className="sticky top-0 bg-white border-b border-gray-200 z-10 min-w-[800px]">
@@ -562,7 +575,9 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
                     Search Users
                   </h3>
                   <button
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                       setShowUserSearch(false);
                       setUserSearchTerm('');
                     }}
@@ -593,8 +608,12 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
                     />
                     {userSearchTerm && (
                       <button
-                        onClick={() => setUserSearchTerm('')}
-                        className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setUserSearchTerm('');
+                        }}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
                       >
                         Clear search
                       </button>
@@ -649,14 +668,23 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
                         getFilteredUsers().map((userItem: User) => (
                           <tr
                             key={getUserId(userItem)}
-                            onClick={() => {
-                              const userName = `${userItem.firstName} ${userItem.lastName}`;
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              console.log('User selected:', userItem.firstName, userItem.lastName);
+                              
+                              // Update the form data with the selected user
                               setFormData(prev => ({
                                 ...prev,
                                 leadOwner: getUserId(userItem)
                               }));
+                              
+                              // Close only the search overlay, not the main modal
                               setShowUserSearch(false);
                               setUserSearchTerm('');
+                              
+                              // Optional: Show a brief success message
+                              console.log('Lead owner updated to:', userItem.firstName, userItem.lastName);
                             }}
                             className="hover:bg-blue-50 cursor-pointer transition-colors"
                           >
@@ -699,7 +727,11 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
                               </p>
                               {userSearchTerm && (
                                 <button
-                                  onClick={() => setUserSearchTerm('')}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setUserSearchTerm('');
+                                  }}
                                   className="mt-2 text-blue-600 hover:text-blue-800 text-sm"
                                 >
                                   Clear search
@@ -715,7 +747,8 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </Dialog>
   );
