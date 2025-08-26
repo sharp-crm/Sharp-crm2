@@ -949,10 +949,10 @@ const OverviewTab: React.FC<{
         </div>
       </div>
 
-      {/* Open Activities Section */}
+      {/* Open Tasks Section */}
       <div id="section-openActivities" className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Open Activities</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Open Tasks</h3>
           <button
             onClick={() => setIsAddTaskModalOpen(true)}
             className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
@@ -967,7 +967,7 @@ const OverviewTab: React.FC<{
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
         ) : tasks.filter(task => task.status !== 'Completed').length === 0 ? (
-          <p className="text-gray-500 text-center py-8">No open activities found</p>
+          <p className="text-gray-500 text-center py-8">No Open Tasks found</p>
         ) : (
           <div className="space-y-4">
             {tasks.filter(task => task.status !== 'Completed').map((task) => (
@@ -1025,10 +1025,10 @@ const OverviewTab: React.FC<{
         )}
       </div>
 
-      {/* Closed Activities Section */}
+      {/* Closed Tasks Section */}
       <div id="section-closedActivities" className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Closed Activities</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Closed Tasks</h3>
         </div>
 
         {loadingTasks ? (
@@ -1036,7 +1036,7 @@ const OverviewTab: React.FC<{
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
         ) : tasks.filter(task => task.status === 'Completed').length === 0 ? (
-          <p className="text-gray-500 text-center py-8">No closed activities found</p>
+          <p className="text-gray-500 text-center py-8">No Closed Tasks found</p>
         ) : (
           <div className="space-y-4">
             {tasks.filter(task => task.status === 'Completed').map((task) => (

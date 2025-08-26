@@ -19,8 +19,8 @@ const LeadSidebar: React.FC<LeadSidebarProps> = ({ lead, tasks = [] }) => {
   const sidebarItems = [
     { id: 'notes', label: 'Notes', icon: Icons.FileText, count: lead?.notes ? lead.notes.split('\n\n').length : 0 },
     { id: 'products', label: 'Products', icon: Icons.Package, count: lead?.relatedProductIds?.length || 0 },
-    { id: 'openActivities', label: 'Open Activities', icon: Icons.Activity, count: getOpenActivitiesCount() },
-    { id: 'closedActivities', label: 'Closed Activities', icon: Icons.CheckCircle, count: getClosedActivitiesCount() },
+    { id: 'openActivities', label: 'Open Tasks', icon: Icons.Activity, count: getOpenActivitiesCount() },
+    { id: 'closedActivities', label: 'Closed Tasks', icon: Icons.CheckCircle, count: getClosedActivitiesCount() },
     { id: 'emails', label: 'Emails', icon: Icons.Mail, count: 0 }
   ];
 

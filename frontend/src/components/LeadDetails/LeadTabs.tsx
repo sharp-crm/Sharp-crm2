@@ -888,10 +888,10 @@ const OverviewTab: React.FC<{
           )}
         </div>
 
-        {/* Open Activities Section */}
+        {/* Open Tasks Section */}
         <div id="section-openActivities" className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Open Activities</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Open Tasks</h3>
             <button 
               onClick={() => setIsAddTaskModalOpen(true)}
               className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
@@ -988,15 +988,15 @@ const OverviewTab: React.FC<{
           ) : (
             <div className="text-center py-8">
               <Icons.Activity className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No open activities yet</p>
+              <p className="text-sm text-gray-500">No Open Tasks yet</p>
             </div>
           )}
         </div>
 
-        {/* Closed Activities Section */}
+        {/* Closed Tasks Section */}
         <div id="section-closedActivities" className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Closed Activities</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Closed Tasks</h3>
             <button 
               onClick={() => navigate('/tasks')}
               className="text-blue-600 hover:text-blue-800 text-sm font-medium"
@@ -1072,7 +1072,7 @@ const OverviewTab: React.FC<{
           ) : (
             <div className="text-center py-8">
               <Icons.CheckCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">No closed activities yet</p>
+              <p className="text-sm text-gray-500">No Closed Tasks yet</p>
             </div>
           )}
         </div>

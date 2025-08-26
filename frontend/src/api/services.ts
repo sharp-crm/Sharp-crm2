@@ -567,18 +567,7 @@ export const tasksApi = {
     }
   },
 
-  // Test function to debug filtering
-  testFilter: async (recordType: string, recordId: string): Promise<any> => {
-    try {
-      console.log('Testing filter with:', { recordType, recordId });
-      const response = await API.get(`/tasks/test-filter?recordType=${recordType}&recordId=${recordId}`);
-      console.log('Test filter response:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('Test filter error:', error);
-      return null;
-    }
-  },
+
 
   getById: async (id: string): Promise<Task | null> => {
     try {

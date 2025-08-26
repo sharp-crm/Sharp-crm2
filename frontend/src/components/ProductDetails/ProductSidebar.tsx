@@ -81,13 +81,13 @@ const ProductSidebar: React.FC<ProductSidebarProps> = ({ product, tasks = [], de
     },
     { 
       id: 'open-activities', 
-      label: 'Open Activities', 
+      label: 'Open Tasks', 
       icon: Icons.Activity, 
       count: getOpenActivitiesCount()
     },
     { 
       id: 'closed-activities', 
-      label: 'Closed Activities', 
+      label: 'Closed Tasks', 
       icon: Icons.CheckCircle, 
       count: getClosedActivitiesCount()
     },

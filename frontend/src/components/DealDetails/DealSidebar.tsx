@@ -18,8 +18,8 @@ const DealSidebar: React.FC<DealSidebarProps> = ({ deal, tasks = [] }) => {
 
   const sidebarItems = [
     { id: 'notes', label: 'Notes', icon: Icons.FileText, count: deal?.notes ? deal.notes.split('\n\n').length : 0 },
-    { id: 'openActivities', label: 'Open Activities', icon: Icons.Activity, count: getOpenActivitiesCount() },
-    { id: 'closedActivities', label: 'Closed Activities', icon: Icons.CheckCircle, count: getClosedActivitiesCount() },
+    { id: 'openActivities', label: 'Open Tasks', icon: Icons.Activity, count: getOpenActivitiesCount() },
+    { id: 'closedActivities', label: 'Closed Tasks', icon: Icons.CheckCircle, count: getClosedActivitiesCount() },
     { id: 'products', label: 'Products', icon: Icons.Package, count: deal?.relatedProductIds?.length || 0 },
     { id: 'quotes', label: 'Quotes', icon: Icons.FileText, count: deal?.relatedQuoteIds?.length || 0 },
     { id: 'contacts', label: 'Contacts', icon: Icons.Users, count: deal?.relatedContactIds?.length || 0 },

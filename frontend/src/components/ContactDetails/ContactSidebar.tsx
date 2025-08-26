@@ -20,8 +20,8 @@ const ContactSidebar: React.FC<ContactSidebarProps> = ({ contact, tasks = [], de
   const sidebarItems = [
     { id: 'notes', label: 'Notes', icon: Icons.FileText, count: contact?.notes ? contact.notes.split('\n\n').length : 0 },
     { id: 'deals', label: 'Deals', icon: Icons.Target, count: dealsCount || 0 },
-    { id: 'openActivities', label: 'Open Activities', icon: Icons.Activity, count: getOpenActivitiesCount() },
-    { id: 'closedActivities', label: 'Closed Activities', icon: Icons.CheckCircle, count: getClosedActivitiesCount() },
+    { id: 'openActivities', label: 'Open Tasks', icon: Icons.Activity, count: getOpenActivitiesCount() },
+    { id: 'closedActivities', label: 'Closed Tasks', icon: Icons.CheckCircle, count: getClosedActivitiesCount() },
     { id: 'products', label: 'Products', icon: Icons.Package, count: contact?.relatedProductIds?.length || 0 },
     { id: 'quotes', label: 'Quotes', icon: Icons.FileText, count: contact?.relatedQuoteIds?.length || 0 },
     { id: 'emails', label: 'Emails', icon: Icons.Mail, count: 0 }
