@@ -177,65 +177,7 @@ const EditReportModal: React.FC<EditReportModalProps> = ({ isOpen, onClose, onSu
               </div>
             </div>
 
-            {/* Visibility Controls */}
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                <Icons.Eye className="w-5 h-5 mr-2 text-blue-600" />
-                Visibility Settings
-              </h3>
-              
-              <div className="space-y-4">
-                {/* Public Access Toggle */}
-                <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">
-                      Public Access
-                    </label>
-                    <p className="text-xs text-gray-500">
-                      Allow all users in your organization to view this report
-                    </p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.isPublic}
-                      onChange={(e) => handleInputChange('isPublic', e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                  </label>
-                </div>
-
-                {/* Specific Users */}
-                {!formData.isPublic && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Share with Specific Users
-                    </label>
-                    <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-md p-2">
-                      {users.map(user => (
-                        <label key={user.userId} className="flex items-center p-2 hover:bg-gray-50 rounded">
-                          <input
-                            type="checkbox"
-                            checked={formData.sharedWith?.includes(user.userId)}
-                            onChange={() => handleVisibilityChange(user.userId)}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <span className="ml-2 text-sm text-gray-700">
-                            {user.firstName} {user.lastName} ({user.role})
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      {formData.sharedWith?.length === 0 
-                        ? "Report will be private (only visible to you)" 
-                        : `Report will be shared with ${formData.sharedWith?.length} selected user(s)`}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
+            
 
             {/* Scheduling Controls */}
             <div className="bg-green-50 rounded-lg p-4">

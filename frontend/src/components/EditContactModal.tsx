@@ -509,54 +509,7 @@ const EditContactModal: React.FC<EditContactModalProps> = ({ isOpen, onClose, co
                 </div>
               </div>
 
-              {/* Visibility Settings Section */}
-              <div className="bg-gray-50 rounded-xl p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">
-                  <Icons.Eye className="w-5 h-5 text-blue-600 mr-2" />
-                  Visibility Settings
-                </h3>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Visible To
-                    </label>
-                    <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-lg p-4 bg-white">
-                      {users.length > 0 ? (
-                        <div className="space-y-2">
-                          {users.map(user => (
-                            <label key={user.userId} className="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer transition-colors">
-                              <input
-                                type="checkbox"
-                                checked={formData.visibleTo?.includes(user.userId)}
-                                onChange={() => handleVisibilityChange(user.userId)}
-                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                              />
-                              <span className="ml-3 text-sm text-gray-700">
-                                {user.firstName} {user.lastName} 
-                                <span className="text-gray-500 ml-2">({user.role})</span>
-                                {user.userId === currentUser?.userId && (
-                                  <span className="text-blue-600 ml-2 font-medium">(You)</span>
-                                )}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-4">
-                          <Icons.Users className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                          <p className="text-gray-500 text-sm">No users available</p>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      {formData.visibleTo?.length === 0 
-                        ? "Contact will be visible to all users" 
-                        : `Contact will be visible to ${formData.visibleTo?.length} selected user(s)`}
-                    </p>
-                  </div>
-                </div>
-              </div>
+              
 
               {/* Description Section */}
               <div className="bg-gray-50 rounded-xl p-6">

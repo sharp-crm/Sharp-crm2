@@ -266,38 +266,7 @@ const EditDealerModal: React.FC<EditDealerModalProps> = ({
                 </div>
               </div>
 
-              {/* Visibility Controls */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                  <Icons.Eye className="w-5 h-5 mr-2 text-blue-600" />
-                  Visibility Settings
-                </h3>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Visible To
-                  </label>
-                  <div className="max-h-48 overflow-y-auto border border-gray-300 rounded-md p-2">
-                    {tenantUsers.map(user => (
-                      <label key={user.id || user.userId} className="flex items-center p-2 hover:bg-gray-50">
-                        <input
-                          type="checkbox"
-                          checked={formData.visibleTo?.includes(user.id || user.userId)}
-                          onChange={() => handleVisibilityChange(user.id || user.userId)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">
-                          {user.firstName} {user.lastName} ({user.role})
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {formData.visibleTo?.length === 0 
-                      ? "Dealer will be visible to all users" 
-                      : `Dealer will be visible to ${formData.visibleTo?.length} selected user(s)`}
-                  </p>
-                </div>
-              </div>
+              
             </div>
 
             <div className="flex justify-end p-6 border-t border-gray-200 bg-gray-50 gap-3">

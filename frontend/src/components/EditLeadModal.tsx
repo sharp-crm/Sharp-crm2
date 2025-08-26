@@ -41,8 +41,7 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
     country: '',
     zipCode: '',
     description: '',
-    value: 0,
-    visibleTo: []
+    value: 0
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,8 +79,7 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
         country: lead.country || '',
         zipCode: lead.zipCode || '',
         description: lead.description || '',
-        value: lead.value || 0,
-        visibleTo: lead.visibleTo || []
+        value: lead.value || 0
       });
       setError(null);
     }
@@ -105,16 +103,6 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
 
   const handleInputChange = (name: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleVisibilityChange = (userId: string) => {
-    setFormData(prev => {
-      const currentVisibleTo = prev.visibleTo || [];
-      const newVisibleTo = currentVisibleTo.includes(userId)
-        ? currentVisibleTo.filter(id => id !== userId)
-        : [...currentVisibleTo, userId];
-      return { ...prev, visibleTo: newVisibleTo };
-    });
   };
 
   // Helper function to safely get user ID
@@ -201,8 +189,7 @@ const EditLeadModal: React.FC<EditLeadModalProps> = ({ isOpen, onClose, lead, on
       country: '',
       zipCode: '',
       description: '',
-      value: 0,
-      visibleTo: []
+      value: 0
     });
     setError(null);
     setShowUserSearch(false);
