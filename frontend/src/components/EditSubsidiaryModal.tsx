@@ -36,8 +36,7 @@ const EditSubsidiaryModal: React.FC<EditSubsidiaryModalProps> = ({
     email: '',
     contact: '',
     address: '',
-    totalEmployees: 0,
-    visibleTo: []
+    totalEmployees: 0
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tenantUsers, setTenantUsers] = useState<TenantUser[]>([]);
@@ -71,8 +70,7 @@ const EditSubsidiaryModal: React.FC<EditSubsidiaryModalProps> = ({
         email: subsidiary.email || '',
         contact: subsidiary.contact || '',
         address: subsidiary.address || '',
-        totalEmployees: subsidiary.totalEmployees || 0,
-        visibleTo: subsidiary.visibleTo || []
+        totalEmployees: subsidiary.totalEmployees || 0
       });
     }
   }, [subsidiary, isOpen]);
@@ -81,14 +79,6 @@ const EditSubsidiaryModal: React.FC<EditSubsidiaryModalProps> = ({
 
   const handleInputChange = (name: string, value: any) => {
     setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleVisibilityChange = (userId: string) => {
-    const currentVisibleTo = formData.visibleTo || [];
-    const newVisibleTo = currentVisibleTo.includes(userId)
-      ? currentVisibleTo.filter(id => id !== userId)
-      : [...currentVisibleTo, userId];
-    handleInputChange('visibleTo', newVisibleTo);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

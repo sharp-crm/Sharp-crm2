@@ -41,8 +41,7 @@ const EditContactModal: React.FC<EditContactModalProps> = ({ isOpen, onClose, co
     country: '',
     zipCode: '',
     description: '',
-    status: 'Active',
-    visibleTo: []
+    status: 'Active'
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,8 +75,7 @@ const EditContactModal: React.FC<EditContactModalProps> = ({ isOpen, onClose, co
         country: contact.country || '',
         zipCode: contact.zipCode || '',
         description: contact.description || '',
-        status: contact.status || 'Active',
-        visibleTo: contact.visibleTo || []
+        status: contact.status || 'Active'
       });
       setError(null);
     }
@@ -101,16 +99,6 @@ const EditContactModal: React.FC<EditContactModalProps> = ({ isOpen, onClose, co
 
   const handleInputChange = (name: string, value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleVisibilityChange = (userId: string) => {
-    setFormData(prev => {
-      const currentVisibleTo = prev.visibleTo || [];
-      const newVisibleTo = currentVisibleTo.includes(userId)
-        ? currentVisibleTo.filter(id => id !== userId)
-        : [...currentVisibleTo, userId];
-      return { ...prev, visibleTo: newVisibleTo };
-    });
   };
 
   // Get filtered users based on search term
@@ -177,8 +165,7 @@ const EditContactModal: React.FC<EditContactModalProps> = ({ isOpen, onClose, co
       country: '',
       zipCode: '',
       description: '',
-      status: 'Active',
-      visibleTo: []
+      status: 'Active'
     });
     setError(null);
     setShowUserSearch(false);

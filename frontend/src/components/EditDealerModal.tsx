@@ -38,8 +38,7 @@ const EditDealerModal: React.FC<EditDealerModalProps> = ({
     company: '',
     location: '',
     territory: '',
-    status: 'Active',
-    visibleTo: []
+    status: 'Active'
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tenantUsers, setTenantUsers] = useState<TenantUser[]>([]);
@@ -75,8 +74,7 @@ const EditDealerModal: React.FC<EditDealerModalProps> = ({
         company: dealer.company || '',
         location: dealer.location || '',
         territory: dealer.territory || '',
-        status: dealer.status || 'Active',
-        visibleTo: dealer.visibleTo || []
+        status: dealer.status || 'Active'
       });
     }
   }, [dealer, isOpen]);
@@ -85,14 +83,6 @@ const EditDealerModal: React.FC<EditDealerModalProps> = ({
 
   const handleInputChange = (name: string, value: any) => {
     setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleVisibilityChange = (userId: string) => {
-    const currentVisibleTo = formData.visibleTo || [];
-    const newVisibleTo = currentVisibleTo.includes(userId)
-      ? currentVisibleTo.filter(id => id !== userId)
-      : [...currentVisibleTo, userId];
-    handleInputChange('visibleTo', newVisibleTo);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
