@@ -1,29 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, CheckCircle2, Mail, Settings, Link2, AlertCircle, Send } from 'lucide-react';
+import { Loader2, CheckCircle2, Mail, Settings, Link2, AlertCircle, Send, Key, Server, Shield, TestTube } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import API from '../../api/client';
+import { useAuthStore } from '../../store/useAuthStore';
+
+interface SMTPConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  auth: {
+    user: string;
+    pass: string;
+  };
+  tls?: {
+    rejectUnauthorized: boolean;
+  };
+}
 
 const EmailIntegration: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [isConnected, setIsConnected] = useState(false);
-  const [autoSend, setAutoSend] = useState(true);
+  const [isConfiguring, setIsConfiguring] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
-  const [sesConfig, setSesConfig] = useState<{
+  const [configError, setConfigError] = useState<string | null>(null);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [userEmailStatus, setUserEmailStatus] = useState<{
     configured: boolean;
-    region: string;
+    verified: boolean;
+    email?: string;
     error?: string;
   } | null>(null);
-  const [userEmailStatus, setUserEmailStatus] = useState<{
-    email: string;
-    verified: boolean;
-    status: 'checking' | 'verified' | 'unverified' | 'error';
-  } | null>(null);
-  
-
 
   const [formData, setFormData] = useState({
     to: '',
@@ -31,94 +43,199 @@ const EmailIntegration: React.FC = () => {
     message: '',
   });
 
-  // Check SES configuration and user email verification on component mount
+  const [smtpConfig, setSmtpConfig] = useState<SMTPConfig>({
+    host: '',
+    port: 587,
+    secure: false,
+    auth: {
+      user: user?.email || '',
+      pass: '', // Always start with empty password
+    },
+    tls: {
+      rejectUnauthorized: false,
+    },
+  });
+
+  // Get user email from auth store
+  const userEmail = user?.email || '';
+
+  // Check user email configuration on component mount
   useEffect(() => {
-    checkSESConfiguration();
-    checkUserEmailVerification();
+    checkUserEmailConfiguration();
   }, []);
 
-  const checkSESConfiguration = async () => {
+  // Auto-sync SMTP username with user email
+  useEffect(() => {
+    if (userEmail) {
+      setSmtpConfig(prev => ({
+        ...prev,
+        auth: {
+          ...prev.auth,
+          user: userEmail,
+        },
+      }));
+    }
+  }, [userEmail]);
+
+  // Ensure password is always empty on mount and when user changes
+  useEffect(() => {
+    setSmtpConfig(prev => ({
+      ...prev,
+      auth: {
+        ...prev.auth,
+        pass: '',
+      },
+    }));
+  }, [userEmail]); // Clear password when user changes
+
+  const checkUserEmailConfiguration = async () => {
     try {
-      const response = await API.get('/email/config');
+      const response = await API.get('/email/user-config');
       const data = response.data;
       
-      setSesConfig(data);
-      
-      if (data.configured) {
-        setIsConnected(true);
-        setConnectionError(null);
+      if (data.success) {
+        setUserEmailStatus(data);
+        const shouldBeConnected = data.configured && data.verified;
+        setIsConnected(shouldBeConnected);
+        // User email is already set from auth store
       } else {
-        setConnectionError(data.error || 'SES not configured');
+        setUserEmailStatus({
+          configured: false,
+          verified: false,
+          error: data.error,
+        });
+        setIsConnected(false);
       }
     } catch (error: any) {
-      console.error('Error checking SES configuration:', error);
-      
-      if (error.response?.status === 404) {
-        setConnectionError('Email service not available. Please check if the backend is properly configured.');
-      } else if (error.response?.status === 401) {
-        setConnectionError('Authentication required. Please log in again.');
-      } else if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
-        setConnectionError('Backend server is not running. Please check if the server is started.');
-      } else {
-        setConnectionError(`Failed to check SES configuration: ${error.response?.data?.error || error.message}`);
-      }
-    }
-  };
-
-  const checkUserEmailVerification = async () => {
-    try {
-      // Get user info from API
-      const userResponse = await API.get('/users/profile/me');
-      const userData = userResponse.data;
-      const userEmail = userData.email;
-      
+      console.error('Error checking user email configuration:', error);
       setUserEmailStatus({
-        email: userEmail,
-        verified: true, // We'll assume verified for now, you can enhance this
-        status: 'verified'
+        configured: false,
+        verified: false,
+        error: 'Failed to check email configuration',
       });
-    } catch (error: any) {
-      console.error('Error checking user email verification:', error);
-      
-      if (error.response?.status === 401) {
-        setUserEmailStatus({
-          email: '',
-          verified: false,
-          status: 'error'
-        });
-      } else {
-        setUserEmailStatus({
-          email: '',
-          verified: false,
-          status: 'error'
-        });
-      }
+      setIsConnected(false);
     }
   };
 
-  const handleConnect = async () => {
+  const handleSMTPConfigChange = (field: string, value: any) => {
+    if (field.includes('.')) {
+      const [parent, child] = field.split('.');
+      setSmtpConfig(prev => ({
+        ...prev,
+        [parent]: {
+          ...(prev[parent as keyof SMTPConfig] as any),
+          [child]: value,
+        },
+      }));
+      } else {
+      setSmtpConfig(prev => ({
+        ...prev,
+        [field]: value,
+      }));
+    }
+  };
+
+  const handleTestConnection = async () => {
     setIsConnecting(true);
     setConnectionError(null);
     
     try {
-      // Test the connection
-      const response = await API.post('/email/test-connection', {
-        testEmail: 'test@example.com'
-      });
-
+      const response = await API.post('/email/test-smtp', { smtpConfig });
       const data = response.data;
       
       if (data.success) {
-        setIsConnected(true);
         setConnectionError(null);
+        // Show success message
+        alert('SMTP connection test successful! You can now save your configuration.');
       } else {
         setConnectionError(data.error || 'Connection test failed');
       }
     } catch (error: any) {
-      console.error('Error testing connection:', error);
+      console.error('Error testing SMTP connection:', error);
       setConnectionError(`Failed to test connection: ${error.response?.data?.error || error.message}`);
     } finally {
       setIsConnecting(false);
+    }
+  };
+
+  const handleSaveConfiguration = async () => {
+    if (!userEmail.trim()) {
+      setConfigError('Please enter your email address');
+      return;
+    }
+
+    if (!smtpConfig.host || !smtpConfig.auth.user || !smtpConfig.auth.pass) {
+      setConfigError('Please fill in all required SMTP fields');
+      return;
+    }
+
+    setIsConfiguring(true);
+    setConfigError(null);
+    
+    try {
+      const response = await API.post('/email/configure-smtp', {
+        email: userEmail,
+        smtpConfig,
+      });
+      
+      const data = response.data;
+      
+      if (data.success) {
+        setConfigError(null);
+        alert('SMTP configuration saved successfully! Please verify your email to complete setup.');
+        // Refresh user email status
+        await checkUserEmailConfiguration();
+      } else {
+        setConfigError(data.error || 'Failed to save configuration');
+      }
+    } catch (error: any) {
+      console.error('Error saving SMTP configuration:', error);
+      setConfigError(`Failed to save configuration: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setIsConfiguring(false);
+    }
+  };
+
+  const handleVerifyEmail = async () => {
+    if (!userEmail.trim() || !smtpConfig.host || !smtpConfig.auth.user || !smtpConfig.auth.pass) {
+      setVerificationError('Please ensure all SMTP configuration fields are filled');
+      return;
+    }
+
+    setIsVerifying(true);
+    setVerificationError(null);
+    
+    try {
+      const response = await API.post('/email/verify-email', {
+        email: userEmail,
+        smtpConfig,
+      });
+      
+      const data = response.data;
+      
+      if (data.success) {
+        setVerificationError(null);
+        alert('Email verification successful! You can now send emails.');
+        
+        // Update the connection status immediately
+        setIsConnected(true);
+        
+        // Update user email status locally to show verified
+        setUserEmailStatus(prev => prev ? {
+          ...prev,
+          verified: true
+        } : null);
+        
+        // Don't refresh from backend immediately - let the local state persist
+        // The backend refresh will happen on the next page load or manual refresh
+      } else {
+        setVerificationError(data.error || 'Email verification failed');
+      }
+    } catch (error: any) {
+      console.error('Error verifying email:', error);
+      setVerificationError(`Failed to verify email: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -134,8 +251,6 @@ const EmailIntegration: React.FC = () => {
         setEmailSent(true);
         setFormData({ to: '', subject: '', message: '' });
         setTimeout(() => setEmailSent(false), 3000);
-        
-
       } else {
         setEmailError(data.error || 'Failed to send email');
       }
@@ -147,9 +262,55 @@ const EmailIntegration: React.FC = () => {
     }
   };
 
+  const getCommonSMTPConfigs = () => [
+    {
+      name: 'Gmail',
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false,
+    },
+    {
+      name: 'Outlook/Hotmail',
+      host: 'smtp-mail.outlook.com',
+      port: 587,
+      secure: false,
+    },
+    {
+      name: 'Yahoo',
+      host: 'smtp.mail.yahoo.com',
+      port: 587,
+      secure: false,
+    },
+    {
+      name: 'Office 365',
+      host: 'smtp.office365.com',
+      port: 587,
+      secure: false,
+    },
+  ];
 
+  const applyCommonConfig = (config: any) => {
+    setSmtpConfig(prev => ({
+      ...prev,
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      auth: {
+        ...prev.auth,
+        pass: '', // Always clear password when applying new config
+      },
+    }));
+  };
 
-
+  const clearPassword = () => {
+    setSmtpConfig(prev => ({
+      ...prev,
+      auth: {
+        ...prev.auth,
+        pass: '',
+      },
+    }));
+  };
 
   return (
     <div className="p-6">
@@ -167,7 +328,7 @@ const EmailIntegration: React.FC = () => {
         </button>
       </div>
 
-      <div className="bg-white shadow rounded-xl p-6 space-y-6 max-w-3xl">
+      <div className="bg-white shadow rounded-xl p-6 space-y-6 max-w-4xl">
         {/* Status Section */}
         <div>
           <div className="flex items-center justify-between">
@@ -177,39 +338,39 @@ const EmailIntegration: React.FC = () => {
             </h2>
           </div>
           
-          {sesConfig && (
-            <div className="mt-2 p-3 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-600">
-                <strong>AWS Region:</strong> {sesConfig.region}
-              </p>
-              <p className="text-sm text-gray-600">
-                <strong>Status:</strong> {sesConfig.configured ? 'Configured' : 'Not Configured'}
-              </p>
-            </div>
-          )}
-
-          {userEmailStatus && (
-            <div className="mt-2 p-3 bg-blue-50 rounded-lg">
-              <p className="text-sm text-gray-600">
-                <strong>Your Email:</strong> {userEmailStatus.email}
-              </p>
-              <p className="text-sm text-gray-600">
-                <strong>Verification:</strong> 
-                <span className={`ml-1 ${
-                  userEmailStatus.status === 'verified' ? 'text-green-600' : 
-                  userEmailStatus.status === 'checking' ? 'text-yellow-600' : 'text-red-600'
-                }`}>
-                  {userEmailStatus.status === 'verified' ? '✓ Verified' :
-                   userEmailStatus.status === 'checking' ? '⏳ Checking...' :
-                   userEmailStatus.status === 'error' ? '✗ Error' : '✗ Unverified'}
-                </span>
-              </p>
-            </div>
-          )}
-          
-          <p className="text-sm text-gray-600 mt-1">
-            {isConnected ? "Connected to AWS SES" : "No email service connected"}
-          </p>
+                     {userEmailStatus && (
+             <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+               <div className="flex items-center justify-between">
+                 <div>
+                   <p className="text-sm text-gray-600">
+                     <strong>Service:</strong> NodeMailer SMTP
+                   </p>
+                   <p className="text-sm text-gray-600">
+                     <strong>Status:</strong> 
+                     <span className={`ml-1 ${
+                       userEmailStatus.verified ? 'text-green-600' : 
+                       userEmailStatus.configured ? 'text-yellow-600' : 'text-red-600'
+                     }`}>
+                       {userEmailStatus.verified ? '✓ Verified & Ready' :
+                        userEmailStatus.configured ? '⚠ Configured (Needs Verification)' : '✗ Not Configured'}
+                     </span>
+                   </p>
+                   {userEmailStatus.email && (
+                     <p className="text-sm text-gray-600">
+                       <strong>Email:</strong> {userEmailStatus.email}
+                     </p>
+                   )}
+                 </div>
+                 <button
+                   onClick={checkUserEmailConfiguration}
+                   className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                   title="Refresh status from server"
+                 >
+                   🔄 Refresh
+                 </button>
+               </div>
+             </div>
+           )}
           
           {connectionError && (
             <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
@@ -217,85 +378,237 @@ const EmailIntegration: React.FC = () => {
               <p className="text-sm text-red-600">{connectionError}</p>
             </div>
           )}
+        </div>
           
+        {/* SMTP Configuration Section */}
           {!isConnected && (
+          <div>
+            <h2 className="text-lg font-semibold text-gray-700 flex items-center gap-2 mb-4">
+              <Settings className="w-5 h-5 text-gray-500" />
+              Configure SMTP Settings
+            </h2>
+
+            {/* Common SMTP Configurations */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Quick Setup (Common Providers)</label>
+              <div className="flex flex-wrap gap-2">
+                {getCommonSMTPConfigs().map((config, index) => (
+                  <button
+                    key={index}
+                    onClick={() => applyCommonConfig(config)}
+                    className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                  >
+                    {config.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Email Address Display */}
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Mail className="w-4 h-4 inline mr-1" />
+                  Your Email Address
+                </label>
+                <div className="w-full p-2 bg-gray-50 border rounded text-gray-700">
+                  {userEmail || 'Loading...'}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  This is your authenticated email address from your account
+                </p>
+              </div>
+
+              {/* SMTP Host */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Server className="w-4 h-4 inline mr-1" />
+                  SMTP Server
+                </label>
+                <input
+                  type="text"
+                  placeholder="smtp.gmail.com"
+                  value={smtpConfig.host}
+                  onChange={(e) => handleSMTPConfigChange('host', e.target.value)}
+                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* SMTP Port */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Key className="w-4 h-4 inline mr-1" />
+                  Port
+                </label>
+                <input
+                  type="number"
+                  placeholder="587"
+                  value={smtpConfig.port}
+                  onChange={(e) => handleSMTPConfigChange('port', parseInt(e.target.value))}
+                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* Username - Hidden since it auto-syncs with user email */}
+              <input
+                type="hidden"
+                value={userEmail}
+                onChange={(e) => handleSMTPConfigChange('auth.user', e.target.value)}
+              />
+
+              {/* Password */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Key className="w-4 h-4 inline mr-1" />
+                  Password/App Password
+                </label>
+                <input
+                  type="password"
+                  placeholder="Your password or app password"
+                  value={smtpConfig.auth.pass}
+                  onChange={(e) => handleSMTPConfigChange('auth.pass', e.target.value)}
+                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-xs text-gray-500">
+                    Enter your SMTP password or Gmail App Password
+                  </p>
+                </div>
+              </div>
+
+              {/* Security Options */}
+              <div className="md:col-span-2">
+                <div className="flex items-center space-x-4">
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={smtpConfig.secure}
+                      onChange={(e) => handleSMTPConfigChange('secure', e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm text-gray-700">Use SSL/TLS (port 465)</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={smtpConfig.tls?.rejectUnauthorized || false}
+                      onChange={(e) => handleSMTPConfigChange('tls.rejectUnauthorized', e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm text-gray-700">Strict SSL verification</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap gap-3 mt-4">
             <button
-              onClick={handleConnect}
-              disabled={isConnecting}
-              className={`mt-3 px-4 py-2 rounded text-white ${
+                onClick={handleTestConnection}
+                disabled={isConnecting || !smtpConfig.host || !smtpConfig.auth.user || !smtpConfig.auth.pass}
+                className={`px-4 py-2 rounded text-white flex items-center gap-2 ${
                 isConnecting
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-blue-600 hover:bg-blue-700'
               }`}
             >
               {isConnecting ? (
-                <span className="flex items-center gap-2">
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Testing...
+                  </>
+                ) : (
+                  <>
+                    <TestTube className="w-4 h-4" />
+                    Test Connection
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={handleSaveConfiguration}
+                disabled={isConfiguring || !userEmail || !smtpConfig.host || !smtpConfig.auth.user || !smtpConfig.auth.pass}
+                className={`px-4 py-2 rounded text-white flex items-center gap-2 ${
+                  isConfiguring
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                {isConfiguring ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Settings className="w-4 h-4" />
+                    Save Configuration
+                  </>
+                )}
+              </button>
+
+              {userEmailStatus?.configured && !userEmailStatus?.verified && (
+                <button
+                  onClick={handleVerifyEmail}
+                  disabled={isVerifying || !userEmail || !smtpConfig.host || !smtpConfig.auth.user || !smtpConfig.auth.pass}
+                  className={`px-4 py-2 rounded text-white flex items-center gap-2 ${
+                    isVerifying
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-purple-600 hover:bg-purple-700'
+                  }`}
+                >
+                  {isVerifying ? (
+                    <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Testing Connection...
-                </span>
+                      Verifying...
+                    </>
               ) : (
-                'Test Connection'
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      Verify Email
+                    </>
               )}
             </button>
           )}
         </div>
 
+            {/* Error Messages */}
+            {configError && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-red-500" />
+                <p className="text-sm text-red-600">{configError}</p>
+                </div>
+            )}
+
+            {verificationError && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-red-500" />
+                <p className="text-sm text-red-600">{verificationError}</p>
+                </div>
+            )}
+
+            {/* Help Text */}
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <h4 className="font-medium text-blue-800 mb-2">💡 Setup Instructions:</h4>
+              <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
+                <li>Your email address is automatically filled from your account</li>
+                <li>Enter your SMTP server details (host, port, password)</li>
+                <li>Username is automatically set to match your email</li>
+                <li>Test the connection to verify your settings</li>
+                <li>Save your configuration</li>
+                <li>Verify your email by clicking the verification button</li>
+                <li>Once verified, you can start sending emails!</li>
+              </ol>
+              <div className="mt-2 text-xs text-blue-600">
+                <strong>Note:</strong> For Gmail, you may need to use an App Password instead of your regular password.
+              </div>
+            </div>
+            </div>
+        )}
+
         {/* Connected Sections */}
         {isConnected && (
           <>
-            {/* AWS SES Settings */}
-            <div>
-              <h2 className="text-lg font-semibold text-gray-700 flex items-center gap-2">
-                <Settings className="w-5 h-5 text-gray-500" />
-                AWS SES Configuration
-              </h2>
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-gray-600">Service</label>
-                  <input
-                    type="text"
-                    readOnly
-                    value="AWS SES"
-                    className="mt-1 w-full p-2 border rounded bg-gray-100 text-gray-700"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600">Region</label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={sesConfig?.region || 'us-east-1'}
-                    className="mt-1 w-full p-2 border rounded bg-gray-100 text-gray-700"
-                  />
-                </div>
-              </div>
-              <div className="mt-3">
-                <label className="block text-sm text-gray-600">Sender Email</label>
-                <input
-                  type="text"
-                  readOnly
-                  value="Logged-in user's email"
-                  className="mt-1 w-full p-2 border rounded bg-gray-100 text-gray-700"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Emails will be sent from the currently logged-in user's email address
-                </p>
-              </div>
-            </div>
-
-            {/* Auto-send Toggle */}
-            <div className="flex items-center space-x-3">
-              <input
-                type="checkbox"
-                checked={autoSend}
-                onChange={(e) => setAutoSend(e.target.checked)}
-                className="w-4 h-4"
-              />
-              <label className="text-sm text-gray-700">
-                Enable Auto-Send for new deals
-              </label>
-            </div>
-
             {/* Email Form */}
             <div className="border-t pt-4">
               <h2 className="text-lg font-semibold text-gray-700 mb-4">Send Email</h2>
@@ -368,8 +681,6 @@ const EmailIntegration: React.FC = () => {
                 )}
               </div>
             </div>
-
-
           </>
         )}
       </div>
@@ -378,3 +689,4 @@ const EmailIntegration: React.FC = () => {
 };
 
 export default EmailIntegration;
+

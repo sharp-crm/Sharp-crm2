@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { EmailData } from '../services/emailService';
+import { EmailData, SMTPConfig } from '../services/emailService';
 import emailService from '../services/emailService';
 import { AuthenticatedRequest } from '../middlewares/authenticate';
 import { EmailHistoryModel } from '../models/emailHistory';
@@ -17,6 +17,180 @@ router.get('/config', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to check email configuration',
+    });
+  }
+});
+
+// Route to get user's email configuration status
+router.get('/user-config', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as AuthenticatedRequest).user.userId;
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        error: 'User ID not found in user context',
+      });
+      return;
+    }
+
+    const status = await emailService.getUserEmailStatus(userId);
+    res.json({
+      success: true,
+      ...status,
+    });
+  } catch (error) {
+    console.error('❌ Error getting user email config:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get user email configuration',
+    });
+  }
+});
+
+// Route to configure user's SMTP settings
+router.post('/configure-smtp', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as AuthenticatedRequest).user.userId;
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        error: 'User ID not found in user context',
+      });
+      return;
+    }
+
+    const { email, smtpConfig }: { email: string; smtpConfig: SMTPConfig } = req.body;
+
+    // Validate required fields
+    if (!email || !smtpConfig) {
+      res.status(400).json({
+        success: false,
+        error: 'Email and SMTP configuration are required',
+      });
+      return;
+    }
+
+    // Validate SMTP config
+    if (!smtpConfig.host || !smtpConfig.port || !smtpConfig.auth?.user || !smtpConfig.auth?.pass) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid SMTP configuration. Host, port, username, and password are required.',
+      });
+      return;
+    }
+
+    // Test SMTP connection first
+    const connectionTest = await emailService.testSMTPConnection(smtpConfig);
+    if (!connectionTest) {
+      res.status(400).json({
+        success: false,
+        error: 'SMTP connection test failed. Please check your settings.',
+      });
+      return;
+    }
+
+    // Store the configuration
+    const stored = await emailService.storeUserEmailConfig(userId, email, smtpConfig);
+    if (!stored) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to store SMTP configuration',
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      message: 'SMTP configuration stored successfully. Please verify your email to complete setup.',
+    });
+  } catch (error) {
+    console.error('❌ Error configuring SMTP:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to configure SMTP settings',
+    });
+  }
+});
+
+// Route to verify user's email configuration
+router.post('/verify-email', async (req: Request, res: Response) => {
+  try {
+    const userId = (req as AuthenticatedRequest).user.userId;
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        error: 'User ID not found in user context',
+      });
+      return;
+    }
+
+    const { email, smtpConfig }: { email: string; smtpConfig: SMTPConfig } = req.body;
+
+    // Validate required fields
+    if (!email || !smtpConfig) {
+      res.status(400).json({
+        success: false,
+        error: 'Email and SMTP configuration are required',
+      });
+      return;
+    }
+
+    // Verify the configuration by sending a test email
+    const verified = await emailService.verifyUserEmailConfig(userId, email, smtpConfig);
+    if (!verified) {
+      res.status(400).json({
+        success: false,
+        error: 'Email verification failed. Please check your SMTP settings.',
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      message: 'Email configuration verified successfully! You can now send emails.',
+    });
+  } catch (error) {
+    console.error('❌ Error verifying email:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to verify email configuration',
+    });
+  }
+});
+
+// Route to test SMTP connection
+router.post('/test-smtp', async (req: Request, res: Response) => {
+  try {
+    const { smtpConfig }: { smtpConfig: SMTPConfig } = req.body;
+
+    // Validate SMTP config
+    if (!smtpConfig.host || !smtpConfig.port || !smtpConfig.auth?.user || !smtpConfig.auth?.pass) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid SMTP configuration. Host, port, username, and password are required.',
+      });
+      return;
+    }
+
+    // Test the connection
+    const connectionTest = await emailService.testSMTPConnection(smtpConfig);
+    
+    if (connectionTest) {
+      res.json({
+        success: true,
+        message: 'SMTP connection test successful',
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: 'SMTP connection test failed. Please check your settings.',
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error testing SMTP connection:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to test SMTP connection',
     });
   }
 });

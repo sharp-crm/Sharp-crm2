@@ -267,10 +267,12 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                - ses:SendEmail
-                - ses:SendRawEmail
-                - ses:GetSendQuota
-                - ses:GetSendStatistics
+                - secretsmanager:GetSecretValue
+                - secretsmanager:CreateSecret
+                - secretsmanager:UpdateSecret
+                - secretsmanager:DeleteSecret
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecrets
               Resource: '*'
 
   # Email Service Lambda Function
@@ -292,10 +294,12 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                - ses:SendEmail
-                - ses:SendRawEmail
-                - ses:GetSendQuota
-                - ses:GetSendStatistics
+                - secretsmanager:GetSecretValue
+                - secretsmanager:CreateSecret
+                - secretsmanager:UpdateSecret
+                - secretsmanager:DeleteSecret
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecrets
               Resource: '*'
             - Effect: Allow
               Action:
