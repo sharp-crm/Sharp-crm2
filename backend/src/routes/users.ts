@@ -188,6 +188,44 @@ router.get("/managers", authenticate, requirePermission('view', 'user'), async (
 });
 
 
+// Get tenant users for chat (minimal data, no RBAC filtering for chat purposes)
+router.get("/chat-users", authenticate, async (req: any, res, next) => {
+  try {
+    const currentUser = req.user;
+    if (!currentUser) {
+      throw createError("User not found in token", 401);
+    }
+
+    // Get all users in the same tenant for chat purposes
+    const result = await docClient.send(
+      new QueryCommand({
+        TableName: TABLES.USERS,
+        IndexName: 'TenantRoleIndex',
+        KeyConditionExpression: 'tenantId = :tenantId',
+        FilterExpression: 'isDeleted = :isDeleted',
+        ExpressionAttributeValues: {
+          ':tenantId': currentUser.tenantId,
+          ':isDeleted': false
+        }
+      })
+    );
+
+    const users = (result.Items || []).map(user => ({
+      userId: user.userId,
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      email: user.email,
+      role: normalizeRole(user.role),
+      tenantId: user.tenantId,
+      status: 'offline' // Default status, will be updated by socket connection
+    }));
+
+    res.json({ success: true, data: users });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get all users for the same tenant (hierarchical)
 router.get("/tenant-users", authenticate, requirePermission('view', 'user'), async (req: any, res, next) => {
   try {

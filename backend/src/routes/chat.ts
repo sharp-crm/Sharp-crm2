@@ -1,7 +1,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { AuthenticatedRequest, authenticate } from '../middlewares/authenticate';
-import { docClient } from '../services/dynamoClient';
+import { docClient, TABLES } from '../services/dynamoClient';
 import { 
   PutCommand, 
   GetCommand, 
@@ -30,7 +30,7 @@ router.get('/channels', async (req, res) => {
     }
 
     const result = await docClient.send(new QueryCommand({
-      TableName: 'Channels',
+      TableName: TABLES.CHANNELS,
       IndexName: 'TenantIdIndex',
       KeyConditionExpression: 'tenantId = :tenantId',
       ExpressionAttributeValues: {
@@ -97,7 +97,7 @@ router.post('/channels', async (req, res) => {
     };
 
     await docClient.send(new PutCommand({
-      TableName: 'Channels',
+      TableName: TABLES.CHANNELS,
       Item: channel
     }));
 
@@ -132,7 +132,7 @@ router.get('/channels/:channelId/messages', async (req, res) => {
 
     // Check if user is member of channel
     const channelResult = await docClient.send(new GetCommand({
-      TableName: 'Channels',
+      TableName: TABLES.CHANNELS,
       Key: { channelId, tenantId }
     }));
 
@@ -145,7 +145,7 @@ router.get('/channels/:channelId/messages', async (req, res) => {
     }
 
     const messagesResult = await docClient.send(new QueryCommand({
-      TableName: 'Messages',
+      TableName: TABLES.MESSAGES,
       KeyConditionExpression: 'channelId = :channelId',
       ExpressionAttributeValues: {
         ':channelId': channelId
@@ -194,7 +194,7 @@ router.post('/channels/:channelId/messages', async (req, res) => {
 
     // Check if user can post to channel
     const channelResult = await docClient.send(new GetCommand({
-      TableName: 'Channels',
+      TableName: TABLES.CHANNELS,
       Key: { channelId, tenantId }
     }));
 
@@ -231,7 +231,7 @@ router.post('/channels/:channelId/messages', async (req, res) => {
     };
 
     await docClient.send(new PutCommand({
-      TableName: 'Messages',
+      TableName: TABLES.MESSAGES,
       Item: message
     }));
 
@@ -275,7 +275,7 @@ router.post('/channels/:channelId/messages/:messageTimestamp/reactions', async (
 
     // Check if user is member of channel
     const channelResult = await docClient.send(new GetCommand({
-      TableName: 'Channels',
+      TableName: TABLES.CHANNELS,
       Key: { channelId, tenantId }
     }));
 
@@ -289,7 +289,7 @@ router.post('/channels/:channelId/messages/:messageTimestamp/reactions', async (
 
     // Update message with reaction
     await docClient.send(new UpdateCommand({
-      TableName: 'Messages',
+      TableName: TABLES.MESSAGES,
       Key: { channelId, timestamp: messageTimestamp },
       UpdateExpression: 'SET reactions.#emoji = if_not_exists(reactions.#emoji, :emptyList) + :userId',
       ExpressionAttributeNames: {
@@ -332,7 +332,7 @@ router.post('/channels/:channelId/messages/:messageTimestamp/read', async (req, 
 
     // Check if user is member of channel
     const channelResult = await docClient.send(new GetCommand({
-      TableName: 'Channels',
+      TableName: TABLES.CHANNELS,
       Key: { channelId, tenantId }
     }));
 
@@ -348,7 +348,7 @@ router.post('/channels/:channelId/messages/:messageTimestamp/read', async (req, 
 
     // Update message with read receipt
     await docClient.send(new UpdateCommand({
-      TableName: 'Messages',
+      TableName: TABLES.MESSAGES,
       Key: { channelId, timestamp: messageTimestamp },
       UpdateExpression: 'SET readBy.#userId = :readTimestamp',
       ExpressionAttributeNames: {
@@ -399,7 +399,7 @@ router.post('/channels/:channelId/members', async (req, res) => {
 
     // Check if user can invite to channel
     const channelResult = await docClient.send(new GetCommand({
-      TableName: 'Channels',
+      TableName: TABLES.CHANNELS,
       Key: { channelId, tenantId }
     }));
 
@@ -430,7 +430,7 @@ router.post('/channels/:channelId/members', async (req, res) => {
 
     // Add member to channel
     await docClient.send(new UpdateCommand({
-      TableName: 'Channels',
+      TableName: TABLES.CHANNELS,
       Key: { channelId, tenantId },
       UpdateExpression: 'ADD members :newMember SET memberPermissions.#newMemberId = :permissions, updatedAt = :timestamp',
       ExpressionAttributeNames: {
@@ -474,7 +474,7 @@ router.delete('/channels/:channelId/members/:memberId', async (req, res) => {
 
     // Check if user can manage channel
     const channelResult = await docClient.send(new GetCommand({
-      TableName: 'Channels',
+      TableName: TABLES.CHANNELS,
       Key: { channelId, tenantId }
     }));
 
@@ -505,7 +505,7 @@ router.delete('/channels/:channelId/members/:memberId', async (req, res) => {
 
     // Remove member from channel
     await docClient.send(new UpdateCommand({
-      TableName: 'Channels',
+      TableName: TABLES.CHANNELS,
       Key: { channelId, tenantId },
       UpdateExpression: 'DELETE members :member REMOVE memberPermissions.#memberId SET updatedAt = :timestamp',
       ExpressionAttributeNames: {
@@ -526,6 +526,266 @@ router.delete('/channels/:channelId/members/:memberId', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to remove member'
+    });
+  }
+});
+
+// Direct Messages endpoints
+
+// Get direct message conversations for a user
+router.get('/direct-messages', async (req, res) => {
+  try {
+    const authReq = req as unknown as AuthenticatedRequest;
+    const userId = authReq.user?.userId;
+    const tenantId = authReq.user?.tenantId;
+    
+    if (!userId || !tenantId) {
+      res.status(401).json({ 
+        success: false, 
+        message: 'User not authenticated' 
+      });
+      return;
+    }
+
+    // Query messages where user is sender or recipient
+    const senderResult = await docClient.send(new QueryCommand({
+      TableName: TABLES.DIRECT_MESSAGES,
+      IndexName: 'SenderIdIndex',
+      KeyConditionExpression: 'senderId = :userId',
+      FilterExpression: 'tenantId = :tenantId',
+      ExpressionAttributeValues: {
+        ':userId': userId,
+        ':tenantId': tenantId
+      },
+      ScanIndexForward: false,
+      Limit: 50
+    }));
+
+    const recipientResult = await docClient.send(new QueryCommand({
+      TableName: TABLES.DIRECT_MESSAGES,
+      IndexName: 'RecipientIdIndex',
+      KeyConditionExpression: 'recipientId = :userId',
+      FilterExpression: 'tenantId = :tenantId',
+      ExpressionAttributeValues: {
+        ':userId': userId,
+        ':tenantId': tenantId
+      },
+      ScanIndexForward: false,
+      Limit: 50
+    }));
+
+    // Combine and sort messages
+    const allMessages = [
+      ...(senderResult.Items || []),
+      ...(recipientResult.Items || [])
+    ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    res.json({
+      success: true,
+      data: allMessages
+    });
+  } catch (error) {
+    console.error('Error fetching direct messages:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch direct messages'
+    });
+  }
+});
+
+// Get conversation messages between two users
+router.get('/direct-messages/:otherUserId', async (req, res) => {
+  try {
+    const { otherUserId } = req.params;
+    const authReq = req as unknown as AuthenticatedRequest;
+    const userId = authReq.user?.userId;
+    const tenantId = authReq.user?.tenantId;
+    
+    if (!userId || !tenantId) {
+      res.status(401).json({ 
+        success: false, 
+        message: 'User not authenticated' 
+      });
+      return;
+    }
+
+    // Create conversation ID (consistent ordering)
+    const conversationId = [userId, otherUserId].sort().join('_');
+
+    const result = await docClient.send(new QueryCommand({
+      TableName: TABLES.DIRECT_MESSAGES,
+      KeyConditionExpression: 'conversationId = :conversationId',
+      FilterExpression: 'tenantId = :tenantId',
+      ExpressionAttributeValues: {
+        ':conversationId': conversationId,
+        ':tenantId': tenantId
+      },
+      ScanIndexForward: false,
+      Limit: 50
+    }));
+
+    res.json({
+      success: true,
+      data: result.Items || []
+    });
+  } catch (error) {
+    console.error('Error fetching conversation:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch conversation'
+    });
+  }
+});
+
+// Send a direct message
+router.post('/direct-messages', async (req, res) => {
+  try {
+    const { recipientId, content, type = 'text', files } = req.body;
+    const authReq = req as unknown as AuthenticatedRequest;
+    const userId = authReq.user?.userId;
+    const tenantId = authReq.user?.tenantId;
+    
+    if (!userId || !tenantId) {
+      res.status(401).json({ 
+        success: false, 
+        message: 'User not authenticated' 
+      });
+      return;
+    }
+
+    if (!recipientId || !content) {
+      res.status(400).json({
+        success: false,
+        message: 'Recipient ID and content are required'
+      });
+      return;
+    }
+
+    // Verify recipient exists and is in same tenant
+    const recipientResult = await docClient.send(new QueryCommand({
+      TableName: TABLES.USERS,
+      IndexName: 'UserIdIndex',
+      KeyConditionExpression: 'userId = :userId',
+      FilterExpression: 'tenantId = :tenantId AND isDeleted = :isDeleted',
+      ExpressionAttributeValues: {
+        ':userId': recipientId,
+        ':tenantId': tenantId,
+        ':isDeleted': false
+      }
+    }));
+
+    if (!recipientResult.Items || recipientResult.Items.length === 0) {
+      res.status(404).json({
+        success: false,
+        message: 'Recipient not found or not in same tenant'
+      });
+      return;
+    }
+
+    const messageId = uuidv4();
+    const timestamp = new Date().toISOString();
+    const conversationId = [userId, recipientId].sort().join('_');
+
+    const message = {
+      messageId,
+      conversationId,
+      timestamp,
+      senderId: userId,
+      recipientId,
+      tenantId,
+      content,
+      type,
+      files: files || [],
+      isEdited: false,
+      isDeleted: false,
+      readBy: [],
+      reactions: {}
+    };
+
+    await docClient.send(new PutCommand({
+      TableName: TABLES.DIRECT_MESSAGES,
+      Item: message
+    }));
+
+    res.status(201).json({
+      success: true,
+      data: message
+    });
+  } catch (error) {
+    console.error('Error sending direct message:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send direct message'
+    });
+  }
+});
+
+// Mark direct message as read
+router.post('/direct-messages/:messageId/read', async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const authReq = req as unknown as AuthenticatedRequest;
+    const userId = authReq.user?.userId;
+    const tenantId = authReq.user?.tenantId;
+    
+    if (!userId || !tenantId) {
+      res.status(401).json({ 
+        success: false, 
+        message: 'User not authenticated' 
+      });
+      return;
+    }
+
+    // Find the message first
+    const messageResult = await docClient.send(new QueryCommand({
+      TableName: TABLES.DIRECT_MESSAGES,
+      IndexName: 'MessageIdIndex',
+      KeyConditionExpression: 'messageId = :messageId',
+      FilterExpression: 'tenantId = :tenantId AND (senderId = :userId OR recipientId = :userId)',
+      ExpressionAttributeValues: {
+        ':messageId': messageId,
+        ':tenantId': tenantId,
+        ':userId': userId
+      }
+    }));
+
+    if (!messageResult.Items || messageResult.Items.length === 0) {
+      res.status(404).json({
+        success: false,
+        message: 'Message not found or access denied'
+      });
+      return;
+    }
+
+    const message = messageResult.Items[0];
+    const readTimestamp = new Date().toISOString();
+
+    // Update message with read receipt
+    await docClient.send(new UpdateCommand({
+      TableName: TABLES.DIRECT_MESSAGES,
+      Key: { 
+        conversationId: message.conversationId, 
+        timestamp: message.timestamp 
+      },
+      UpdateExpression: 'SET readBy = list_append(if_not_exists(readBy, :emptyList), :readBy)',
+      ExpressionAttributeValues: {
+        ':emptyList': [],
+        ':readBy': [{
+          userId: userId,
+          readAt: readTimestamp
+        }]
+      }
+    }));
+
+    res.json({
+      success: true,
+      message: 'Message marked as read'
+    });
+  } catch (error) {
+    console.error('Error marking message as read:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark message as read'
     });
   }
 });

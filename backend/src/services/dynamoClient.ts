@@ -92,7 +92,11 @@ export const TABLES = {
   NOTIFICATIONS: process.env.NOTIFICATIONS_TABLE_NAME || process.env.NOTIFICATIONS_TABLE || 'SharpCRM-Notifications-development',
   REPORTS: process.env.REPORTS_TABLE_NAME || process.env.REPORTS_TABLE || 'SharpCRM-Reports-development',
   REFRESH_TOKENS: process.env.REFRESH_TOKENS_TABLE_NAME || process.env.REFRESH_TOKENS_TABLE || 'SharpCRM-RefreshTokens-development',
-  QUOTES: process.env.QUOTES_TABLE_NAME || process.env.QUOTES_TABLE || 'SharpCRM-Quotes-development'
+  QUOTES: process.env.QUOTES_TABLE_NAME || process.env.QUOTES_TABLE || 'SharpCRM-Quotes-development',
+  CHANNELS: process.env.CHANNELS_TABLE_NAME || process.env.CHANNELS_TABLE || 'SharpCRM-Channels-development',
+  MESSAGES: process.env.MESSAGES_TABLE_NAME || process.env.MESSAGES_TABLE || 'SharpCRM-Messages-development',
+  CHANNEL_MEMBERS: process.env.CHANNEL_MEMBERS_TABLE_NAME || process.env.CHANNEL_MEMBERS_TABLE || 'SharpCRM-ChannelMembers-development',
+  DIRECT_MESSAGES: process.env.DIRECT_MESSAGES_TABLE_NAME || process.env.DIRECT_MESSAGES_TABLE || 'SharpCRM-DirectMessages-development'
 } as const;
 
 // Debug table names (same pattern as auth routes)

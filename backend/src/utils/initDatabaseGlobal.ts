@@ -478,6 +478,186 @@ const tables = [
       }
     ],
     BillingMode: "PAY_PER_REQUEST"
+  },
+  {
+    TableName: getTableName("Channels"),
+    KeySchema: [
+      { AttributeName: "channelId", KeyType: "HASH" },
+      { AttributeName: "tenantId", KeyType: "RANGE" }
+    ],
+    AttributeDefinitions: [
+      { AttributeName: "channelId", AttributeType: "S" },
+      { AttributeName: "tenantId", AttributeType: "S" },
+      { AttributeName: "createdBy", AttributeType: "S" },
+      { AttributeName: "name", AttributeType: "S" }
+    ],
+    GlobalSecondaryIndexes: [
+      {
+        IndexName: "TenantIdIndex",
+        KeySchema: [
+          { AttributeName: "tenantId", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "CreatedByIndex",
+        KeySchema: [
+          { AttributeName: "createdBy", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "TenantNameIndex",
+        KeySchema: [
+          { AttributeName: "tenantId", KeyType: "HASH" },
+          { AttributeName: "name", KeyType: "RANGE" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      }
+    ],
+    BillingMode: "PAY_PER_REQUEST"
+  },
+  {
+    TableName: getTableName("Messages"),
+    KeySchema: [
+      { AttributeName: "channelId", KeyType: "HASH" },
+      { AttributeName: "timestamp", KeyType: "RANGE" }
+    ],
+    AttributeDefinitions: [
+      { AttributeName: "channelId", AttributeType: "S" },
+      { AttributeName: "timestamp", AttributeType: "S" },
+      { AttributeName: "messageId", AttributeType: "S" },
+      { AttributeName: "senderId", AttributeType: "S" },
+      { AttributeName: "tenantId", AttributeType: "S" }
+    ],
+    GlobalSecondaryIndexes: [
+      {
+        IndexName: "MessageIdIndex",
+        KeySchema: [
+          { AttributeName: "messageId", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "SenderIdIndex",
+        KeySchema: [
+          { AttributeName: "senderId", KeyType: "HASH" },
+          { AttributeName: "timestamp", KeyType: "RANGE" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "TenantIdIndex",
+        KeySchema: [
+          { AttributeName: "tenantId", KeyType: "HASH" },
+          { AttributeName: "timestamp", KeyType: "RANGE" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      }
+    ],
+    BillingMode: "PAY_PER_REQUEST"
+  },
+  {
+    TableName: getTableName("ChannelMembers"),
+    KeySchema: [
+      { AttributeName: "channelId", KeyType: "HASH" },
+      { AttributeName: "userId", KeyType: "RANGE" }
+    ],
+    AttributeDefinitions: [
+      { AttributeName: "channelId", AttributeType: "S" },
+      { AttributeName: "userId", AttributeType: "S" },
+      { AttributeName: "tenantId", AttributeType: "S" }
+    ],
+    GlobalSecondaryIndexes: [
+      {
+        IndexName: "UserIdIndex",
+        KeySchema: [
+          { AttributeName: "userId", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "TenantIdIndex",
+        KeySchema: [
+          { AttributeName: "tenantId", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      }
+    ],
+    BillingMode: "PAY_PER_REQUEST"
+  },
+  {
+    TableName: getTableName("DirectMessages"),
+    KeySchema: [
+      { AttributeName: "conversationId", KeyType: "HASH" },
+      { AttributeName: "timestamp", KeyType: "RANGE" }
+    ],
+    AttributeDefinitions: [
+      { AttributeName: "conversationId", AttributeType: "S" },
+      { AttributeName: "timestamp", AttributeType: "S" },
+      { AttributeName: "messageId", AttributeType: "S" },
+      { AttributeName: "senderId", AttributeType: "S" },
+      { AttributeName: "recipientId", AttributeType: "S" },
+      { AttributeName: "tenantId", AttributeType: "S" }
+    ],
+    GlobalSecondaryIndexes: [
+      {
+        IndexName: "MessageIdIndex",
+        KeySchema: [
+          { AttributeName: "messageId", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "SenderIdIndex",
+        KeySchema: [
+          { AttributeName: "senderId", KeyType: "HASH" },
+          { AttributeName: "timestamp", KeyType: "RANGE" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "RecipientIdIndex",
+        KeySchema: [
+          { AttributeName: "recipientId", KeyType: "HASH" },
+          { AttributeName: "timestamp", KeyType: "RANGE" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      },
+      {
+        IndexName: "TenantIdIndex",
+        KeySchema: [
+          { AttributeName: "tenantId", KeyType: "HASH" },
+          { AttributeName: "timestamp", KeyType: "RANGE" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      }
+    ],
+    BillingMode: "PAY_PER_REQUEST"
   }
 ];
 

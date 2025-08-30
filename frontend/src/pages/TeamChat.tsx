@@ -1,14 +1,13 @@
 // src/Pages/TeamChat.tsx
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import * as Icons from 'lucide-react';
-import PageHeader from '../components/Common/PageHeader';
-import StatusBadge from '../components/Common/StatusBadge';
 import data from '@emoji-mart/data'
 import Picker from '@emoji-mart/react'
 import { format } from 'date-fns';
 import API from '../api/client';
 import { useAuthStore } from '../store/useAuthStore';
 import socketService from '../services/socketService';
+import { API_CONFIG } from '../config/api';
 import ChannelModal from '../components/ChannelModal';
 import ChannelSettingsModal from '../components/ChannelSettingsModal';
 
@@ -112,26 +111,21 @@ interface DirectChat {
   lastMessage?: Message;
 }
 
-interface ChannelMessages {
-  [channelId: string]: Message[];
-}
+
 
 const TeamChat: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedChannel, setSelectedChannel] = useState<string>('');
   const [directMessages, setDirectMessages] = useState<{ [key: string]: Message[] }>({});
   const [channels, setChannels] = useState<Channel[]>([]);
-  
-  const [messages, setMessages] = useState<Message[]>([]);
-  
   const [users, setUsers] = useState<User[]>([]);
   const currentUser = useAuthStore(state => state.user);
 
-  // Fetch tenant users
+  // Fetch tenant users for chat
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const response = await API.get('/users/tenant-users');
+        const response = await API.get('/users/chat-users');
         const data = response.data?.data || [];
         
         // Map the users to include status
@@ -191,59 +185,125 @@ const TeamChat: React.FC = () => {
     fetchChannels();
   }, []);
 
+  // Auto-refresh interval for Lambda environment
+  useEffect(() => {
+    // Set up auto-refresh for Lambda environment every 2 seconds for better UX
+    const isLambdaEnvironment = API_CONFIG.BASE_URL.includes('amazonaws.com');
+    
+    if (isLambdaEnvironment && (selectedChannel || selectedUser)) {
+      const refreshInterval = setInterval(() => {
+        if (selectedChannel) {
+          fetchChannelMessages(false); // Not initial load - only add new messages
+        } else if (selectedUser) {
+          fetchDirectMessages(selectedUser, false); // Not initial load - only add new messages
+        }
+      }, 2000); // Refresh every 2 seconds for near real-time experience
+
+      return () => clearInterval(refreshInterval);
+    }
+  }, [selectedChannel, selectedUser]);
+
   // Fetch channel messages when a channel is selected
   useEffect(() => {
     if (!selectedChannel) return;
+    fetchChannelMessages(true); // Initial load
+  }, [selectedChannel]);
 
-    const fetchChannelMessages = async () => {
-      try {
-        const response = await API.get(`/chat/channels/${selectedChannel}/messages`);
-        if (response.data?.data) {
-          const mappedMessages = response.data.data.map((msg: any) => ({
-            id: msg.id,
-            senderId: msg.senderId,
-            sender: getUserName(msg.senderId),
-            content: msg.content,
-            timestamp: new Date(msg.timestamp),
-            type: msg.type,
-            channelId: msg.channelId,
-            reactions: msg.reactions || [],
-            isEdited: msg.isEdited || false,
-            readBy: msg.readBy || [],
-            threadMessages: [],
-            files: msg.files
-          }));
-          
+  const fetchChannelMessages = async (isInitialLoad = false) => {
+    if (!selectedChannel) return;
+    
+    try {
+      setIsRefreshing(true);
+      const response = await API.get(`/chat/channels/${selectedChannel}/messages`);
+      if (response.data?.data) {
+        const mappedMessages = response.data.data.map((msg: any) => ({
+          id: msg.id,
+          senderId: msg.senderId,
+          sender: getUserName(msg.senderId),
+          content: msg.content,
+          timestamp: new Date(msg.timestamp),
+          type: msg.type,
+          channelId: msg.channelId,
+          reactions: msg.reactions || [],
+          isEdited: msg.isEdited || false,
+          readBy: msg.readBy || [],
+          threadMessages: [],
+          files: msg.files
+        }));
+        
+        if (isInitialLoad) {
+          // Initial load - replace all messages
           setChannelMessages(prev => ({
             ...prev,
             [selectedChannel]: mappedMessages
           }));
+          // Scroll to bottom after initial load
+          setTimeout(() => scrollToBottom(), 200);
+        } else {
+          // Subsequent fetches - only add new messages
+          setChannelMessages(prev => {
+            const existingMessages = prev[selectedChannel] || [];
+            
+            // Remove temporary messages (optimistic updates) and keep only real messages
+            const realExistingMessages = existingMessages.filter(msg => !msg.id.startsWith('temp-'));
+            const existingMessageIds = new Set(realExistingMessages.map(msg => msg.id));
+            
+            // Also check for content-based duplicates to prevent same message appearing twice
+            const existingContentKeys = new Set(
+              realExistingMessages.map(msg => 
+                `${msg.senderId}-${msg.content}-${Math.floor(new Date(msg.timestamp).getTime() / 60000)}` // Same sender, content, within same minute
+              )
+            );
+            
+            // Find only new messages (not by ID and not by content similarity)
+            const newMessages = mappedMessages.filter((msg: any) => {
+              const isNotDuplicateId = !existingMessageIds.has(msg.id);
+              const contentKey = `${msg.senderId}-${msg.content}-${Math.floor(new Date(msg.timestamp).getTime() / 60000)}`;
+              const isNotDuplicateContent = !existingContentKeys.has(contentKey);
+              
+              return isNotDuplicateId && isNotDuplicateContent;
+            });
+            
+            if (newMessages.length > 0) {
+              console.log(`📬 Found ${newMessages.length} new channel messages`);
+              // Combine real existing messages with new messages and sort by timestamp
+              const allMessages = [...realExistingMessages, ...newMessages]
+                .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+              
+              // Auto-scroll to bottom for new messages
+              setTimeout(() => scrollToBottom(), 100);
+              
+              return {
+                ...prev,
+                [selectedChannel]: allMessages
+              };
+            }
+            
+            return prev; // No new messages, return unchanged
+          });
         }
-      } catch (error) {
-        console.error(`Failed to fetch messages for channel ${selectedChannel}:`, error);
-      }
-    };
 
-    fetchChannelMessages();
-  }, [selectedChannel]);
+        // Mark existing messages as seen for polling
+        socketService.markExistingMessagesAsSeen(mappedMessages);
+      }
+    } catch (error) {
+      console.error(`Failed to fetch messages for channel ${selectedChannel}:`, error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
   
   const [channelMessages, setChannelMessages] = useState<{ [key: string]: Message[] }>({});
 
-  const [directChats, setDirectChats] = useState<DirectChat[]>([]);
-  
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // New state for message features
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editInput, setEditInput] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-  const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedThread, setSelectedThread] = useState<Message | null>(null);
 
   // Add state for reply input
   const [replyInput, setReplyInput] = useState('');
@@ -261,16 +321,14 @@ const TeamChat: React.FC = () => {
 
   // New state for file handling
   const [fileUploads, setFileUploads] = useState<FileUpload[]>([]);
-  const [isFileDragging, setIsFileDragging] = useState(false);
   const dropZoneRef = useRef<HTMLDivElement>(null);
 
   // Add new state for typing indicators and channel management
-  const [typingUsers, setTypingUsers] = useState<TypingStatus[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<TypingStatus[]>([]);
   const [showChannelModal, setShowChannelModal] = useState(false);
   const [showChannelSettings, setShowChannelSettings] = useState(false);
-  const [selectedChannelSettings, setSelectedChannelSettings] = useState<Channel | null>(null);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<number | null>(null);
 
   // Connect to socket when component mounts
   useEffect(() => {
@@ -283,10 +341,10 @@ const TeamChat: React.FC = () => {
       setUsers(prevUsers => {
         // Update existing users with online status
         const updatedUsers = prevUsers.map(user => {
-          const onlineUser = onlineUsers.find(u => u.userId === user.userId);
+          const onlineUser = onlineUsers.find((u: any) => u.userId === user.userId);
           return {
             ...user,
-            status: onlineUser ? 'online' : 'offline'
+            status: (onlineUser ? 'online' : 'offline') as 'online' | 'away' | 'offline'
           };
         });
         return updatedUsers;
@@ -313,7 +371,7 @@ const TeamChat: React.FC = () => {
             }]
           };
         });
-      } else if (message.senderId === selectedUser?.userId) {
+      } else if (selectedUser && message.senderId === selectedUser.userId) {
         // Add to direct messages with selected user
         setDirectMessages(prev => ({
           ...prev,
@@ -410,7 +468,8 @@ const TeamChat: React.FC = () => {
                   readAt: new Date() 
                 }],
                 deliveryStatus: {
-                  ...msg.deliveryStatus,
+                  sent: msg.deliveryStatus?.sent || true,
+                  delivered: msg.deliveryStatus?.delivered || true,
                   read: true,
                   timestamp: new Date()
                 }
@@ -436,20 +495,114 @@ const TeamChat: React.FC = () => {
     };
   }, [selectedUser, selectedChannel]);
 
-  const handleUserSelect = (user: User) => {
+  const fetchDirectMessages = async (user: User, isInitialLoad = false) => {
+    try {
+      setIsRefreshing(true);
+      const response = await API.get(`/chat/direct-messages/${user.userId}`);
+      if (response.data?.success && response.data.data) {
+        const mappedMessages = response.data.data.map((msg: any) => ({
+          id: msg.messageId,
+          senderId: msg.senderId,
+          sender: getUserName(msg.senderId),
+          content: msg.content,
+          timestamp: new Date(msg.timestamp),
+          type: msg.type || 'text',
+          channelId: '',
+          recipientId: msg.recipientId,
+          reactions: [],
+          isEdited: msg.isEdited || false,
+          readBy: msg.readBy || [],
+          threadMessages: [],
+          files: msg.files || []
+        }));
+        
+        if (isInitialLoad) {
+          // Initial load - replace all messages
+          setDirectMessages(prev => ({
+            ...prev,
+            [user.id]: mappedMessages
+          }));
+          // Scroll to bottom after initial load
+          setTimeout(() => scrollToBottom(), 200);
+        } else {
+          // Subsequent fetches - only add new messages
+          setDirectMessages(prev => {
+            const existingMessages = prev[user.id] || [];
+            
+            // Remove temporary messages (optimistic updates) and keep only real messages
+            const realExistingMessages = existingMessages.filter(msg => !msg.id.startsWith('temp-'));
+            const existingMessageIds = new Set(realExistingMessages.map(msg => msg.id));
+            
+            // Also check for content-based duplicates to prevent same message appearing twice
+            const existingContentKeys = new Set(
+              realExistingMessages.map(msg => 
+                `${msg.senderId}-${msg.content}-${Math.floor(new Date(msg.timestamp).getTime() / 60000)}` // Same sender, content, within same minute
+              )
+            );
+            
+            // Find only new messages (not by ID and not by content similarity)
+            const newMessages = mappedMessages.filter((msg: any) => {
+              const isNotDuplicateId = !existingMessageIds.has(msg.id);
+              const contentKey = `${msg.senderId}-${msg.content}-${Math.floor(new Date(msg.timestamp).getTime() / 60000)}`;
+              const isNotDuplicateContent = !existingContentKeys.has(contentKey);
+              
+              return isNotDuplicateId && isNotDuplicateContent;
+            });
+            
+            if (newMessages.length > 0) {
+              console.log(`📬 Found ${newMessages.length} new direct messages`);
+              // Combine real existing messages with new messages and sort by timestamp
+              const allMessages = [...realExistingMessages, ...newMessages]
+                .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+              
+              // Auto-scroll to bottom for new messages
+              setTimeout(() => scrollToBottom(), 100);
+              
+              return {
+                ...prev,
+                [user.id]: allMessages
+              };
+            }
+            
+            return prev; // No new messages, return unchanged
+          });
+        }
+
+        // Mark existing messages as seen for polling
+        socketService.markExistingMessagesAsSeen(mappedMessages);
+      }
+    } catch (error) {
+      console.error(`Failed to fetch direct messages with ${user.firstName}:`, error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleUserSelect = async (user: User) => {
     setSelectedUser(user);
     setSelectedChannel(''); // Clear channel selection when in DM
+    
+    // Set polling context for direct messages
+    socketService.setPollingContext(user.userId);
+    
+    // Load existing direct messages with this user
     if (!directMessages[user.id]) {
       setDirectMessages(prev => ({
         ...prev,
         [user.id]: []
       }));
     }
+    
+    // Always fetch latest messages
+    await fetchDirectMessages(user, true); // Initial load
   };
 
   const handleChannelSelect = (channelId: string) => {
     setSelectedChannel(channelId);
     setSelectedUser(null); // Clear user selection when selecting channel
+    
+    // Set polling context for channel messages
+    socketService.setPollingContext(undefined, channelId);
   };
 
   // Message delivery status handling
@@ -808,25 +961,26 @@ const TeamChat: React.FC = () => {
 
   // Function to get current messages based on selected user or channel
   const getCurrentMessages = (): Message[] => {
+    let messages: Message[] = [];
+    
     if (selectedUser) {
-      return directMessages[selectedUser.userId] || [];
+      messages = directMessages[selectedUser.userId] || [];
     } else if (selectedChannel) {
-      return channelMessages[selectedChannel] || [];
+      messages = channelMessages[selectedChannel] || [];
     }
-    return [];
+    
+    // Sort messages by timestamp (oldest first, newest last)
+    return messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  // Note: Auto-scroll is now handled in fetch functions for better control
 
   const renderMessage = (message: Message) => {
     const isOwnMessage = message.senderId === currentUser?.userId;
-    const isEditing = editingMessageId === message.id;
     const repliedToMessage = message.replyTo ? getRepliedMessage(message.replyTo) : null;
 
     // Format timestamp for messages
@@ -875,34 +1029,8 @@ const TeamChat: React.FC = () => {
       );
     };
 
-    // Message actions component
-    const MessageActions = () => (
-      <div className={`absolute top-2 ${isOwnMessage ? '-left-14' : '-right-14'} hidden group-hover:flex items-center space-x-1`}>
-        <button
-          onClick={() => setShowReactionPicker(message.id)}
-          className="p-1.5 bg-white text-gray-500 hover:text-gray-700 rounded-full shadow-sm transition-colors"
-          title="Add reaction"
-        >
-          <Icons.Smile className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => handleReply(message)}
-          className="p-1.5 bg-white text-gray-500 hover:text-gray-700 rounded-full shadow-sm transition-colors"
-          title="Reply"
-        >
-          <Icons.Reply className={`w-4 h-4 ${isOwnMessage ? 'rotate-180' : ''}`} />
-        </button>
-        {message.senderId === currentUser?.userId && (
-          <button
-            onClick={() => handleEditMessage(message.id)}
-            className="p-1.5 bg-white text-gray-500 hover:text-gray-700 rounded-full shadow-sm transition-colors"
-            title="Edit"
-          >
-            <Icons.Edit className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-    );
+    // Message actions component (removed - clean UI)
+    const MessageActions = () => null;
 
     return (
       <div className="group relative flex flex-col w-full">
@@ -947,38 +1075,13 @@ const TeamChat: React.FC = () => {
                 )}
 
                 {/* Message Content */}
-                {isEditing ? (
-                  <div className="flex items-end space-x-2">
-                    <textarea
-                      value={editInput}
-                      onChange={(e) => setEditInput(e.target.value)}
-                      className="w-full px-3 py-2 bg-white text-gray-900 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      rows={1}
-                    />
-                    <button
-                      onClick={() => handleSaveEdit(message.id)}
-                      className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => setEditingMessageId(null)}
-                      className="px-3 py-1 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                    
-                    {/* Timestamp */}
-                    <div className={`text-[10px] mt-1 ${isOwnMessage ? 'text-blue-100' : 'text-gray-400'}`}>
-                      {formatMessageTime(message.timestamp)}
-                      {message.isEdited && <span className="ml-1">(edited)</span>}
-                    </div>
-                  </>
-                )}
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                  
+                {/* Timestamp */}
+                <div className={`text-[10px] mt-1 ${isOwnMessage ? 'text-blue-100' : 'text-gray-400'}`}>
+                  {formatMessageTime(message.timestamp)}
+                  {message.isEdited && <span className="ml-1">(edited)</span>}
+                </div>
 
                 {/* File Previews */}
                 {message.type === 'file' && message.files && (
@@ -994,54 +1097,6 @@ const TeamChat: React.FC = () => {
                 {/* Message Actions */}
                 <MessageActions />
 
-                {/* Reaction Picker */}
-                {showReactionPicker === message.id && (
-                  <div className={`absolute top-0 ${isOwnMessage ? 'left-0 -translate-x-full -ml-2' : 'right-0 translate-x-full mr-2'} z-50`}>
-                    <div className="relative bg-white rounded-lg shadow-lg">
-                      <button
-                        onClick={() => setShowReactionPicker(null)}
-                        className="absolute -top-2 -right-2 p-1 bg-white rounded-full shadow-md text-gray-400 hover:text-gray-600"
-                      >
-                        <Icons.X className="w-4 h-4" />
-                      </button>
-                      <Picker
-                        data={data}
-                        onEmojiSelect={(emoji: any) => {
-                          handleReaction(message.id, emoji.native);
-                          setShowReactionPicker(null);
-                        }}
-                        theme="light"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Reactions Display */}
-                {message.reactions.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {message.reactions.map((reaction, index) => {
-                      const hasReacted = reaction.users.includes(currentUser?.userId);
-                      return (
-                        <button
-                          key={`${reaction.emoji}-${index}`}
-                          onClick={() => handleReaction(message.id, reaction.emoji)}
-                          className={`px-2 py-0.5 rounded-full text-xs ${
-                            hasReacted
-                              ? isOwnMessage
-                                ? 'bg-blue-500 text-white'
-                                : 'bg-blue-100 text-blue-800'
-                              : isOwnMessage
-                                ? 'bg-blue-700 text-white'
-                                : 'bg-gray-100 text-gray-800'
-                          }`}
-                        >
-                          <span>{reaction.emoji} {reaction.users.length}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
                 <div className="flex items-center justify-end mt-1">
                   <MessageDeliveryStatus status={message.deliveryStatus} readBy={message.readBy} />
                 </div>
@@ -1049,7 +1104,7 @@ const TeamChat: React.FC = () => {
             </div>
             {isOwnMessage && (
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center ml-3 flex-shrink-0">
-                <span className="text-sm font-medium text-blue-700">YU</span>
+                <span className="text-sm font-medium text-blue-700">ME</span>
               </div>
             )}
           </div>
@@ -1079,12 +1134,12 @@ const TeamChat: React.FC = () => {
           const existingReactionIndex = msg.reactions.findIndex(r => r.emoji === emoji);
           let newReactions = [...msg.reactions];
 
-          if (existingReactionIndex >= 0) {
+          if (existingReactionIndex >= 0 && currentUser?.userId) {
             // Toggle user's reaction
-            const userIndex = newReactions[existingReactionIndex].users.indexOf(currentUser?.userId);
+            const userIndex = newReactions[existingReactionIndex].users.indexOf(currentUser.userId);
             if (userIndex >= 0) {
               // Remove user's reaction
-              const updatedUsers = newReactions[existingReactionIndex].users.filter(u => u !== currentUser?.userId);
+              const updatedUsers = newReactions[existingReactionIndex].users.filter(u => u !== currentUser.userId);
               if (updatedUsers.length === 0) {
                 // Remove the reaction entirely if no users left
                 newReactions = newReactions.filter(r => r.emoji !== emoji);
@@ -1098,14 +1153,14 @@ const TeamChat: React.FC = () => {
               // Add user's reaction
               newReactions[existingReactionIndex] = {
                 ...newReactions[existingReactionIndex],
-                users: [...newReactions[existingReactionIndex].users, currentUser?.userId]
+                users: [...newReactions[existingReactionIndex].users, currentUser.userId]
               };
             }
-          } else {
+          } else if (currentUser?.userId) {
             // Add new reaction
             newReactions.push({
               emoji,
-              users: [currentUser?.userId]
+              users: [currentUser.userId]
             });
           }
 
@@ -1143,42 +1198,7 @@ const TeamChat: React.FC = () => {
     return currentMessages.find(m => m.id === messageId) || null;
   };
 
-  // Function to handle message editing
-  const handleEditMessage = (messageId: string) => {
-    const message = getCurrentMessages().find(m => m.id === messageId);
-    if (message && message.senderId === currentUser?.userId) { // Only allow editing own messages
-      setEditingMessageId(messageId);
-      setEditInput(message.content);
-    }
-  };
-
-  // Function to save edited message
-  const handleSaveEdit = (messageId: string) => {
-    const updateMessage = (message: Message) => {
-      if (message.id === messageId) {
-        return {
-          ...message,
-          content: editInput,
-          isEdited: true
-        };
-      }
-      return message;
-    };
-
-    if (selectedUser) {
-      setDirectMessages(prev => ({
-        ...prev,
-        [selectedUser.id]: prev[selectedUser.id].map(updateMessage)
-      }));
-    } else {
-      setChannelMessages(prev => ({
-        ...prev,
-        [selectedChannel]: prev[selectedChannel].map(updateMessage)
-      }));
-    }
-    setEditingMessageId(null);
-    setEditInput('');
-  };
+  // Editing functions removed since edit functionality was disabled
 
   // Function to handle message deletion
   const handleDeleteMessage = (messageId: string) => {
@@ -1314,14 +1334,17 @@ const TeamChat: React.FC = () => {
     if (!input.trim() && !selectedFile) return;
 
     const newMessage: Message = {
-      id: Math.random().toString(),
+      id: `temp-${Date.now()}-${Math.random()}`, // Temporary ID for optimistic update
       senderId: currentUser?.userId || '',
+      sender: `${currentUser?.firstName} ${currentUser?.lastName}`,
       content: input,
       timestamp: new Date(),
       type: 'text',
+      channelId: selectedChannel || '',
       reactions: [],
       isEdited: false,
       readBy: [{ userId: currentUser?.userId || '', readAt: new Date() }],
+      threadMessages: [],
       deliveryStatus: {
         sent: true,
         delivered: false,
@@ -1339,6 +1362,11 @@ const TeamChat: React.FC = () => {
       
       // Send via socket
       socketService.sendPrivateMessage(selectedUser.userId, newMessage);
+      
+      // Force refresh to replace optimistic update with real data after a short delay
+      setTimeout(() => {
+        fetchDirectMessages(selectedUser, false);
+      }, 1000);
     } else if (selectedChannel) {
       setChannelMessages(prev => ({
         ...prev,
@@ -1347,6 +1375,11 @@ const TeamChat: React.FC = () => {
       
       // Send via socket
       socketService.sendChannelMessage(selectedChannel, newMessage);
+      
+      // Force refresh to replace optimistic update with real data after a short delay
+      setTimeout(() => {
+        fetchChannelMessages(false);
+      }, 1000);
     }
 
     setInput('');
@@ -1365,6 +1398,9 @@ const TeamChat: React.FC = () => {
     } else if (selectedChannel) {
       socketService.sendChannelTypingStop(selectedChannel);
     }
+
+    // Scroll to bottom after sending message
+    setTimeout(() => scrollToBottom(), 100);
   };
 
   // Enhanced typing indicator component
@@ -1496,17 +1532,10 @@ const TeamChat: React.FC = () => {
             )}
           </button>
           <h1 className="ml-3 text-xl font-semibold text-gray-900">
-            {selectedUser ? `Chat with ${selectedUser.firstName} ${selectedUser.lastName}` : "Team Chat"}
+            {selectedUser ? `Chat with ${selectedUser.firstName} ${selectedUser.lastName}` : "Messages"}
           </h1>
         </div>
-        <div className="flex items-center space-x-2">
-          <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
-            <Icons.Search className="w-5 h-5" />
-          </button>
-          <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg">
-            <Icons.Settings className="w-5 h-5" />
-          </button>
-        </div>
+
       </div>
       
       <div className="flex-1 flex overflow-hidden">
@@ -1520,73 +1549,14 @@ const TeamChat: React.FC = () => {
               }}
               className="flex-shrink-0 flex flex-col bg-gray-50 border-r border-gray-200"
             >
-              {/* Channels Section */}
-              <div className="p-4 border-b border-gray-200">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Channels</h3>
-                  <button 
-                    onClick={() => setShowChannelModal(true)}
-                    className="p-1 text-gray-400 hover:text-gray-600 rounded"
-                  >
-                    <Icons.Plus className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {channels.length > 0 ? (
-                    channels.map(channel => (
-                      <button
-                        key={channel.id}
-                        onClick={() => handleChannelSelect(channel.id)}
-                        className={`w-full flex items-center px-3 py-2 rounded-lg transition-colors ${
-                          selectedChannel === channel.id
-                            ? 'bg-blue-50 text-blue-600'
-                            : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                        <span className="text-lg mr-2">#</span>
-                        <span className="flex-1 text-left font-medium">{channel.name}</span>
-                        {channel.unread && (
-                          <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-600 rounded-full">
-                            {channel.unread}
-                          </span>
-                        )}
-                        {channel.type === 'private' && (
-                          <Icons.Lock className="w-4 h-4 ml-2 text-gray-400" />
-                        )}
-                        {channel.permissions?.canManage.includes(currentUser?.userId) && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedChannelSettings(channel);
-                              setShowChannelSettings(true);
-                            }}
-                            className="p-1 ml-2 text-gray-400 hover:text-gray-600 rounded"
-                          >
-                            <Icons.Settings className="w-4 h-4" />
-                          </button>
-                        )}
-                      </button>
-                    ))
-                  ) : (
-                    <div className="text-center py-4">
-                      <p className="text-sm text-gray-500 mb-2">No channels yet</p>
-                      <button
-                        onClick={() => setShowChannelModal(true)}
-                        className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                      >
-                        Create your first channel
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
+
 
               {/* Team Members Section */}
               <div className="flex-1 p-4 overflow-y-auto">
             <div className="space-y-1">
                   <div className="px-3 py-2">
                     <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                      Team Members ({users.filter(m => m.status === 'online' && m.userId !== currentUser?.userId).length} Online)
+                      Team Members
                     </h2>
                   </div>
                   {users
@@ -1601,7 +1571,7 @@ const TeamChat: React.FC = () => {
                               ...message,
                               readBy: message.readBy.some(r => r.userId === currentUser?.userId)
                                 ? message.readBy
-                                : [...message.readBy, { userId: currentUser?.userId, readAt: new Date() }]
+                                : [...message.readBy, { userId: currentUser?.userId || '', readAt: new Date() }]
                             }));
 
                             setDirectMessages(prev => ({
@@ -1628,16 +1598,10 @@ const TeamChat: React.FC = () => {
                                 {member.firstName.charAt(0) + member.lastName.charAt(0)}
                           </span>
                         </div>
-                            <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-white rounded-full ${getStatusColor(member.status)}`}></div>
                           </div>
                           <div className="ml-3 flex-1 min-w-0">
                             <div className="flex items-center">
                               <span className="text-sm font-medium truncate">{`${member.firstName} ${member.lastName}`}</span>
-                              {member.status === 'online' && (
-                                <span className="ml-2 px-2 py-0.5 text-xs font-medium text-green-700 bg-green-100 rounded-full">
-                                  Online
-                                </span>
-                              )}
                         </div>
                             <p className="text-xs text-gray-500 truncate">{member.role}</p>
                           </div>
@@ -1671,48 +1635,51 @@ const TeamChat: React.FC = () => {
         <div className="flex-1 flex flex-col bg-gray-50 relative min-w-0">
           {/* Chat Header */}
           <div className="bg-white px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center">
-                {selectedUser ? (
-                  <>
-                    <div className="relative mr-3">
-                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                        <span className="text-sm font-medium text-blue-700">
-                          {selectedUser.firstName.charAt(0) + selectedUser.lastName.charAt(0)}
-                        </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  {selectedUser ? (
+                    <>
+                      <div className="relative mr-3">
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                          <span className="text-sm font-medium text-blue-700">
+                            {selectedUser.firstName.charAt(0) + selectedUser.lastName.charAt(0)}
+                          </span>
+                        </div>
                       </div>
-                      <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-white rounded-full ${getStatusColor(selectedUser.status)}`}></div>
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-semibold text-gray-900">{`${selectedUser.firstName} ${selectedUser.lastName}`}</h2>
-                      <p className="text-sm text-gray-500">{selectedUser.role}</p>
-                    </div>
-                  </>
-                ) : selectedChannel && channels.find(c => c.id === selectedChannel) ? (
-                  <>
-                    <Icons.Hash className="w-5 h-5 text-gray-400 mr-2" />
-                    <h2 className="text-lg font-semibold text-gray-900">
-                      {channels.find(c => c.id === selectedChannel)?.name}
-                    </h2>
-                    <span className="ml-2 text-sm text-gray-500">
-                      {channels.find(c => c.id === selectedChannel)?.members} members
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <Icons.MessageCircle className="w-5 h-5 text-gray-400 mr-2" />
-                    <h2 className="text-lg font-semibold text-gray-900">
-                      Team Chat
-                    </h2>
-                    <span className="ml-2 text-sm text-gray-500">
-                      No channels available
-                    </span>
-                  </>
-                )}
-            </div>
+                      <div>
+                        <h2 className="text-lg font-semibold text-gray-900">{`${selectedUser.firstName} ${selectedUser.lastName}`}</h2>
+                        <p className="text-sm text-gray-500">{selectedUser.role}</p>
+                      </div>
+                    </>
+                  ) : selectedChannel && channels.find(c => c.id === selectedChannel) ? (
+                    <>
+                      <Icons.Hash className="w-5 h-5 text-gray-400 mr-2" />
+                      <h2 className="text-lg font-semibold text-gray-900">
+                        {channels.find(c => c.id === selectedChannel)?.name}
+                      </h2>
+                      <span className="ml-2 text-sm text-gray-500">
+                        {channels.find(c => c.id === selectedChannel)?.members} members
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Icons.MessageCircle className="w-5 h-5 text-gray-400 mr-2" />
+                      <h2 className="text-lg font-semibold text-gray-900">
+                        Messages
+                      </h2>
+                      <span className="ml-2 text-sm text-gray-500">
+                        Select a conversation
+                      </span>
+                    </>
+                  )}
+                </div>
+                
+
+              </div>
           </div>
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6" style={{ scrollBehavior: 'smooth' }}>
             {getCurrentMessages().length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
@@ -1721,17 +1688,13 @@ const TeamChat: React.FC = () => {
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
                   {selectedUser 
                     ? `Start a conversation with ${selectedUser.firstName} ${selectedUser.lastName}`
-                    : selectedChannel && channels.find(c => c.id === selectedChannel)
-                    ? `Welcome to #${channels.find(c => c.id === selectedChannel)?.name}`
-                    : "Welcome to Team Chat"
+                    : "Welcome to Messages"
                   }
                 </h3>
                 <p className="text-gray-500">
                   {selectedUser
                     ? "Send a message to begin chatting"
-                    : selectedChannel && channels.find(c => c.id === selectedChannel)
-                    ? "This is the beginning of your conversation."
-                    : "Create a channel or start a direct message to begin chatting."
+                    : "Select a team member from the sidebar to start a conversation."
                   }
                 </p>
               </div>
@@ -1827,99 +1790,97 @@ const TeamChat: React.FC = () => {
             </div>
           )}
 
-          {/* Message Input */}
-          <div className="bg-white border-t border-gray-200 p-4">
-            <div className="flex items-end space-x-3">
-              <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <Icons.Paperclip className="w-5 h-5" />
-              </button>
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileSelect}
-                className="hidden"
-                multiple
-                accept={ALLOWED_FILE_TYPES.join(',')}
-              />
-              <div className="flex-1 relative">
-                <div className="relative">
-                  <textarea
-                    value={replyingTo ? replyInput : input}
-                    onChange={(e) => replyingTo ? setReplyInput(e.target.value) : setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        replyingTo ? handleSendReply() : handleSend();
-                      }
-                    }}
-                    placeholder={
-                      replyingTo
-                        ? `Reply to ${getUserName(replyingTo.senderId)}...`
-                        : selectedUser 
-                          ? `Message ${selectedUser.firstName} ${selectedUser.lastName}`
-                          : selectedChannel && channels.find(c => c.id === selectedChannel)
-                          ? `Message #${channels.find(c => c.id === selectedChannel)?.name}`
-                          : "Select a channel or user to start messaging"
-                    }
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    rows={1}
-                    style={{ minHeight: '44px', maxHeight: '120px' }}
-                  />
-                </div>
-                
-                  {showEmojiPicker && (
-                    <div 
-                    className="absolute bottom-full right-0 mb-2 z-50"
-                      style={{ 
-                      filter: 'drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1))',
-                      maxWidth: '100vw',
-                      overflow: 'auto'
-                      }}
-                    >
-                      <div className="relative bg-white rounded-lg p-2">
-                        <button
-                          onClick={() => setShowEmojiPicker(false)}
-                          className="absolute -top-2 -right-2 p-1 bg-white rounded-full shadow-md text-gray-400 hover:text-gray-600 z-10"
-                        >
-                          <Icons.X className="w-4 h-4" />
-                        </button>
-                      <div className="overflow-x-auto">
-                        <Picker 
-                          data={data}
-                          onEmojiSelect={(emoji: any) => {
-                            if (replyingTo) {
-                              setReplyInput(prev => prev + emoji.native);
-                            } else {
-                              setInput(prev => prev + emoji.native);
-                            }
-                            setShowEmojiPicker(false);
-                          }}
-                          theme="light"
-                        />
-                      </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={replyingTo ? handleSendReply : handleSend}
-                  disabled={replyingTo ? !replyInput.trim() : !input.trim()}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    (replyingTo ? replyInput.trim() : input.trim())
-                      ? 'bg-blue-600 text-white hover:bg-blue-700'
-                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  }`}
-            >
-                  <Icons.Send className="w-4 h-4" />
+          {/* Message Input - Only show when a user is selected */}
+          {selectedUser && (
+            <div className="bg-white border-t border-gray-200 p-4">
+              <div className="flex items-end space-x-3">
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <Icons.Paperclip className="w-5 h-5" />
                 </button>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  multiple
+                  accept={ALLOWED_FILE_TYPES.join(',')}
+                />
+                <div className="flex-1 relative">
+                  <div className="relative">
+                    <textarea
+                      value={replyingTo ? replyInput : input}
+                      onChange={(e) => replyingTo ? setReplyInput(e.target.value) : setInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          replyingTo ? handleSendReply() : handleSend();
+                        }
+                      }}
+                      placeholder={
+                        replyingTo
+                          ? `Reply to ${getUserName(replyingTo.senderId)}...`
+                          : `Message ${selectedUser.firstName} ${selectedUser.lastName}`
+                      }
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      rows={1}
+                      style={{ minHeight: '44px', maxHeight: '120px' }}
+                    />
+                  </div>
+                  
+                    {showEmojiPicker && (
+                      <div 
+                      className="absolute bottom-full right-0 mb-2 z-50"
+                        style={{ 
+                        filter: 'drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1))',
+                        maxWidth: '100vw',
+                        overflow: 'auto'
+                        }}
+                      >
+                        <div className="relative bg-white rounded-lg p-2">
+                          <button
+                            onClick={() => setShowEmojiPicker(false)}
+                            className="absolute -top-2 -right-2 p-1 bg-white rounded-full shadow-md text-gray-400 hover:text-gray-600 z-10"
+                          >
+                            <Icons.X className="w-4 h-4" />
+                          </button>
+                        <div className="overflow-x-auto">
+                          <Picker 
+                            data={data}
+                            onEmojiSelect={(emoji: any) => {
+                              if (replyingTo) {
+                                setReplyInput(prev => prev + emoji.native);
+                              } else {
+                                setInput(prev => prev + emoji.native);
+                              }
+                              setShowEmojiPicker(false);
+                            }}
+                            theme="light"
+                          />
+                        </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={replyingTo ? handleSendReply : handleSend}
+                    disabled={replyingTo ? !replyInput.trim() : !input.trim()}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      (replyingTo ? replyInput.trim() : input.trim())
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    }`}
+              >
+                    <Icons.Send className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -1965,7 +1926,7 @@ const TeamChat: React.FC = () => {
             id: selectedChannel,
             name: channels.find(c => c.id === selectedChannel)?.name || '',
             description: channels.find(c => c.id === selectedChannel)?.description,
-            type: channels.find(c => c.id === selectedChannel)?.type || 'public',
+            type: (channels.find(c => c.id === selectedChannel)?.type as 'public' | 'private') || 'public',
             members: [],
             createdBy: channels.find(c => c.id === selectedChannel)?.createdBy
           }}

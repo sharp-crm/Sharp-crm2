@@ -1,5 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
+import jwt from 'jsonwebtoken';
 
 interface User {
   userId: string;
@@ -7,18 +8,32 @@ interface User {
   firstName: string;
   lastName: string;
   role: string;
+  tenantId: string;
+  email: string;
 }
 
 interface TypingStatus {
   userId: string;
-  channelId: string;
+  channelId?: string;
   timestamp: Date;
+}
+
+interface JWTPayload {
+  userId: string;
+  email: string;
+  role: string;
+  tenantId: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 class SocketService {
   private io: SocketIOServer;
   private onlineUsers: Map<string, User> = new Map(); // userId -> User
+  private userSockets: Map<string, Set<string>> = new Map(); // userId -> Set of socketIds (for multiple tabs)
+  private socketToUser: Map<string, string> = new Map(); // socketId -> userId
   private channelTypingUsers: Map<string, TypingStatus[]> = new Map(); // channelId -> TypingStatus[]
+  private directTypingUsers: Map<string, TypingStatus[]> = new Map(); // userId -> TypingStatus[] (who's typing to this user)
   private typingTimeouts: Map<string, NodeJS.Timeout> = new Map(); // userId_channelId -> timeout
 
   constructor(server: HTTPServer) {
@@ -30,7 +45,10 @@ class SocketService {
         origin: corsOrigins,
         methods: ["GET", "POST"],
         credentials: true
-      }
+      },
+      transports: ['websocket', 'polling'],
+      pingTimeout: 60000,
+      pingInterval: 25000
     });
 
     this.setupEventHandlers();
@@ -66,60 +84,155 @@ class SocketService {
     }
   }
 
+  // Authentication middleware for sockets
+  private async authenticateSocket(socket: any, token: string): Promise<JWTPayload | null> {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret') as JWTPayload;
+      return decoded;
+    } catch (error) {
+      console.error('Socket authentication failed:', error);
+      return null;
+    }
+  }
+
   private setupEventHandlers() {
+    // Authentication middleware
+    this.io.use(async (socket, next) => {
+      try {
+        const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.replace('Bearer ', '');
+        
+        if (!token) {
+          return next(new Error('Authentication token required'));
+        }
+
+        const user = await this.authenticateSocket(socket, token);
+        if (!user) {
+          return next(new Error('Invalid authentication token'));
+        }
+
+        socket.data.user = user;
+        next();
+      } catch (error) {
+        console.error('Socket authentication error:', error);
+        next(new Error('Authentication failed'));
+      }
+    });
+
     this.io.on('connection', (socket) => {
-      console.log('New client connected:', socket.id);
+      const user = socket.data.user as JWTPayload;
+      console.log('New authenticated client connected:', socket.id, 'User:', user.userId);
 
       // Handle user joining
-      socket.on('user:join', (user: { userId: string; firstName: string; lastName: string; role: string }) => {
-        console.log('User joined:', user);
+      socket.on('user:join', (userData?: { firstName?: string; lastName?: string }) => {
+        console.log('User joined:', user.userId);
+        
+        const userInfo: User = {
+          userId: user.userId,
+          socketId: socket.id,
+          firstName: userData?.firstName || user.firstName || '',
+          lastName: userData?.lastName || user.lastName || '',
+          role: user.role,
+          tenantId: user.tenantId,
+          email: user.email
+        };
         
         // Store user with socket ID
-        this.onlineUsers.set(user.userId, { ...user, socketId: socket.id });
+        this.onlineUsers.set(user.userId, userInfo);
         
-        // Broadcast updated online users list
-        this.broadcastOnlineUsers();
+        // Track multiple sockets for same user (multiple tabs)
+        if (!this.userSockets.has(user.userId)) {
+          this.userSockets.set(user.userId, new Set());
+        }
+        this.userSockets.get(user.userId)!.add(socket.id);
+        this.socketToUser.set(socket.id, user.userId);
+        
+        // Broadcast updated online users list to tenant
+        this.broadcastOnlineUsersToTenant(user.tenantId);
       });
+
+      // Auto-join user on connection
+      const userInfo: User = {
+        userId: user.userId,
+        socketId: socket.id,
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        role: user.role,
+        tenantId: user.tenantId,
+        email: user.email
+      };
+      
+      this.onlineUsers.set(user.userId, userInfo);
+      if (!this.userSockets.has(user.userId)) {
+        this.userSockets.set(user.userId, new Set());
+      }
+      this.userSockets.get(user.userId)!.add(socket.id);
+      this.socketToUser.set(socket.id, user.userId);
+      this.broadcastOnlineUsersToTenant(user.tenantId);
 
       // Handle private messages
       socket.on('message:private', ({ to, message }) => {
-        console.log('Private message from', socket.id, 'to', to, ':', message);
+        console.log('Private message from', user.userId, 'to', to, ':', message);
         
-        const recipientSocket = this.onlineUsers.get(to)?.socketId;
-        if (recipientSocket) {
-          console.log('Forwarding to recipient socket:', recipientSocket);
-          this.io.to(recipientSocket).emit('message:receive', message);
+        // Ensure both users are in same tenant
+        const recipient = this.onlineUsers.get(to);
+        if (recipient && recipient.tenantId === user.tenantId) {
+          const recipientSockets = this.userSockets.get(to);
+          if (recipientSockets) {
+            recipientSockets.forEach(socketId => {
+              this.io.to(socketId).emit('message:receive', {
+                ...message,
+                senderId: user.userId,
+                timestamp: new Date().toISOString()
+              });
+            });
+          }
         } else {
-          console.log('Recipient not online:', to);
+          console.log('Recipient not online or in different tenant:', to);
         }
       });
 
-      // Handle typing status
-      socket.on('typing:start', ({ from, to }) => {
-        console.log('Typing start from', from, 'to', to);
+      // Handle direct message typing status
+      socket.on('typing:start', ({ to }) => {
+        console.log('Typing start from', user.userId, 'to', to);
         
-        const recipientSocket = this.onlineUsers.get(to)?.socketId;
-        if (recipientSocket) {
-          this.io.to(recipientSocket).emit('typing:receive', { from });
+        const recipient = this.onlineUsers.get(to);
+        if (recipient && recipient.tenantId === user.tenantId) {
+          const recipientSockets = this.userSockets.get(to);
+          if (recipientSockets) {
+            recipientSockets.forEach(socketId => {
+              this.io.to(socketId).emit('typing:receive', { 
+                from: user.userId,
+                type: 'start'
+              });
+            });
+          }
         }
       });
 
-      socket.on('typing:stop', ({ from, to }) => {
-        console.log('Typing stop from', from, 'to', to);
+      socket.on('typing:stop', ({ to }) => {
+        console.log('Typing stop from', user.userId, 'to', to);
         
-        const recipientSocket = this.onlineUsers.get(to)?.socketId;
-        if (recipientSocket) {
-          this.io.to(recipientSocket).emit('typing:stop', { from });
+        const recipient = this.onlineUsers.get(to);
+        if (recipient && recipient.tenantId === user.tenantId) {
+          const recipientSockets = this.userSockets.get(to);
+          if (recipientSockets) {
+            recipientSockets.forEach(socketId => {
+              this.io.to(socketId).emit('typing:stop', { 
+                from: user.userId,
+                type: 'stop'
+              });
+            });
+          }
         }
       });
 
       // Handle channel typing status
-      socket.on('channel:typing', ({ channelId, userId }) => {
-        console.log('Channel typing from', userId, 'in channel', channelId);
+      socket.on('channel:typing', ({ channelId }) => {
+        console.log('Channel typing from', user.userId, 'in channel', channelId);
         
         // Add to typing users for this channel
         const typingUsers = this.channelTypingUsers.get(channelId) || [];
-        const existingIndex = typingUsers.findIndex(u => u.userId === userId);
+        const existingIndex = typingUsers.findIndex(u => u.userId === user.userId);
         
         if (existingIndex >= 0) {
           // Update timestamp
@@ -127,7 +240,7 @@ class SocketService {
         } else {
           // Add new typing user
           typingUsers.push({
-            userId,
+            userId: user.userId,
             channelId,
             timestamp: new Date()
           });
@@ -136,92 +249,114 @@ class SocketService {
         this.channelTypingUsers.set(channelId, typingUsers);
         
         // Clear any existing timeout
-        const timeoutKey = `${userId}_${channelId}`;
+        const timeoutKey = `${user.userId}_${channelId}`;
         if (this.typingTimeouts.has(timeoutKey)) {
           clearTimeout(this.typingTimeouts.get(timeoutKey));
         }
         
         // Set timeout to automatically remove typing status after 3 seconds
         const timeout = setTimeout(() => {
-          this.removeChannelTypingUser(channelId, userId);
+          this.removeChannelTypingUser(channelId, user.userId);
         }, 3000);
         
         this.typingTimeouts.set(timeoutKey, timeout);
         
-        // Broadcast to channel
+        // Broadcast to channel (exclude sender)
         socket.to(`channel:${channelId}`).emit('channel:typing:receive', {
-          userId,
+          userId: user.userId,
           channelId,
-          timestamp: new Date()
+          timestamp: new Date().toISOString(),
+          type: 'start'
         });
       });
       
-      socket.on('channel:typing:stop', ({ channelId, userId }) => {
-        console.log('Channel typing stop from', userId, 'in channel', channelId);
+      socket.on('channel:typing:stop', ({ channelId }) => {
+        console.log('Channel typing stop from', user.userId, 'in channel', channelId);
         
-        this.removeChannelTypingUser(channelId, userId);
+        this.removeChannelTypingUser(channelId, user.userId);
         
-        // Broadcast to channel
+        // Broadcast to channel (exclude sender)
         socket.to(`channel:${channelId}`).emit('channel:typing:stop', {
-          userId,
-          channelId
+          userId: user.userId,
+          channelId,
+          type: 'stop'
         });
       });
 
       // Handle read receipts
-      socket.on('message:read', ({ messageIds, from, to }) => {
-        console.log('Message read receipt from', from, 'for messages', messageIds);
+      socket.on('message:read', ({ messageIds, to }) => {
+        console.log('Message read receipt from', user.userId, 'for messages', messageIds);
         
-        const recipientSocket = this.onlineUsers.get(to)?.socketId;
-        if (recipientSocket) {
-          this.io.to(recipientSocket).emit('message:read:receive', { messageIds, from });
+        const recipient = this.onlineUsers.get(to);
+        if (recipient && recipient.tenantId === user.tenantId) {
+          const recipientSockets = this.userSockets.get(to);
+          if (recipientSockets) {
+            recipientSockets.forEach(socketId => {
+              this.io.to(socketId).emit('message:read:receive', { 
+                messageIds, 
+                from: user.userId 
+              });
+            });
+          }
         }
       });
 
       // Handle channel messages (broadcast to all members)
       socket.on('channel:message', ({ channelId, message }) => {
-        console.log('Channel message for', channelId, ':', message);
+        console.log('Channel message for', channelId, 'from', user.userId);
         
-        // Broadcast to all sockets in the channel room
-        socket.to(`channel:${channelId}`).emit('message:receive', message);
+        // Broadcast to all sockets in the channel room (exclude sender)
+        socket.to(`channel:${channelId}`).emit('message:receive', {
+          ...message,
+          senderId: user.userId,
+          timestamp: new Date().toISOString()
+        });
       });
       
       // Join channel room
       socket.on('channel:join', ({ channelId }) => {
-        console.log('User joining channel:', channelId);
+        console.log('User', user.userId, 'joining channel:', channelId);
         socket.join(`channel:${channelId}`);
       });
       
       // Leave channel room
       socket.on('channel:leave', ({ channelId }) => {
-        console.log('User leaving channel:', channelId);
+        console.log('User', user.userId, 'leaving channel:', channelId);
         socket.leave(`channel:${channelId}`);
       });
 
       // Handle disconnection
       socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
+        console.log('Client disconnected:', socket.id, 'User:', user.userId);
         
-        // Find and remove the disconnected user
-        let disconnectedUserId = null;
-        for (const [userId, user] of this.onlineUsers.entries()) {
-          if (user.socketId === socket.id) {
-            console.log('User went offline:', userId);
-            this.onlineUsers.delete(userId);
-            disconnectedUserId = userId;
-            break;
+        // Remove this socket from user's socket set
+        const userSocketSet = this.userSockets.get(user.userId);
+        if (userSocketSet) {
+          userSocketSet.delete(socket.id);
+          
+          // If no more sockets for this user, remove from online users
+          if (userSocketSet.size === 0) {
+            this.onlineUsers.delete(user.userId);
+            this.userSockets.delete(user.userId);
+            
+            // Remove from all channel typing statuses
+            this.channelTypingUsers.forEach((typingUsers, channelId) => {
+              this.removeChannelTypingUser(channelId, user.userId);
+            });
+            
+            // Remove from direct typing statuses
+            this.directTypingUsers.forEach((typingUsers, targetUserId) => {
+              this.directTypingUsers.set(targetUserId, 
+                typingUsers.filter(tu => tu.userId !== user.userId)
+              );
+            });
           }
         }
         
-        // Remove from all channel typing statuses
-        if (disconnectedUserId) {
-          this.channelTypingUsers.forEach((typingUsers, channelId) => {
-            this.removeChannelTypingUser(channelId, disconnectedUserId as string);
-          });
-        }
+        this.socketToUser.delete(socket.id);
         
-        // Broadcast updated online users list
-        this.broadcastOnlineUsers();
+        // Broadcast updated online users list to tenant
+        this.broadcastOnlineUsersToTenant(user.tenantId);
       });
     });
   }
@@ -230,6 +365,27 @@ class SocketService {
     const onlineUsersList = Array.from(this.onlineUsers.values()).map(({ socketId, ...user }) => user);
     console.log('Broadcasting online users:', onlineUsersList.length);
     this.io.emit('users:online', onlineUsersList);
+  }
+
+  // Broadcast online users only to specific tenant
+  private broadcastOnlineUsersToTenant(tenantId: string) {
+    const tenantUsers = Array.from(this.onlineUsers.values())
+      .filter(user => user.tenantId === tenantId)
+      .map(({ socketId, ...user }) => user);
+    
+    console.log(`Broadcasting online users to tenant ${tenantId}:`, tenantUsers.length);
+    
+    // Send to all sockets of users in this tenant
+    this.onlineUsers.forEach((user) => {
+      if (user.tenantId === tenantId) {
+        const userSockets = this.userSockets.get(user.userId);
+        if (userSockets) {
+          userSockets.forEach(socketId => {
+            this.io.to(socketId).emit('users:online', tenantUsers);
+          });
+        }
+      }
+    });
   }
   
   private removeChannelTypingUser(channelId: string, userId: string) {
