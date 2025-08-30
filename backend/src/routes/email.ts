@@ -21,7 +21,8 @@ router.get('/config', async (req: Request, res: Response) => {
   }
 });
 
-// Route to get user's email configuration status
+// Route to get user's email configuration status (Legacy SMTP)
+// This endpoint is kept for backward compatibility but OAuth is recommended
 router.get('/user-config', async (req: Request, res: Response) => {
   try {
     const userId = (req as AuthenticatedRequest).user.userId;
@@ -33,10 +34,13 @@ router.get('/user-config', async (req: Request, res: Response) => {
       return;
     }
 
-    const status = await emailService.getUserEmailStatus(userId);
+    // Always return that SMTP is deprecated
     res.json({
       success: true,
-      ...status,
+      configured: false,
+      verified: false,
+      error: 'SMTP configuration is deprecated. Please use OAuth 2.0 authentication instead.',
+      recommendedEndpoint: '/oauth/status'
     });
   } catch (error) {
     console.error('❌ Error getting user email config:', error);
@@ -47,216 +51,54 @@ router.get('/user-config', async (req: Request, res: Response) => {
   }
 });
 
-// Route to configure user's SMTP settings
+// SMTP configuration has been replaced with OAuth2.0
+// This endpoint is deprecated - use OAuth endpoints instead
 router.post('/configure-smtp', async (req: Request, res: Response) => {
-  try {
-    const userId = (req as AuthenticatedRequest).user.userId;
-    if (!userId) {
-      res.status(400).json({
-        success: false,
-        error: 'User ID not found in user context',
-      });
-      return;
-    }
-
-    const { email, smtpConfig }: { email: string; smtpConfig: SMTPConfig } = req.body;
-
-    // Validate required fields
-    if (!email || !smtpConfig) {
-      res.status(400).json({
-        success: false,
-        error: 'Email and SMTP configuration are required',
-      });
-      return;
-    }
-
-    // Validate SMTP config
-    if (!smtpConfig.host || !smtpConfig.port || !smtpConfig.auth?.user || !smtpConfig.auth?.pass) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid SMTP configuration. Host, port, username, and password are required.',
-      });
-      return;
-    }
-
-    // Test SMTP connection first
-    const connectionTest = await emailService.testSMTPConnection(smtpConfig);
-    if (!connectionTest) {
-      res.status(400).json({
-        success: false,
-        error: 'SMTP connection test failed. Please check your settings.',
-      });
-      return;
-    }
-
-    // Store the configuration
-    const stored = await emailService.storeUserEmailConfig(userId, email, smtpConfig);
-    if (!stored) {
-      res.status(500).json({
-        success: false,
-        error: 'Failed to store SMTP configuration',
-      });
-      return;
-    }
-
-    res.json({
-      success: true,
-      message: 'SMTP configuration stored successfully. Please verify your email to complete setup.',
-    });
-  } catch (error) {
-    console.error('❌ Error configuring SMTP:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to configure SMTP settings',
-    });
-  }
+  res.status(410).json({
+    success: false,
+    error: 'SMTP configuration is deprecated. Please use OAuth 2.0 authentication instead.',
+    redirectTo: '/oauth'
+  });
 });
 
-// Route to verify user's email configuration
+// Email verification has been replaced with OAuth2.0
+// This endpoint is deprecated - OAuth handles verification automatically
 router.post('/verify-email', async (req: Request, res: Response) => {
-  try {
-    const userId = (req as AuthenticatedRequest).user.userId;
-    if (!userId) {
-      res.status(400).json({
-        success: false,
-        error: 'User ID not found in user context',
-      });
-      return;
-    }
-
-    const { email, smtpConfig }: { email: string; smtpConfig: SMTPConfig } = req.body;
-
-    // Validate required fields
-    if (!email || !smtpConfig) {
-      res.status(400).json({
-        success: false,
-        error: 'Email and SMTP configuration are required',
-      });
-      return;
-    }
-
-    // Verify the configuration by sending a test email
-    const verified = await emailService.verifyUserEmailConfig(userId, email, smtpConfig);
-    if (!verified) {
-      res.status(400).json({
-        success: false,
-        error: 'Email verification failed. Please check your SMTP settings.',
-      });
-      return;
-    }
-
-    res.json({
-      success: true,
-      message: 'Email configuration verified successfully! You can now send emails.',
-    });
-  } catch (error) {
-    console.error('❌ Error verifying email:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to verify email configuration',
-    });
-  }
+  res.status(410).json({
+    success: false,
+    error: 'Email verification is deprecated. OAuth 2.0 handles verification automatically.',
+    redirectTo: '/oauth'
+  });
 });
 
-// Route to test SMTP connection
+// SMTP testing has been replaced with OAuth2.0
+// This endpoint is deprecated - OAuth handles connection testing automatically
 router.post('/test-smtp', async (req: Request, res: Response) => {
-  try {
-    const { smtpConfig }: { smtpConfig: SMTPConfig } = req.body;
-
-    // Validate SMTP config
-    if (!smtpConfig.host || !smtpConfig.port || !smtpConfig.auth?.user || !smtpConfig.auth?.pass) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid SMTP configuration. Host, port, username, and password are required.',
-      });
-      return;
-    }
-
-    // Test the connection
-    const connectionTest = await emailService.testSMTPConnection(smtpConfig);
-    
-    if (connectionTest) {
-      res.json({
-        success: true,
-        message: 'SMTP connection test successful',
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        error: 'SMTP connection test failed. Please check your settings.',
-      });
-    }
-  } catch (error) {
-    console.error('❌ Error testing SMTP connection:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to test SMTP connection',
-    });
-  }
+  res.status(410).json({
+    success: false,
+    error: 'SMTP testing is deprecated. OAuth 2.0 handles connection testing automatically.',
+    redirectTo: '/oauth'
+  });
 });
 
-// Route to send email
+// SMTP email sending has been replaced with OAuth2.0
+// This endpoint is deprecated - use OAuth endpoints instead
 router.post('/send', async (req: Request, res: Response) => {
-  try {
-    const { to, subject, message }: EmailData = req.body;
-
-    // Validate required fields
-    if (!to || !subject || !message) {
-      res.status(400).json({
-        success: false,
-        error: 'Missing required fields: to, subject, and message are required',
-      });
-      return;
-    }
-
-    // Use the email service directly
-    const result = await emailService.sendEmail(req as AuthenticatedRequest, { to, subject, message });
-
-    if (result.success) {
-      res.json({
-        success: true,
-        messageId: result.messageId,
-        message: 'Email sent successfully',
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        error: result.error || 'Failed to send email',
-      });
-    }
-  } catch (error) {
-    console.error('❌ Error sending email:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error while sending email',
-    });
-  }
+  res.status(410).json({
+    success: false,
+    error: 'SMTP email sending is deprecated. Please use OAuth 2.0 email sending instead.',
+    redirectTo: '/oauth/send-email'
+  });
 });
 
-// Route to test email connection (without sending actual email)
+// SMTP connection testing has been replaced with OAuth2.0
+// This endpoint is deprecated - OAuth handles connection testing automatically
 router.post('/test-connection', async (req: Request, res: Response) => {
-  try {
-    // Test the email service configuration
-    const config = await emailService.checkConfiguration();
-    
-    if (config.configured) {
-      res.json({
-        success: true,
-        message: 'Email service connection test successful',
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        error: config.error || 'Connection test failed',
-      });
-    }
-  } catch (error) {
-    console.error('❌ Error testing email connection:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to test email connection',
-    });
-  }
+  res.status(410).json({
+    success: false,
+    error: 'SMTP connection testing is deprecated. OAuth 2.0 handles connection testing automatically.',
+    redirectTo: '/oauth/status'
+  });
 });
 
 // Route to get email history

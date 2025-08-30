@@ -1,315 +1,194 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, CheckCircle2, Mail, Settings, Link2, AlertCircle, Send, Key, Server, Shield, TestTube } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Loader2, CheckCircle2, Mail, Settings, Link2, AlertCircle, Send, Shield, ExternalLink, ArrowRight, Users, Lock } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import API from '../../api/client';
 import { useAuthStore } from '../../store/useAuthStore';
 
-interface SMTPConfig {
-  host: string;
-  port: number;
-  secure: boolean;
-  auth: {
-    user: string;
-    pass: string;
-  };
-  tls?: {
-    rejectUnauthorized: boolean;
-  };
+interface OAuthStatus {
+  configured: boolean;
+  verified: boolean;
+  email?: string;
+  provider?: string;
+  error?: string;
 }
 
 const EmailIntegration: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuthStore();
-  const [isConnected, setIsConnected] = useState(false);
-  const [isConfiguring, setIsConfiguring] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
-  const [isSending, setIsSending] = useState(false);
+  const [oauthStatus, setOAuthStatus] = useState<OAuthStatus | null>(null);
+  const [isLoadingOAuth, setIsLoadingOAuth] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [configError, setConfigError] = useState<string | null>(null);
-  const [verificationError, setVerificationError] = useState<string | null>(null);
-  const [userEmailStatus, setUserEmailStatus] = useState<{
-    configured: boolean;
-    verified: boolean;
-    email?: string;
-    error?: string;
-  } | null>(null);
-
-  const [formData, setFormData] = useState({
-    to: '',
-    subject: '',
-    message: '',
-  });
-
-  const [smtpConfig, setSmtpConfig] = useState<SMTPConfig>({
-    host: '',
-    port: 587,
-    secure: false,
-    auth: {
-      user: user?.email || '',
-      pass: '', // Always start with empty password
-    },
-    tls: {
-      rejectUnauthorized: false,
-    },
-  });
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   // Get user email from auth store
   const userEmail = user?.email || '';
 
-  // Check user email configuration on component mount
+  // Check OAuth status on component mount and when page gains focus
   useEffect(() => {
-    checkUserEmailConfiguration();
+    checkOAuthStatus();
+    
+    // Also check when the page becomes visible (user returns from OAuth)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('🔍 EmailIntegration - Page became visible, checking OAuth status');
+        checkOAuthStatus();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Also check when window gains focus
+    const handleFocus = () => {
+      console.log('🔍 EmailIntegration - Window gained focus, checking OAuth status');
+      checkOAuthStatus();
+    };
+    
+    window.addEventListener('focus', handleFocus);
+
+    // Listen for OAuth events from the URL handler
+    const handleOAuthSuccess = () => {
+      console.log('🎉 OAuth success event received');
+      setTimeout(() => checkOAuthStatus(), 1000); // Wait a bit for backend processing
+    };
+
+    const handleOAuthError = (event: any) => {
+      console.log('❌ OAuth error event received:', event.detail?.error);
+      setAuthError(event.detail?.error || 'OAuth authentication failed');
+    };
+
+    window.addEventListener('oauth-success', handleOAuthSuccess);
+    window.addEventListener('oauth-error', handleOAuthError);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('oauth-success', handleOAuthSuccess);
+      window.removeEventListener('oauth-error', handleOAuthError);
+    };
   }, []);
 
-  // Auto-sync SMTP username with user email
+  // Also check OAuth status when location changes (e.g., from OAuth redirect)
   useEffect(() => {
-    if (userEmail) {
-      setSmtpConfig(prev => ({
-        ...prev,
-        auth: {
-          ...prev.auth,
-          user: userEmail,
-        },
-      }));
-    }
-  }, [userEmail]);
+    console.log('🔍 EmailIntegration - Location changed, checking OAuth status');
+    checkOAuthStatus();
+  }, [location.pathname]);
 
-  // Ensure password is always empty on mount and when user changes
-  useEffect(() => {
-    setSmtpConfig(prev => ({
-      ...prev,
-      auth: {
-        ...prev.auth,
-        pass: '',
-      },
-    }));
-  }, [userEmail]); // Clear password when user changes
-
-  const checkUserEmailConfiguration = async () => {
+  const checkOAuthStatus = async () => {
+    setIsLoadingOAuth(true);
     try {
-      const response = await API.get('/email/user-config');
+      console.log('🔍 EmailIntegration - Checking OAuth status...');
+      const response = await API.get('/oauth/status');
       const data = response.data;
+      console.log('🔍 EmailIntegration - OAuth status response:', data);
       
       if (data.success) {
-        setUserEmailStatus(data);
-        const shouldBeConnected = data.configured && data.verified;
-        setIsConnected(shouldBeConnected);
-        // User email is already set from auth store
+        setOAuthStatus(data);
       } else {
-        setUserEmailStatus({
+        setOAuthStatus({
           configured: false,
           verified: false,
           error: data.error,
         });
-        setIsConnected(false);
       }
     } catch (error: any) {
-      console.error('Error checking user email configuration:', error);
-      setUserEmailStatus({
+      console.error('Error checking OAuth status:', error);
+      setOAuthStatus({
         configured: false,
         verified: false,
-        error: 'Failed to check email configuration',
+        error: 'Failed to check OAuth status',
       });
-      setIsConnected(false);
+    } finally {
+      setIsLoadingOAuth(false);
     }
   };
 
-  const handleSMTPConfigChange = (field: string, value: any) => {
-    if (field.includes('.')) {
-      const [parent, child] = field.split('.');
-      setSmtpConfig(prev => ({
-        ...prev,
-        [parent]: {
-          ...(prev[parent as keyof SMTPConfig] as any),
-          [child]: value,
-        },
-      }));
-      } else {
-      setSmtpConfig(prev => ({
-        ...prev,
-        [field]: value,
-      }));
-    }
-  };
-
-  const handleTestConnection = async () => {
+  const handleGmailConnect = async () => {
     setIsConnecting(true);
-    setConnectionError(null);
+    setAuthError(null);
     
     try {
-      const response = await API.post('/email/test-smtp', { smtpConfig });
+      const response = await API.get('/oauth/gmail/auth-url');
       const data = response.data;
       
       if (data.success) {
-        setConnectionError(null);
-        // Show success message
-        alert('SMTP connection test successful! You can now save your configuration.');
+        // Redirect to Gmail OAuth URL
+        window.location.href = data.authUrl;
       } else {
-        setConnectionError(data.error || 'Connection test failed');
+        setAuthError(data.error || 'Failed to get Gmail authorization URL');
       }
     } catch (error: any) {
-      console.error('Error testing SMTP connection:', error);
-      setConnectionError(`Failed to test connection: ${error.response?.data?.error || error.message}`);
+      console.error('Error getting Gmail auth URL:', error);
+      setAuthError(error.response?.data?.error || 'Failed to connect to Gmail');
     } finally {
       setIsConnecting(false);
     }
   };
 
-  const handleSaveConfiguration = async () => {
-    if (!userEmail.trim()) {
-      setConfigError('Please enter your email address');
-      return;
-    }
-
-    if (!smtpConfig.host || !smtpConfig.auth.user || !smtpConfig.auth.pass) {
-      setConfigError('Please fill in all required SMTP fields');
-      return;
-    }
-
-    setIsConfiguring(true);
-    setConfigError(null);
+  const handleOutlookConnect = async () => {
+    setIsConnecting(true);
+    setAuthError(null);
     
     try {
-      const response = await API.post('/email/configure-smtp', {
-        email: userEmail,
-        smtpConfig,
-      });
-      
+      const response = await API.get('/oauth/outlook/auth-url');
       const data = response.data;
       
       if (data.success) {
-        setConfigError(null);
-        alert('SMTP configuration saved successfully! Please verify your email to complete setup.');
-        // Refresh user email status
-        await checkUserEmailConfiguration();
+        // Redirect to Outlook OAuth URL
+        window.location.href = data.authUrl;
       } else {
-        setConfigError(data.error || 'Failed to save configuration');
+        setAuthError(data.error || 'Failed to get Outlook authorization URL');
       }
     } catch (error: any) {
-      console.error('Error saving SMTP configuration:', error);
-      setConfigError(`Failed to save configuration: ${error.response?.data?.error || error.message}`);
+      console.error('Error getting Outlook auth URL:', error);
+      setAuthError(error.response?.data?.error || 'Failed to connect to Outlook');
     } finally {
-      setIsConfiguring(false);
+      setIsConnecting(false);
     }
   };
 
-  const handleVerifyEmail = async () => {
-    if (!userEmail.trim() || !smtpConfig.host || !smtpConfig.auth.user || !smtpConfig.auth.pass) {
-      setVerificationError('Please ensure all SMTP configuration fields are filled');
-      return;
-    }
-
-    setIsVerifying(true);
-    setVerificationError(null);
+  const handleDisconnect = async () => {
+    setIsDisconnecting(true);
+    setAuthError(null);
     
     try {
-      const response = await API.post('/email/verify-email', {
-        email: userEmail,
-        smtpConfig,
-      });
-      
+      const response = await API.delete('/oauth/disconnect');
       const data = response.data;
       
       if (data.success) {
-        setVerificationError(null);
-        alert('Email verification successful! You can now send emails.');
-        
-        // Update the connection status immediately
-        setIsConnected(true);
-        
-        // Update user email status locally to show verified
-        setUserEmailStatus(prev => prev ? {
-          ...prev,
-          verified: true
-        } : null);
-        
-        // Don't refresh from backend immediately - let the local state persist
-        // The backend refresh will happen on the next page load or manual refresh
+        setOAuthStatus({
+          configured: false,
+          verified: false,
+        });
+        alert('OAuth email configuration removed successfully');
       } else {
-        setVerificationError(data.error || 'Email verification failed');
+        setAuthError(data.error || 'Failed to disconnect OAuth');
       }
     } catch (error: any) {
-      console.error('Error verifying email:', error);
-      setVerificationError(`Failed to verify email: ${error.response?.data?.error || error.message}`);
+      console.error('Error disconnecting OAuth:', error);
+      setAuthError(error.response?.data?.error || 'Failed to disconnect OAuth');
     } finally {
-      setIsVerifying(false);
+      setIsDisconnecting(false);
     }
   };
 
-  const handleSendEmail = async () => {
-    setIsSending(true);
-    setEmailError(null);
-    
-    try {
-      const response = await API.post('/email/send', formData);
-      const data = response.data;
-      
-      if (data.success) {
-        setEmailSent(true);
-        setFormData({ to: '', subject: '', message: '' });
-        setTimeout(() => setEmailSent(false), 3000);
-      } else {
-        setEmailError(data.error || 'Failed to send email');
-      }
-    } catch (error: any) {
-      console.error('Error sending email:', error);
-      setEmailError(`Failed to send email: ${error.response?.data?.error || error.message}`);
-    } finally {
-      setIsSending(false);
+  const verifyEmailMatch = (oauthEmail?: string) => {
+    if (!oauthEmail || !userEmail) return true;
+    return oauthEmail.toLowerCase() === userEmail.toLowerCase();
+  };
+
+  const getStatusBadge = (configured: boolean, verified: boolean, hasError?: boolean) => {
+    if (hasError) {
+      return <span className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded">Error</span>;
     }
-  };
-
-  const getCommonSMTPConfigs = () => [
-    {
-      name: 'Gmail',
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-    },
-    {
-      name: 'Outlook/Hotmail',
-      host: 'smtp-mail.outlook.com',
-      port: 587,
-      secure: false,
-    },
-    {
-      name: 'Yahoo',
-      host: 'smtp.mail.yahoo.com',
-      port: 587,
-      secure: false,
-    },
-    {
-      name: 'Office 365',
-      host: 'smtp.office365.com',
-      port: 587,
-      secure: false,
-    },
-  ];
-
-  const applyCommonConfig = (config: any) => {
-    setSmtpConfig(prev => ({
-      ...prev,
-      host: config.host,
-      port: config.port,
-      secure: config.secure,
-      auth: {
-        ...prev.auth,
-        pass: '', // Always clear password when applying new config
-      },
-    }));
-  };
-
-  const clearPassword = () => {
-    setSmtpConfig(prev => ({
-      ...prev,
-      auth: {
-        ...prev.auth,
-        pass: '',
-      },
-    }));
+    if (verified) {
+      return <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded">✓ Ready</span>;
+    }
+    if (configured) {
+      return <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded">⚠ Needs Verification</span>;
+    }
+    return <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">Not Connected</span>;
   };
 
   return (
@@ -317,7 +196,7 @@ const EmailIntegration: React.FC = () => {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
           <Mail className="w-6 h-6 text-blue-600" />
-          Email Integration
+          OAuth Email Integration
         </h1>
         <button
           onClick={() => navigate('/integrations/email/history')}
@@ -329,364 +208,340 @@ const EmailIntegration: React.FC = () => {
       </div>
 
       <div className="bg-white shadow rounded-xl p-6 space-y-6 max-w-4xl">
+        {/* Header Info */}
+        <div className="text-center py-4">
+          <div className="flex justify-center mb-4">
+            <div className="p-3 bg-green-100 rounded-full">
+              <Shield className="w-8 h-8 text-green-600" />
+            </div>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Secure OAuth 2.0 Email Authentication</h2>
+          <p className="text-gray-600 max-w-2xl mx-auto">
+            Connect your Gmail or Outlook account securely using OAuth 2.0. No passwords required - 
+            just grant permission and start sending emails through your authenticated account.
+          </p>
+        </div>
+
         {/* Status Section */}
         <div>
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-700 flex items-center gap-2">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-700 flex items-center gap-2">
               <Link2 className="w-5 h-5 text-gray-500" />
               Connection Status
-            </h2>
+            </h3>
+            {getStatusBadge(
+              oauthStatus?.configured || false, 
+              oauthStatus?.verified || false,
+              !!oauthStatus?.error
+            )}
           </div>
           
-                     {userEmailStatus && (
-             <div className="mt-2 p-3 bg-gray-50 rounded-lg">
-               <div className="flex items-center justify-between">
-                 <div>
-                   <p className="text-sm text-gray-600">
-                     <strong>Service:</strong> NodeMailer SMTP
-                   </p>
-                   <p className="text-sm text-gray-600">
-                     <strong>Status:</strong> 
-                     <span className={`ml-1 ${
-                       userEmailStatus.verified ? 'text-green-600' : 
-                       userEmailStatus.configured ? 'text-yellow-600' : 'text-red-600'
-                     }`}>
-                       {userEmailStatus.verified ? '✓ Verified & Ready' :
-                        userEmailStatus.configured ? '⚠ Configured (Needs Verification)' : '✗ Not Configured'}
-                     </span>
-                   </p>
-                   {userEmailStatus.email && (
-                     <p className="text-sm text-gray-600">
-                       <strong>Email:</strong> {userEmailStatus.email}
-                     </p>
-                   )}
-                 </div>
-                 <button
-                   onClick={checkUserEmailConfiguration}
-                   className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                   title="Refresh status from server"
-                 >
-                   🔄 Refresh
-                 </button>
-               </div>
-             </div>
-           )}
-          
-          {connectionError && (
-            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-red-500" />
-              <p className="text-sm text-red-600">{connectionError}</p>
-            </div>
-          )}
-        </div>
-          
-        {/* SMTP Configuration Section */}
-          {!isConnected && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-700 flex items-center gap-2 mb-4">
-              <Settings className="w-5 h-5 text-gray-500" />
-              Configure SMTP Settings
-            </h2>
-
-            {/* Common SMTP Configurations */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Quick Setup (Common Providers)</label>
-              <div className="flex flex-wrap gap-2">
-                {getCommonSMTPConfigs().map((config, index) => (
-                  <button
-                    key={index}
-                    onClick={() => applyCommonConfig(config)}
-                    className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-                  >
-                    {config.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Email Address Display */}
-              <div className="md:col-span-3">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Mail className="w-4 h-4 inline mr-1" />
-                  Your Email Address
-                </label>
-                <div className="w-full p-2 bg-gray-50 border rounded text-gray-700">
-                  {userEmail || 'Loading...'}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  This is your authenticated email address from your account
-                </p>
-              </div>
-
-              {/* SMTP Host */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Server className="w-4 h-4 inline mr-1" />
-                  SMTP Server
-                </label>
-                <input
-                  type="text"
-                  placeholder="smtp.gmail.com"
-                  value={smtpConfig.host}
-                  onChange={(e) => handleSMTPConfigChange('host', e.target.value)}
-                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              {/* SMTP Port */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Key className="w-4 h-4 inline mr-1" />
-                  Port
-                </label>
-                <input
-                  type="number"
-                  placeholder="587"
-                  value={smtpConfig.port}
-                  onChange={(e) => handleSMTPConfigChange('port', parseInt(e.target.value))}
-                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-
-              {/* Username - Hidden since it auto-syncs with user email */}
-              <input
-                type="hidden"
-                value={userEmail}
-                onChange={(e) => handleSMTPConfigChange('auth.user', e.target.value)}
-              />
-
-              {/* Password */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Key className="w-4 h-4 inline mr-1" />
-                  Password/App Password
-                </label>
-                <input
-                  type="password"
-                  placeholder="Your password or app password"
-                  value={smtpConfig.auth.pass}
-                  onChange={(e) => handleSMTPConfigChange('auth.pass', e.target.value)}
-                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <div className="flex items-center justify-between mt-1">
-                  <p className="text-xs text-gray-500">
-                    Enter your SMTP password or Gmail App Password
+          {oauthStatus && (
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm text-gray-600">
+                    <strong>Status:</strong> 
+                    <span className={`ml-1 ${
+                      oauthStatus.verified ? 'text-green-600' : 
+                      oauthStatus.configured ? 'text-yellow-600' : 'text-red-600'
+                    }`}>
+                      {oauthStatus.verified ? '✓ Connected & Verified' :
+                       oauthStatus.configured ? '⚠ Connected (Needs Verification)' : '✗ Not Connected'}
+                    </span>
+                  </p>
+                  {oauthStatus.email && (
+                    <p className="text-sm text-gray-600">
+                      <strong>Authenticated Email:</strong> {oauthStatus.email}
+                    </p>
+                  )}
+                  {oauthStatus.provider && (
+                    <p className="text-sm text-gray-600">
+                      <strong>Provider:</strong> {oauthStatus.provider.charAt(0).toUpperCase() + oauthStatus.provider.slice(1)}
+                    </p>
+                  )}
+                  <p className="text-sm text-gray-600">
+                    <strong>Your Account Email:</strong> {userEmail}
                   </p>
                 </div>
-              </div>
-
-              {/* Security Options */}
-              <div className="md:col-span-2">
-                <div className="flex items-center space-x-4">
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={smtpConfig.secure}
-                      onChange={(e) => handleSMTPConfigChange('secure', e.target.checked)}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm text-gray-700">Use SSL/TLS (port 465)</span>
-                  </label>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={smtpConfig.tls?.rejectUnauthorized || false}
-                      onChange={(e) => handleSMTPConfigChange('tls.rejectUnauthorized', e.target.checked)}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm text-gray-700">Strict SSL verification</span>
-                  </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={checkOAuthStatus}
+                    className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                    title="Refresh status from server"
+                  >
+                    🔄 Refresh
+                  </button>
+                  {oauthStatus.verified && (
+                    <button
+                      onClick={handleDisconnect}
+                      disabled={isDisconnecting}
+                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                        isDisconnecting
+                          ? 'bg-gray-400 text-gray-700 cursor-not-allowed'
+                          : 'bg-red-100 text-red-700 hover:bg-red-200'
+                      }`}
+                    >
+                      {isDisconnecting ? (
+                        <div className="flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Disconnecting...
+                        </div>
+                      ) : (
+                        'Disconnect'
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex flex-wrap gap-3 mt-4">
-            <button
-                onClick={handleTestConnection}
-                disabled={isConnecting || !smtpConfig.host || !smtpConfig.auth.user || !smtpConfig.auth.pass}
-                className={`px-4 py-2 rounded text-white flex items-center gap-2 ${
-                isConnecting
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700'
-              }`}
-            >
-              {isConnecting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Testing...
-                  </>
-                ) : (
-                  <>
-                    <TestTube className="w-4 h-4" />
-                    Test Connection
-                  </>
-                )}
-              </button>
-
-              <button
-                onClick={handleSaveConfiguration}
-                disabled={isConfiguring || !userEmail || !smtpConfig.host || !smtpConfig.auth.user || !smtpConfig.auth.pass}
-                className={`px-4 py-2 rounded text-white flex items-center gap-2 ${
-                  isConfiguring
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-green-600 hover:bg-green-700'
-                }`}
-              >
-                {isConfiguring ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Settings className="w-4 h-4" />
-                    Save Configuration
-                  </>
-                )}
-              </button>
-
-              {userEmailStatus?.configured && !userEmailStatus?.verified && (
-                <button
-                  onClick={handleVerifyEmail}
-                  disabled={isVerifying || !userEmail || !smtpConfig.host || !smtpConfig.auth.user || !smtpConfig.auth.pass}
-                  className={`px-4 py-2 rounded text-white flex items-center gap-2 ${
-                    isVerifying
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-purple-600 hover:bg-purple-700'
-                  }`}
-                >
-                  {isVerifying ? (
-                    <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                      Verifying...
-                    </>
-              ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      Verify Email
-                    </>
+              
+              {/* Email Mismatch Warning */}
+              {oauthStatus.verified && oauthStatus.email && !verifyEmailMatch(oauthStatus.email) && (
+                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-yellow-500" />
+                  <div className="text-sm text-yellow-700">
+                    <p><strong>Email Mismatch Warning:</strong></p>
+                    <p>Your authenticated email ({oauthStatus.email}) doesn't match your account email ({userEmail}).</p>
+                    <p>Please re-authenticate with your account email to send emails.</p>
+                  </div>
+                </div>
               )}
-            </button>
+            </div>
+          )}
+
+          {isLoadingOAuth && (
+            <div className="flex items-center justify-center gap-2 py-4 text-gray-500">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Checking OAuth status...</span>
+            </div>
           )}
         </div>
 
-            {/* Error Messages */}
-            {configError && (
-              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-red-500" />
-                <p className="text-sm text-red-600">{configError}</p>
-                </div>
-            )}
-
-            {verificationError && (
-              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-red-500" />
-                <p className="text-sm text-red-600">{verificationError}</p>
-                </div>
-            )}
-
-            {/* Help Text */}
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <h4 className="font-medium text-blue-800 mb-2">💡 Setup Instructions:</h4>
-              <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
-                <li>Your email address is automatically filled from your account</li>
-                <li>Enter your SMTP server details (host, port, password)</li>
-                <li>Username is automatically set to match your email</li>
-                <li>Test the connection to verify your settings</li>
-                <li>Save your configuration</li>
-                <li>Verify your email by clicking the verification button</li>
-                <li>Once verified, you can start sending emails!</li>
-              </ol>
-              <div className="mt-2 text-xs text-blue-600">
-                <strong>Note:</strong> For Gmail, you may need to use an App Password instead of your regular password.
-              </div>
-            </div>
-            </div>
-        )}
-
-        {/* Connected Sections */}
-        {isConnected && (
-          <>
-            {/* Email Form */}
-            <div className="border-t pt-4">
-              <h2 className="text-lg font-semibold text-gray-700 mb-4">Send Email</h2>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm text-gray-600">To</label>
-                  <input
-                    type="email"
-                    placeholder="client@example.com"
-                    value={formData.to}
-                    onChange={(e) => setFormData({ ...formData, to: e.target.value })}
-                    className="w-full mt-1 p-2 border rounded"
+        {/* Connection Section */}
+        {!oauthStatus?.verified ? (
+          <div>
+            <h3 className="text-lg font-semibold text-gray-700 mb-4">Connect Your Email Account</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {/* Gmail Connection */}
+              <div className="border rounded-lg p-6 hover:shadow-md transition-shadow">
+                <div className="flex items-center gap-3 mb-4">
+                  <img 
+                    src="https://developers.google.com/identity/images/g-logo.png" 
+                    alt="Gmail" 
+                    className="w-10 h-10"
                   />
+                  <div>
+                    <h4 className="text-lg font-medium">Gmail</h4>
+                    <p className="text-sm text-gray-500">Google Workspace & Gmail</p>
+                  </div>
                 </div>
-
-                <div>
-                  <label className="block text-sm text-gray-600">Subject</label>
-                  <input
-                    type="text"
-                    placeholder="Subject line"
-                    value={formData.subject}
-                    onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                    className="w-full mt-1 p-2 border rounded"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-gray-600">Message</label>
-                  <textarea
-                    placeholder="Write your message here..."
-                    rows={5}
-                    value={formData.message}
-                    onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                    className="w-full mt-1 p-2 border rounded"
-                  />
-                </div>
-
+                <p className="text-sm text-gray-600 mb-4">
+                  Connect your Gmail account to send emails through the Gmail API using secure OAuth 2.0 authentication.
+                </p>
+                <ul className="text-xs text-gray-500 mb-4 space-y-1">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-3 h-3 text-green-500" />
+                    Supports Gmail & Google Workspace
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-3 h-3 text-green-500" />
+                    Enterprise-grade security
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-3 h-3 text-green-500" />
+                    No app passwords needed
+                  </li>
+                </ul>
                 <button
-                  onClick={handleSendEmail}
-                  disabled={!formData.to || !formData.subject || !formData.message || isSending}
-                  className={`px-4 py-2 rounded text-white ${
-                    isSending
+                  onClick={handleGmailConnect}
+                  disabled={isConnecting}
+                  className={`w-full px-4 py-2 rounded text-white flex items-center justify-center gap-2 transition-colors ${
+                    isConnecting
                       ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-green-600 hover:bg-green-700'
+                      : 'bg-red-600 hover:bg-red-700'
                   }`}
                 >
-                  {isSending ? (
-                    <span className="flex items-center gap-2">
+                  {isConnecting ? (
+                    <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Sending...
-                    </span>
+                      Connecting...
+                    </>
                   ) : (
-                    "Send Email"
+                    <>
+                      <ExternalLink className="w-4 h-4" />
+                      Connect Gmail
+                    </>
                   )}
                 </button>
+              </div>
 
-                {emailSent && (
-                  <p className="text-green-600 flex items-center gap-2 text-sm mt-3">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Email sent successfully!
-                  </p>
-                )}
-
-                {emailError && (
-                  <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5 text-red-500" />
-                    <p className="text-sm text-red-600">{emailError}</p>
+              {/* Outlook Connection */}
+              <div className="border rounded-lg p-6 hover:shadow-md transition-shadow">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-blue-600 rounded flex items-center justify-center">
+                    <Mail className="w-6 h-6 text-white" />
                   </div>
-                )}
+                  <div>
+                    <h4 className="text-lg font-medium">Outlook</h4>
+                    <p className="text-sm text-gray-500">Microsoft 365 & Outlook</p>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 mb-4">
+                  Connect your Outlook or Microsoft 365 account to send emails through Microsoft Graph API.
+                </p>
+                <ul className="text-xs text-gray-500 mb-4 space-y-1">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-3 h-3 text-green-500" />
+                    Supports Outlook & Microsoft 365
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-3 h-3 text-green-500" />
+                    Microsoft Graph API integration
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-3 h-3 text-green-500" />
+                    Modern authentication
+                  </li>
+                </ul>
+                <button
+                  onClick={handleOutlookConnect}
+                  disabled={isConnecting}
+                  className={`w-full px-4 py-2 rounded text-white flex items-center justify-center gap-2 transition-colors ${
+                    isConnecting
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+                >
+                  {isConnecting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    <>
+                      <ExternalLink className="w-4 h-4" />
+                      Connect Outlook
+                    </>
+                  )}
+                </button>
               </div>
             </div>
-          </>
+
+            {/* OAuth Help Text */}
+            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+              <h4 className="font-medium text-green-800 mb-2">🔐 How OAuth 2.0 Authentication Works</h4>
+              <ol className="text-sm text-green-700 space-y-1 list-decimal list-inside">
+                <li>Click on your preferred email provider above</li>
+                <li>You'll be redirected to the official login page (Gmail or Microsoft)</li>
+                <li>Log in with your credentials on their secure platform</li>
+                <li>Grant permission for SharpCRM to send emails on your behalf</li>
+                <li>You'll be redirected back to our application</li>
+                <li>We verify that your authenticated email matches your account email</li>
+                <li>Start sending emails immediately after successful authentication</li>
+              </ol>
+              <div className="mt-3 p-2 bg-green-100 rounded text-xs text-green-700">
+                <div className="flex items-center gap-2 mb-1">
+                  <Lock className="w-3 h-3" />
+                  <strong>Security & Privacy:</strong>
+                </div>
+                <ul className="space-y-0.5 ml-5">
+                  <li>• We never see or store your email password</li>
+                  <li>• Only secure OAuth tokens are stored in AWS Secrets Manager</li>
+                  <li>• You can revoke access at any time from your email provider</li>
+                  <li>• All communications are encrypted</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Success State */
+          <div className="text-center p-6 bg-green-50 border border-green-200 rounded-lg">
+            <CheckCircle2 className="w-16 h-16 text-green-600 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-green-800 mb-2">
+              🎉 OAuth Email Integration Active!
+            </h3>
+            <p className="text-green-700 mb-2">
+              Your {oauthStatus.provider} account ({oauthStatus.email}) is connected and ready to send emails.
+            </p>
+            <p className="text-sm text-green-600 mb-6">
+              You can now send emails securely through your authenticated email account.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                onClick={() => navigate('/integrations/email/compose')}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <Send className="w-5 h-5" />
+                Send Emails Now
+                <ArrowRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => navigate('/integrations/email/history')}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Users className="w-5 h-5" />
+                View Email History
+              </button>
+            </div>
+          </div>
         )}
+
+        {/* Error Display */}
+        {authError && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-red-500" />
+            <div>
+              <p className="text-sm text-red-600 font-medium">Authentication Error</p>
+              <p className="text-sm text-red-600">{authError}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Features List */}
+        <div className="border-t pt-6">
+          <h3 className="text-lg font-semibold text-gray-700 mb-4">OAuth Email Features</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex items-start gap-3">
+              <div className="p-1 bg-green-100 rounded">
+                <CheckCircle2 className="w-4 h-4 text-green-600" />
+              </div>
+              <div>
+                <h4 className="font-medium text-gray-800">Secure Authentication</h4>
+                <p className="text-sm text-gray-600">OAuth 2.0 standard with no password storage</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="p-1 bg-green-100 rounded">
+                <CheckCircle2 className="w-4 h-4 text-green-600" />
+              </div>
+              <div>
+                <h4 className="font-medium text-gray-800">Email Verification</h4>
+                <p className="text-sm text-gray-600">Ensures authenticated email matches your account</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="p-1 bg-green-100 rounded">
+                <CheckCircle2 className="w-4 h-4 text-green-600" />
+              </div>
+              <div>
+                <h4 className="font-medium text-gray-800">Multiple Providers</h4>
+                <p className="text-sm text-gray-600">Support for Gmail and Outlook/Microsoft 365</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="p-1 bg-green-100 rounded">
+                <CheckCircle2 className="w-4 h-4 text-green-600" />
+              </div>
+              <div>
+                <h4 className="font-medium text-gray-800">Email Tracking</h4>
+                <p className="text-sm text-gray-600">Complete history and status tracking</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
 export default EmailIntegration;
-

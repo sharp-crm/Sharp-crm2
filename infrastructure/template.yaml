@@ -79,6 +79,31 @@ Parameters:
     Description: JWT Refresh Secret for refresh token signing
     NoEcho: true
   
+  # OAuth Configuration Parameters
+  GmailClientId:
+    Type: String
+    Default: ""
+    Description: Gmail OAuth 2.0 Client ID from Google Cloud Console
+    NoEcho: false
+  
+  GmailClientSecret:
+    Type: String
+    Default: ""
+    Description: Gmail OAuth 2.0 Client Secret from Google Cloud Console
+    NoEcho: true
+  
+  OutlookClientId:
+    Type: String
+    Default: ""
+    Description: Outlook OAuth 2.0 Client ID from Azure Portal
+    NoEcho: false
+  
+  OutlookClientSecret:
+    Type: String
+    Default: ""
+    Description: Outlook OAuth 2.0 Client Secret from Azure Portal
+    NoEcho: true
+  
   DomainName:
     Type: String
     Default: "sharpcrm.com"
@@ -135,6 +160,8 @@ Resources:
           REFRESH_TOKENS_TABLE: !Sub "${TablePrefix}-RefreshTokens-${Environment}"
           REFRESH_TOKENS_TABLE_NAME: !Sub "${TablePrefix}-RefreshTokens-${Environment}"
           EMAIL_HISTORY_TABLE: !Sub "${TablePrefix}-EmailHistory-${Environment}"
+          DYNAMODB_TABLE_NAME: !Sub "${TablePrefix}-${Environment}"
+          OAUTH_TABLE_NAME: !Sub "${TablePrefix}-OAuth-${Environment}"
           
           # Super Admin Configuration
           SUPER_ADMIN_EMAIL: "rootuser@sharp.com"
@@ -166,6 +193,12 @@ Resources:
 
           #Email Lambda Function
           EMAIL_LAMBDA_FUNCTION_NAME: !Ref EmailServiceFunction
+          
+          # OAuth Configuration - Referenced from parameters
+          GMAIL_CLIENT_ID: !Ref GmailClientId
+          GMAIL_CLIENT_SECRET: !Ref GmailClientSecret
+          OUTLOOK_CLIENT_ID: !Ref OutlookClientId
+          OUTLOOK_CLIENT_SECRET: !Ref OutlookClientSecret
       Events:
         ApiEvent:
           Type: Api
@@ -221,6 +254,10 @@ Resources:
             TableName: RefreshTokens
         - DynamoDBCrudPolicy:
             TableName: AuthUsers
+        - DynamoDBCrudPolicy:
+            TableName: !Sub "${TablePrefix}-${Environment}"
+        - DynamoDBCrudPolicy:
+            TableName: !Sub "${TablePrefix}-OAuth-${Environment}"
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -228,6 +265,17 @@ Resources:
                 - dynamodb:ListTables
                 - dynamodb:DescribeTable
               Resource: "*"
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+                - secretsmanager:PutSecretValue
+                - secretsmanager:CreateSecret
+                - secretsmanager:UpdateSecret
+                - secretsmanager:DeleteSecret
+                - secretsmanager:DescribeSecret
+              Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:sharp-crm/oauth/*"
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -289,28 +337,33 @@ Resources:
         Variables:
           NODE_ENV: !Ref Environment
           EMAIL_HISTORY_TABLE: !Sub "${TablePrefix}-EmailHistory-${Environment}"
+          DYNAMODB_TABLE_NAME: !Sub "${TablePrefix}-${Environment}"
+          OAUTH_TABLE_NAME: !Sub "${TablePrefix}-OAuth-${Environment}"
+          
+          # OAuth Configuration - Referenced from parameters
+          GMAIL_CLIENT_ID: !Ref GmailClientId
+          GMAIL_CLIENT_SECRET: !Ref GmailClientSecret
+          OUTLOOK_CLIENT_ID: !Ref OutlookClientId
+          OUTLOOK_CLIENT_SECRET: !Ref OutlookClientSecret
+          
+          # Frontend URL for OAuth redirects
+          FRONTEND_URL: "https://d9xj0evv3ouwa.cloudfront.net"
       Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Sub "${TablePrefix}-EmailHistory-${Environment}"
+        - DynamoDBCrudPolicy:
+            TableName: !Sub "${TablePrefix}-OAuth-${Environment}"
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
               Action:
                 - secretsmanager:GetSecretValue
+                - secretsmanager:PutSecretValue
                 - secretsmanager:CreateSecret
                 - secretsmanager:UpdateSecret
                 - secretsmanager:DeleteSecret
                 - secretsmanager:DescribeSecret
-                - secretsmanager:ListSecrets
-              Resource: '*'
-            - Effect: Allow
-              Action:
-                - dynamodb:PutItem
-                - dynamodb:GetItem
-                - dynamodb:UpdateItem
-                - dynamodb:Query
-                - dynamodb:Scan
-              Resource: 
-                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}-EmailHistory-${Environment}"
-                - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}-EmailHistory-${Environment}/index/*"
+              Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:sharp-crm/oauth/*"
             - Effect: Allow
               Action:
                 - logs:CreateLogGroup

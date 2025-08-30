@@ -27,8 +27,11 @@ import SuperAdminAccessControl from './pages/Settings/SuperAdminAccessControl';
 import OrgTree from './pages/Settings/OrgTree';
 import SuperAdminOrgTree from './pages/Settings/SuperAdminOrgTree';
 import EmailIntegration from './pages/Integration/EmailIntegration';
+import EmailCompose from './pages/Integration/EmailCompose';
 import EmailHistoryPage from './pages/EmailHistoryPage';
 import EmailDetailsPage from './pages/EmailDetailsPage';
+
+import OAuthUrlHandler from './components/OAuthUrlHandler';
 import TeamChat from './pages/TeamChat';
 import Profile from './pages/Profile';
 import AllReports from './pages/Reports/AllReports';
@@ -63,11 +66,14 @@ const App: React.FC = () => {
   return (
     <RouteErrorBoundary>
       <AuthWrapper>
-        <Routes>
+        <OAuthUrlHandler>
+          <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/logout" element={<Logout />} />
+          
+          {/* OAuth Callback Routes - Now handled by OAuthUrlHandler component */}
 
           {/* Protected Routes */}
           <Route
@@ -111,6 +117,8 @@ const App: React.FC = () => {
             
             {/* Integration and Chat routes - SuperAdmin can access */}
             <Route path="integrations/email" element={<EmailIntegration />} />
+            <Route path="integrations/email/oauth" element={<EmailCompose />} />
+            <Route path="integrations/email/compose" element={<EmailCompose />} />
             <Route path="integrations/email/history" element={<EmailHistoryPage />} />
             <Route path="integrations/email/history/:id" element={<EmailDetailsPage />} />
             <Route path="team-chat" element={<TeamChat />} />
@@ -129,8 +137,9 @@ const App: React.FC = () => {
           
           {/* 404 Catch-all Route - MUST be last */}
           <Route path="*" element={<NotFound />} />
-        </Routes>
-        <Toast />
+          </Routes>
+          <Toast />
+        </OAuthUrlHandler>
       </AuthWrapper>
     </RouteErrorBoundary>
   );

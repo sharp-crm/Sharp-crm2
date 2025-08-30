@@ -1,0 +1,502 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'SharpCRM Infrastructure (Simplified)
+
+  Serverless backend with Lambda functions and API Gateway Database tables will be
+  created manually using npm run init-db:global
+
+  '
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: nodejs18.x
+    MemorySize: 512
+    Environment:
+      Variables:
+        NODE_ENV:
+          Ref: Environment
+        REGION:
+          Ref: AWS::Region
+        TABLE_PREFIX:
+          Ref: TablePrefix
+        JWT_SECRET:
+          Ref: JWTSecret
+        JWT_REFRESH_SECRET:
+          Ref: JWTRefreshSecret
+        SUPER_ADMIN_EMAIL: rootuser@sharp.com
+        SUPER_ADMIN_PASSWORD: User@123
+        SUPER_ADMIN_FIRST_NAME: Root
+        SUPER_ADMIN_LAST_NAME: User
+        SUPER_ADMIN_ROLE: SUPER_ADMIN
+        SUPER_ADMIN_TENANT_ID: SUPER_ADMIN_TENANT
+        SUPER_ADMIN_CREATED_BY: SYSTEM
+        FRONTEND_URL: https://d9xj0evv3ouwa.cloudfront.net
+        FRONTEND_URL_ALT_1: http://localhost:5174
+        FRONTEND_URL_ALT_2: http://localhost:5175
+  Api:
+    Cors:
+      AllowMethods: '''GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD'''
+      AllowHeaders: '''Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'''
+      AllowOrigin: '''https://d9xj0evv3ouwa.cloudfront.net'''
+      AllowCredentials: true
+      MaxAge: 600
+    GatewayResponses:
+      DEFAULT_4XX:
+        ResponseParameters:
+          Headers:
+            Access-Control-Allow-Origin: '''https://d9xj0evv3ouwa.cloudfront.net'''
+            Access-Control-Allow-Headers: '''Content-Type,Authorization'''
+            Access-Control-Allow-Credentials: '''true'''
+      DEFAULT_5XX:
+        ResponseParameters:
+          Headers:
+            Access-Control-Allow-Origin: '''https://d9xj0evv3ouwa.cloudfront.net'''
+            Access-Control-Allow-Headers: '''Content-Type,Authorization'''
+            Access-Control-Allow-Credentials: '''true'''
+Parameters:
+  Environment:
+    Type: String
+    Default: development
+    AllowedValues:
+    - development
+    - staging
+    - production
+    Description: Environment name
+  TablePrefix:
+    Type: String
+    Default: SharpCRM
+    Description: Prefix for table names
+  JWTSecret:
+    Type: String
+    Default: your-super-secret-jwt-key-change-this-in-production
+    Description: JWT Secret for token signing
+    NoEcho: true
+  JWTRefreshSecret:
+    Type: String
+    Default: your-super-secret-jwt-refresh-key-change-this-in-production
+    Description: JWT Refresh Secret for refresh token signing
+    NoEcho: true
+  GmailClientId:
+    Type: String
+    Default: ''
+    Description: Gmail OAuth 2.0 Client ID from Google Cloud Console
+    NoEcho: false
+  GmailClientSecret:
+    Type: String
+    Default: ''
+    Description: Gmail OAuth 2.0 Client Secret from Google Cloud Console
+    NoEcho: true
+  OutlookClientId:
+    Type: String
+    Default: ''
+    Description: Outlook OAuth 2.0 Client ID from Azure Portal
+    NoEcho: false
+  OutlookClientSecret:
+    Type: String
+    Default: ''
+    Description: Outlook OAuth 2.0 Client Secret from Azure Portal
+    NoEcho: true
+  DomainName:
+    Type: String
+    Default: sharpcrm.com
+    Description: The domain name for the application
+  SubDomainName:
+    Type: String
+    Default: app
+    Description: The subdomain for the frontend application
+Resources:
+  BackendFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${TablePrefix}-Backend-${Environment}
+      CodeUri: BackendFunction
+      Handler: lambda-entrypoint.handler
+      Runtime: nodejs18.x
+      MemorySize: 512
+      Timeout: 30
+      Environment:
+        Variables:
+          NODE_ENV:
+            Ref: Environment
+          REGION:
+            Ref: AWS::Region
+          JWT_SECRET:
+            Ref: JWTSecret
+          JWT_REFRESH_SECRET:
+            Ref: JWTRefreshSecret
+          ACCESS_TOKEN_EXPIRY: 180m
+          REFRESH_TOKEN_EXPIRY: 7d
+          REFRESH_THRESHOLD: '300000'
+          FRONTEND_URL: https://d9xj0evv3ouwa.cloudfront.net
+          FRONTEND_URL_ALT_1: http://localhost:5174
+          FRONTEND_URL_ALT_2: http://localhost:5175
+          FRONTEND_DEV_URL: http://localhost:5173
+          FRONTEND_DEV_URL_ALT_1: http://localhost:5174
+          USERS_TABLE:
+            Fn::Sub: ${TablePrefix}-Users-${Environment}
+          USERS_TABLE_NAME:
+            Fn::Sub: ${TablePrefix}-Users-${Environment}
+          CONTACTS_TABLE:
+            Fn::Sub: ${TablePrefix}-Contacts-${Environment}
+          LEADS_TABLE:
+            Fn::Sub: ${TablePrefix}-Leads-${Environment}
+          DEALS_TABLE:
+            Fn::Sub: ${TablePrefix}-Deals-${Environment}
+          TASKS_TABLE:
+            Fn::Sub: ${TablePrefix}-Tasks-${Environment}
+          SUBSIDIARIES_TABLE:
+            Fn::Sub: ${TablePrefix}-Subsidiaries-${Environment}
+          DEALERS_TABLE:
+            Fn::Sub: ${TablePrefix}-Dealers-${Environment}
+          NOTIFICATIONS_TABLE:
+            Fn::Sub: ${TablePrefix}-Notifications-${Environment}
+          REPORTS_TABLE:
+            Fn::Sub: ${TablePrefix}-Reports-${Environment}
+          REFRESH_TOKENS_TABLE:
+            Fn::Sub: ${TablePrefix}-RefreshTokens-${Environment}
+          REFRESH_TOKENS_TABLE_NAME:
+            Fn::Sub: ${TablePrefix}-RefreshTokens-${Environment}
+          EMAIL_HISTORY_TABLE:
+            Fn::Sub: ${TablePrefix}-EmailHistory-${Environment}
+          DYNAMODB_TABLE_NAME:
+            Fn::Sub: ${TablePrefix}-${Environment}
+          OAUTH_TABLE_NAME:
+            Fn::Sub: ${TablePrefix}-OAuth-${Environment}
+          SUPER_ADMIN_EMAIL: rootuser@sharp.com
+          SUPER_ADMIN_PASSWORD: User@123
+          SUPER_ADMIN_FIRST_NAME: Root
+          SUPER_ADMIN_LAST_NAME: User
+          SUPER_ADMIN_ROLE: SUPER_ADMIN
+          SUPER_ADMIN_TENANT_ID: SUPER_ADMIN_TENANT
+          SUPER_ADMIN_CREATED_BY: SYSTEM
+          DYNAMODB_LOCAL: 'false'
+          DYNAMODB_RETRY_COUNT: '3'
+          DYNAMODB_RETRY_DELAY: '2000'
+          DB_RETRY_COUNT: '5'
+          DB_RETRY_DELAY: '3000'
+          JSON_LIMIT: 50mb
+          URLENCODED_LIMIT: 50mb
+          TYPING_TIMEOUT: '3000'
+          LOG_LEVEL: info
+          EMAIL_LAMBDA_FUNCTION_NAME:
+            Ref: EmailServiceFunction
+          GMAIL_CLIENT_ID:
+            Ref: GmailClientId
+          GMAIL_CLIENT_SECRET:
+            Ref: GmailClientSecret
+          OUTLOOK_CLIENT_ID:
+            Ref: OutlookClientId
+          OUTLOOK_CLIENT_SECRET:
+            Ref: OutlookClientSecret
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            RestApiId:
+              Ref: BackendApi
+        ApiOptionsEvent:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: OPTIONS
+            RestApiId:
+              Ref: BackendApi
+        HealthCheck:
+          Type: Api
+          Properties:
+            Path: /health
+            Method: GET
+            RestApiId:
+              Ref: BackendApi
+        HealthCheckOptions:
+          Type: Api
+          Properties:
+            Path: /health
+            Method: OPTIONS
+            RestApiId:
+              Ref: BackendApi
+      Policies:
+      - AWSLambdaBasicExecutionRole
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-Users-${Environment}
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-RefreshTokens-${Environment}
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-Contacts-${Environment}
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-Leads-${Environment}
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-Deals-${Environment}
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-Tasks-${Environment}
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-Subsidiaries-${Environment}
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-Dealers-${Environment}
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-Notifications-${Environment}
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-Reports-${Environment}
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-EmailHistory-${Environment}
+      - DynamoDBCrudPolicy:
+          TableName: Users
+      - DynamoDBCrudPolicy:
+          TableName: RefreshTokens
+      - DynamoDBCrudPolicy:
+          TableName: AuthUsers
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-${Environment}
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-OAuth-${Environment}
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:ListTables
+          - dynamodb:DescribeTable
+          Resource: '*'
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - secretsmanager:GetSecretValue
+          - secretsmanager:PutSecretValue
+          - secretsmanager:CreateSecret
+          - secretsmanager:UpdateSecret
+          - secretsmanager:DeleteSecret
+          - secretsmanager:DescribeSecret
+          Resource:
+            Fn::Sub: arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:sharp-crm/oauth/*
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:Query
+          - dynamodb:GetItem
+          - dynamodb:PutItem
+          - dynamodb:UpdateItem
+          - dynamodb:DeleteItem
+          - dynamodb:Scan
+          - dynamodb:BatchGetItem
+          - dynamodb:BatchWriteItem
+          - dynamodb:ConditionCheckItem
+          - dynamodb:DescribeStream
+          - dynamodb:GetRecords
+          - dynamodb:GetShardIterator
+          - dynamodb:ListStreams
+          Resource:
+          - Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/*
+          - Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/*/index/*
+          - Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/*/stream/*
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          Resource: '*'
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - lambda:InvokeFunction
+          Resource:
+            Fn::GetAtt:
+            - EmailServiceFunction
+            - Arn
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - secretsmanager:GetSecretValue
+          - secretsmanager:CreateSecret
+          - secretsmanager:UpdateSecret
+          - secretsmanager:DeleteSecret
+          - secretsmanager:DescribeSecret
+          - secretsmanager:ListSecrets
+          Resource: '*'
+    Metadata:
+      SamResourceId: BackendFunction
+  EmailServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${TablePrefix}-EmailService-${Environment}
+      CodeUri: EmailServiceFunction
+      Handler: emailLambda.handler
+      Runtime: nodejs18.x
+      MemorySize: 256
+      Timeout: 30
+      Environment:
+        Variables:
+          NODE_ENV:
+            Ref: Environment
+          EMAIL_HISTORY_TABLE:
+            Fn::Sub: ${TablePrefix}-EmailHistory-${Environment}
+          DYNAMODB_TABLE_NAME:
+            Fn::Sub: ${TablePrefix}-${Environment}
+          OAUTH_TABLE_NAME:
+            Fn::Sub: ${TablePrefix}-OAuth-${Environment}
+          GMAIL_CLIENT_ID:
+            Ref: GmailClientId
+          GMAIL_CLIENT_SECRET:
+            Ref: GmailClientSecret
+          OUTLOOK_CLIENT_ID:
+            Ref: OutlookClientId
+          OUTLOOK_CLIENT_SECRET:
+            Ref: OutlookClientSecret
+          FRONTEND_URL: https://d9xj0evv3ouwa.cloudfront.net
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-EmailHistory-${Environment}
+      - DynamoDBCrudPolicy:
+          TableName:
+            Fn::Sub: ${TablePrefix}-OAuth-${Environment}
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - secretsmanager:GetSecretValue
+          - secretsmanager:PutSecretValue
+          - secretsmanager:CreateSecret
+          - secretsmanager:UpdateSecret
+          - secretsmanager:DeleteSecret
+          - secretsmanager:DescribeSecret
+          Resource:
+            Fn::Sub: arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:sharp-crm/oauth/*
+        - Effect: Allow
+          Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          Resource: '*'
+    Metadata:
+      SamResourceId: EmailServiceFunction
+  BackendApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name:
+        Fn::Sub: ${TablePrefix}-API-${Environment}
+      StageName:
+        Ref: Environment
+      Cors:
+        AllowMethods: '''GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD'''
+        AllowHeaders: '''Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'''
+        AllowOrigin: '''https://d9xj0evv3ouwa.cloudfront.net'''
+        AllowCredentials: true
+        MaxAge: 600
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: '''https://d9xj0evv3ouwa.cloudfront.net'''
+              Access-Control-Allow-Headers: '''Content-Type,Authorization'''
+              Access-Control-Allow-Credentials: '''true'''
+        DEFAULT_5XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: '''https://d9xj0evv3ouwa.cloudfront.net'''
+              Access-Control-Allow-Headers: '''Content-Type,Authorization'''
+              Access-Control-Allow-Credentials: '''true'''
+  TokenCleanupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${TablePrefix}-TokenCleanup-${Environment}
+      CodeUri: TokenCleanupFunction
+      Handler: lambda.tokenCleanupHandler
+      Runtime: nodejs18.x
+      MemorySize: 256
+      Timeout: 60
+      Environment:
+        Variables:
+          NODE_ENV:
+            Ref: Environment
+          REGION:
+            Ref: AWS::Region
+          TABLE_PREFIX:
+            Ref: TablePrefix
+      Events:
+        ScheduledCleanup:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 day)
+            Description: Daily cleanup of expired refresh tokens
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:Query
+          - dynamodb:DeleteItem
+          - dynamodb:Scan
+          Resource:
+          - Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}-RefreshTokens-${Environment}
+          - Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${TablePrefix}-RefreshTokens-${Environment}/index/*
+        - Effect: Allow
+          Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          Resource: '*'
+    Metadata:
+      SamResourceId: TokenCleanupFunction
+Outputs:
+  BackendApiUrl:
+    Description: API Gateway endpoint URL for the backend
+    Value:
+      Fn::Sub: https://${BackendApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-BackendApiUrl
+  BackendFunctionArn:
+    Description: ARN of the Backend Lambda function
+    Value:
+      Fn::GetAtt:
+      - BackendFunction
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-BackendFunctionArn
+  EmailServiceFunctionArn:
+    Description: ARN of the Email Service Lambda function
+    Value:
+      Fn::GetAtt:
+      - EmailServiceFunction
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-EmailServiceFunctionArn
+  Environment:
+    Description: Deployment environment
+    Value:
+      Ref: Environment
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-Environment
+  TablePrefix:
+    Description: Table prefix for DynamoDB tables
+    Value:
+      Ref: TablePrefix
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-TablePrefix

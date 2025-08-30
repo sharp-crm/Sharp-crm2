@@ -480,6 +480,30 @@ const tables = [
     BillingMode: "PAY_PER_REQUEST"
   },
   {
+    TableName: getTableName("OAuth"),
+    KeySchema: [
+      { AttributeName: "userId", KeyType: "HASH" },
+      { AttributeName: "provider", KeyType: "RANGE" }
+    ],
+    AttributeDefinitions: [
+      { AttributeName: "userId", AttributeType: "S" },
+      { AttributeName: "provider", AttributeType: "S" },
+      { AttributeName: "email", AttributeType: "S" }
+    ],
+    GlobalSecondaryIndexes: [
+      {
+        IndexName: "EmailIndex",
+        KeySchema: [
+          { AttributeName: "email", KeyType: "HASH" }
+        ],
+        Projection: {
+          ProjectionType: "ALL"
+        }
+      }
+    ],
+    BillingMode: "PAY_PER_REQUEST"
+  },
+  {
     TableName: getTableName("Channels"),
     KeySchema: [
       { AttributeName: "channelId", KeyType: "HASH" },

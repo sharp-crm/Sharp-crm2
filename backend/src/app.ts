@@ -19,6 +19,7 @@ import chatRoutes from './routes/chat';
 import productsRoutes from './routes/products';
 import quotesRoutes from './routes/quotes';
 import emailRoutes from './routes/email';
+import oauthRoutes from './routes/oauth';
 import { authenticate } from "./middlewares/authenticate";
 import { errorHandler } from "./middlewares/errorHandler";
 import { requestLogger } from "./middlewares/requestLogger";
@@ -154,6 +155,16 @@ app.use("/api/chat", authenticate as express.RequestHandler, tokenRefreshHeaders
 app.use("/api/products", authenticate as express.RequestHandler, tokenRefreshHeaders, productsRoutes);
 app.use("/api/quotes", authenticate as express.RequestHandler, tokenRefreshHeaders, quotesRoutes);
 app.use("/api/email", authenticate as express.RequestHandler, tokenRefreshHeaders, emailRoutes);
+
+// OAuth routes - callbacks don't require auth, others do
+app.use("/api/oauth", (req, res, next) => {
+  // Skip authentication for OAuth callback routes
+  if (req.path.startsWith('/callback/')) {
+    return next();
+  }
+  // Apply authentication for other OAuth routes
+  return authenticate(req as any, res, next);
+}, tokenRefreshHeaders, oauthRoutes);
 
 // 404 handler
 app.use((req, res) => {
