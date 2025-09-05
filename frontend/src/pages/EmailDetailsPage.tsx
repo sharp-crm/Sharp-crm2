@@ -100,6 +100,106 @@ const EmailDetailsPage: React.FC = () => {
     };
   };
 
+  const handlePrint = () => {
+    // Open print layout in new tab
+    const printWindow = window.open('', '_blank');
+    if (printWindow && email) {
+      const dateInfo = formatDate(email.sentAt);
+      
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>SparkCRM - ${email.subject}</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              margin: 0;
+              padding: 20px;
+              background: white;
+              color: #333;
+              line-height: 1.6;
+            }
+            .header {
+              border-bottom: 1px solid #e5e7eb;
+              padding-bottom: 20px;
+              margin-bottom: 20px;
+            }
+            .logo {
+              font-size: 24px;
+              font-weight: bold;
+              color: #2563eb;
+              margin-bottom: 10px;
+            }
+            .subject {
+              font-size: 20px;
+              font-weight: bold;
+              margin-bottom: 15px;
+              color: #111827;
+            }
+            .metadata {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 20px;
+              font-size: 14px;
+              color: #6b7280;
+            }
+            .metadata-item {
+              display: flex;
+              align-items: center;
+              gap: 5px;
+            }
+            .content {
+              margin-top: 20px;
+            }
+            .message {
+              background: #f9fafb;
+              border: 1px solid #e5e7eb;
+              border-radius: 8px;
+              padding: 20px;
+              margin-top: 15px;
+              white-space: pre-wrap;
+              font-size: 14px;
+              line-height: 1.6;
+            }
+            @media print {
+              body { margin: 0; padding: 15px; }
+              .header { border-bottom: 2px solid #000; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="logo">SparkCRM</div>
+            <div class="subject">Sub: ${email.subject}</div>
+            <div class="metadata">
+              <div class="metadata-item">
+                <strong>From:</strong> ${email.senderEmail}
+              </div>
+              <div class="metadata-item">
+                <strong>To:</strong> ${email.recipientEmail}
+              </div>
+              <div class="metadata-item">
+                <strong>Sent:</strong> ${dateInfo.full}
+              </div>
+            </div>
+          </div>
+          <div class="content">
+            <div class="message">${email.message}</div>
+          </div>
+        </body>
+        </html>
+      `);
+      
+      printWindow.document.close();
+      
+      // Wait for content to load, then trigger print
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -167,7 +267,7 @@ const EmailDetailsPage: React.FC = () => {
           <div className="border-b p-6">
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">{email.subject}</h2>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Sub: {email.subject}</h2>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div className="flex items-center space-x-2">
@@ -192,30 +292,6 @@ const EmailDetailsPage: React.FC = () => {
                 <div className="font-medium">{dateInfo.full}</div>
               </div>
             </div>
-
-            {/* Email Metadata */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t">
-              {email.messageId && (
-                <div className="text-sm">
-                  <span className="text-gray-600">Message ID:</span>
-                  <span className="ml-2 font-mono text-gray-900">{email.messageId}</span>
-                </div>
-              )}
-              
-              {email.metadata?.ipAddress && (
-                <div className="text-sm">
-                  <span className="text-gray-600">IP Address:</span>
-                  <span className="ml-2 font-mono text-gray-900">{email.metadata.ipAddress}</span>
-                </div>
-              )}
-              
-              {email.tenantId && (
-                <div className="text-sm">
-                  <span className="text-gray-600">Tenant ID:</span>
-                  <span className="ml-2 font-mono text-gray-900">{email.tenantId}</span>
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Email Content */}
@@ -237,44 +313,6 @@ const EmailDetailsPage: React.FC = () => {
               </div>
             </div>
           )}
-
-          {/* Additional Metadata */}
-          {email.metadata && (
-            <div className="border-t p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                {email.metadata.userAgent && (
-                  <div>
-                    <span className="text-gray-600">User Agent:</span>
-                    <div className="mt-1 font-mono text-gray-900 text-xs break-all">
-                      {email.metadata.userAgent}
-                    </div>
-                  </div>
-                )}
-                
-                {email.metadata.campaignId && (
-                  <div>
-                    <span className="text-gray-600">Campaign ID:</span>
-                    <span className="ml-2 font-mono text-gray-900">{email.metadata.campaignId}</span>
-                  </div>
-                )}
-                
-                {email.metadata.dealId && (
-                  <div>
-                    <span className="text-gray-600">Deal ID:</span>
-                    <span className="ml-2 font-mono text-gray-900">{email.metadata.dealId}</span>
-                  </div>
-                )}
-                
-                {email.metadata.contactId && (
-                  <div>
-                    <span className="text-gray-600">Contact ID:</span>
-                    <span className="ml-2 font-mono text-gray-900">{email.metadata.contactId}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Action Buttons */}
@@ -288,7 +326,7 @@ const EmailDetailsPage: React.FC = () => {
           </button>
           
           <button
-            onClick={() => window.print()}
+            onClick={handlePrint}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
           >
             <Send className="w-4 h-4" />

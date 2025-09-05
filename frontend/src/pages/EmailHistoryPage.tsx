@@ -344,13 +344,10 @@ const EmailHistoryPage: React.FC = () => {
                           {getStatusIcon(email.status)}
                           {email.status}
                         </span>
-                        {email.messageId && (
-                          <span className="text-xs text-gray-500 font-mono">ID: {email.messageId}</span>
-                        )}
                       </div>
                       
                       <h3 className="text-lg font-semibold text-gray-900 mb-2 truncate">
-                        {email.subject}
+                        Sub: {email.subject}
                       </h3>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 mb-3">
@@ -374,17 +371,6 @@ const EmailHistoryPage: React.FC = () => {
                       {email.errorMessage && (
                         <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
                           <strong>Error:</strong> {email.errorMessage}
-                        </div>
-                      )}
-                      
-                      {email.metadata && (
-                        <div className="mt-2 text-xs text-gray-500 flex flex-wrap gap-3">
-                          {email.metadata.ipAddress && (
-                            <span>IP: {email.metadata.ipAddress}</span>
-                          )}
-                          {email.metadata.tenantId && (
-                            <span>Tenant: {email.metadata.tenantId}</span>
-                          )}
                         </div>
                       )}
                     </div>
